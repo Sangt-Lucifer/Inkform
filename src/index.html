@@ -308,7 +308,7 @@
                       aria-describedby="age-hint"
                     /><span
                       id="age-hint"
-                      style="font-size: 10px; color: var(--muted); display: block; margin-top: 6px"
+                      style="color: var(--muted); display: block; margin-top: 6px"
                       >Dieses Formular ist für Personen ab 18 Jahren.</span
                     >
                   </div>
@@ -543,7 +543,7 @@
                       /><span>Nein, keine Veröffentlichung</span></label
                     >
                   </div>
-                  <p style="font-size: 10px; margin: 10px 0 0">
+                  <p class="photo-hint" style="margin: 10px 0 0">
                     Bitte wähle eine Option. Ein Nein hat keine Auswirkungen auf deine Behandlung.
                   </p>
                 </fieldset>
@@ -568,7 +568,7 @@
               <div class="card-body">
                 <p
                   id="signature-confirmation"
-                  style="font-size: 12px; line-height: 1.9; color: var(--muted); margin: 0"
+                  style="line-height: 1.7; color: var(--muted); margin: 0"
                 >
                   Mit meiner Unterschrift bestätige ich meine Angaben und die von mir ausgewählten
                   Erklärungen. Ich willige freiwillig in die beschriebene Tätowierung ein. Die
@@ -604,7 +604,7 @@
                 </div>
                 <p
                   id="signature-help"
-                  style="font-size: 10px; color: var(--muted); line-height: 1.7; margin: 12px 0 0"
+                  style="color: var(--muted); line-height: 1.6; margin: 12px 0 0"
                 >
                   Änderst du danach deine Angaben, ist eine neue Unterschrift nötig. Die
                   Unterschrift bleibt beim Drehen des Geräts erhalten.
@@ -847,14 +847,17 @@
         </div>
         <p id="share-status" role="status" style="margin-bottom: 0"></p>
         <p id="income-capture-note" class="ad-section-copy">
-          Beim Erstellen des unterschriebenen PDFs werden Name, Termin, Artist und Preise in der
-          lokalen Einnahmenliste gespeichert. Gesundheitsangaben und Unterschrift werden dort nicht
+          Sobald du als Inhaber die Ablage bestätigst, werden Name, Termin, Artist und Preise in der
+          lokalen Einnahmenliste gebucht. Gesundheitsangaben und Unterschrift werden dort nicht
           gespeichert.
         </p>
         <button type="button" class="secondary-button pdf-next-button" id="pdf-next">
           PDF ist gespeichert · Nächster Kunde
         </button>
-        <p style="font-size: 10px">
+        <button type="button" class="secondary-button pdf-next-button" id="pdf-missing" hidden>
+          Einnahme als „PDF fehlt“ buchen · Nächster Kunde
+        </button>
+        <p class="pdf-archive-note" id="pdf-archive-note">
           Das PDF ist noch nicht automatisch im Studio archiviert. Bitte sichere eine Kopie für
           Studio und Kundin / Kunden.
         </p>

@@ -178,3 +178,24 @@ test("literal artist names cannot collide with unassigned filter", () => {
   assert.equal(selectIncome(rows, { artist: "__unassigned__" })[0].id, "consent-1");
   assert.equal(selectIncome(rows, { unassigned: true })[0].id, "empty");
 });
+
+// ---------- "PDF fehlt" and single booking (Phase 3) ----------
+import { incomeCsv as csvPhase3, validateIncomeRecord as validatePhase3, createIncomeStore as storePhase3 } from "../src/income.js";
+test("pdfMissing is optional, boolean only, and stored only when true", () => {
+  const base = { id: "p1", date: "2026-11-10", artist: "Alex", customer: "Ayşe Yıldız", totalCents: 1000, depositCents: null, source: "", updatedAt: "2026-11-10T10:00:00.000Z" };
+  assert.equal("pdfMissing" in validatePhase3(base), false);
+  assert.equal("pdfMissing" in validatePhase3({ ...base, pdfMissing: false }), false);
+  assert.equal(validatePhase3({ ...base, pdfMissing: true }).pdfMissing, true);
+  assert.throws(() => validatePhase3({ ...base, pdfMissing: "ja" }));
+  const csv = csvPhase3([validatePhase3({ ...base, pdfMissing: true })]);
+  assert.match(csv, /Preis erfasst · PDF fehlt/);
+  assert.match(csv, /Ayşe Yıldız/);
+});
+test("old backups without pdfMissing still import unchanged", () => {
+  const map = new Map(),
+    storage = { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) };
+  const store = storePhase3(storage);
+  const row = { id: "old", date: "2026-01-02", artist: "", customer: "Alt", totalCents: null, depositCents: null, source: "", updatedAt: "2026-01-02T00:00:00.000Z" };
+  store.merge({ schemaVersion: 1, records: [row] });
+  assert.deepEqual(store.list(), [row]);
+});

@@ -73,7 +73,7 @@ await ev(`resetCustomerForm()`);
 check('New customer clears prices and balance',await ev(`!document.getElementById('totalPrice').value&&!document.getElementById('depositPaid').value&&document.getElementById('price-balance').hidden`));
 await writeFile(OUT+'/inkform-export-test.html',await ev(`window.__exported.text()`));
 await cmd('Page.navigate',{url:pathToFileURL(OUT+'/inkform-export-test.html').href});
-await until(`typeof window.jspdf?.jsPDF === 'function' && typeof settings !== 'undefined' && document.getElementById('customer-studio-name').textContent.includes(${JSON.stringify(P.customerStudioName)})`);
+await until(`document.readyState==='complete' && document.querySelector('.studio-logo')?.complete && typeof window.jspdf?.jsPDF === 'function' && typeof settings !== 'undefined' && document.getElementById('customer-studio-name').textContent.includes(${JSON.stringify(P.customerStudioName)})`);
 check('Exported configured HTML reopens offline without customer data',await ev(`!document.getElementById('firstName').value && !document.getElementById('lastName').value && document.querySelector('.studio-logo').naturalWidth>0`));
 await cmd('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
 await cmd('Storage.clearDataForOrigin',{origin:ORIGIN,storageTypes:'all'});
@@ -83,7 +83,8 @@ check('Web app verifies complete offline cache',await ev(`document.documentEleme
 await until(`!!navigator.serviceWorker.controller`);
 await cmd('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
 await cmd('Page.reload');
-await until(`typeof window.jspdf?.jsPDF === 'function' && document.documentElement.dataset.offlineReady==='true'`);
+await new Promise(r=>setTimeout(r,500));
+await until(`document.readyState==='complete' && document.querySelector('.studio-logo')?.complete && typeof window.jspdf?.jsPDF === 'function' && document.documentElement.dataset.offlineReady==='true'`);
 check('Web app restarts offline with logo and PDF library',await ev(`document.querySelector('.studio-logo').naturalWidth>0 && document.getElementById('customer-studio-name').textContent.includes(${JSON.stringify(P.customerStudioName)})`));
 check('No third-party network requests',requests.every(u=>!/^https?:/.test(u)||u.startsWith(ORIGIN+'/')));
 await writeFile(OUT+'/inkform-qa-results.json',JSON.stringify({requests,errors},null,2));

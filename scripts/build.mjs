@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { loadPdfFonts } from "./fonts.mjs";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
 const TOKEN = /%%(\w+)%%/g;
@@ -29,6 +30,9 @@ const TEMPLATED = [
   "src/defaults.js",
   "src/income.js",
   "src/access.js",
+  "src/pdf-fonts.js",
+  "src/pending.js",
+  "src/consent.js",
   "src/app.js",
 ];
 
@@ -109,31 +113,42 @@ export async function buildProfile(ref) {
   const unused = Object.keys(profile.text).filter((key) => !used.has(key));
   if (unused.length) throw new Error(`${id}: ungenutzte Profiltexte: ${unused.join(", ")}`);
 
-  const [registration, workerTemplate, tailwind, jspdf, logo, guide] = await Promise.all([
+  const [registration, workerTemplate, tailwind, jspdf, logo, guide, pdfFonts] = await Promise.all([
     read("src/register-worker.js"),
     read("src/service-worker.js"),
     read("public/vendor/tailwind-browser.js"),
     read("public/vendor/jspdf.umd.min.js"),
     readFile(path.join(profile.dir, profile.logo)),
     readFile(path.join(profile.dir, "Anleitung-iPad-und-Admin.pdf")),
+    loadPdfFonts(path.join(root, "public/vendor")),
   ]);
   const template = filled["src/index.html"],
     css = filled["src/styles.css"],
     defaults = filled["src/defaults.js"],
     income = filled["src/income.js"],
     access = filled["src/access.js"],
+    fonts = filled["src/pdf-fonts.js"]
+      .replace("__PDF_FONT_REGULAR__", () => pdfFonts.normal)
+      .replace("__PDF_FONT_BOLD__", () => pdfFonts.bold)
+      .replace("__PDF_FONT_COVERAGE__", () => pdfFonts.coverage),
+    pending = filled["src/pending.js"],
+    consent = filled["src/consent.js"],
     app = filled["src/app.js"];
+  const exported = /^export\s+(?=(?:const|(?:async\s+)?function)\s)/gm;
 
   // Both outputs include the logo and every library. No CDN or sibling file is needed.
   const bundledJs = [
     defaults.replace(/^export\s+(?=const\s)/gm, ""),
     access.replace(/^export\s+(?=(?:const|(?:async\s+)?function)\s)/gm, ""),
     income.replace(/^export\s+(?=(?:const|function)\s)/gm, ""),
-    app
-      .replace(/^import\s*\{[^}]*\}\s*from\s*["\']\.\/access\.js["\'];?\s*/m, "")
-      .replace(/^import\s*\{[^}]*\}\s*from\s*["\']\.\/income\.js["\'];?\s*/m, "")
-      .replace(/^import\s*\{[^}]*\}\s*from\s*["']\.\/defaults\.js["'];?\s*/m, ""),
+    fonts.replace(exported, ""),
+    pending.replace(exported, ""),
+    consent.replace(exported, ""),
+    // All modules above are concatenated into one script, so app.js imports them directly.
+    app.replace(/^import\s*\{[^}]*\}\s*from\s*["']\.\/[\w-]+\.js["'];?\s*/gm, ""),
   ].join("\n");
+  if (/^\s*(?:import|export)\s/m.test(bundledJs) || /__PDF_FONT_\w+__/.test(bundledJs))
+    throw new Error("Bundle enthält noch Modul-Importe/-Exporte oder Schrift-Platzhalter.");
   const escapeScript = (source) => source.replace(/<\/script/gi, "<\\/script");
   let portable = template
     .replaceAll("__STUDIO_LOGO__", `data:image/png;base64,${logo.toString("base64")}`)
@@ -187,6 +202,7 @@ export async function buildProfile(ref) {
       "dist/licenses/Tailwind.txt",
       await readFile(path.join(root, "public/vendor/LICENSE-Tailwind.txt")),
     ],
+    ["dist/licenses/NotoSans.txt", await readFile(path.join(root, "public/vendor/LICENSE-NotoSans.txt"))],
   ]);
   for (const icon of (await readdir(path.join(profile.dir, "icons"))).sort()) {
     if (icon.startsWith(".")) continue;

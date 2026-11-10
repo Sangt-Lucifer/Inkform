@@ -11,7 +11,7 @@ Bedienung, Kundenablauf und Sicherungen stehen in `profiles/beispiel/README.md` 
 | Ordner | Inhalt |
 |---|---|
 | `src/` | Gemeinsamer Code für alle Studios: Formular, Admin, PIN-Schutz, Einnahmen, PDF |
-| `public/vendor/` | Gebündelte Bibliotheken (jsPDF 4.2.1, Tailwind CSS Browser 4.3.4) samt Lizenzen |
+| `public/vendor/` | Gebündelte Bibliotheken (jsPDF 4.2.1, Tailwind CSS Browser 4.3.4) und die PDF-Schrift Noto Sans 2.015 (SIL OFL 1.1) samt Lizenzen |
 | `profiles/beispiel/` | Eingebautes Beispielprofil mit einem **erfundenen Musterstudio** (Vorlage für neue Studios und neutrale Demo-Version) |
 | `scripts/` | Build, lokale Vorschau, Anleitung als PDF |
 | `tests/` | Unit-, Profil- und Leak-Tests; `tests/browser/` Browser-Prüfungen; `tests/lib/` Scan-Hilfen |
@@ -40,6 +40,13 @@ node scripts/serve.mjs --profile ../Inkform-Studios/<studio>
 ```
 
 Je Profil entstehen `index.html` (Einzeldatei, alles eingebettet, ohne Server nutzbar) und `dist/` (Web-App mit Service Worker für den Offline-Betrieb auf dem iPad). Ein Studio-Build darf nicht im Kern landen: Der Build verweigert ein `--out` innerhalb dieses Repos. Er überschreibt nur einen vorhandenen Build (`index.html`, `dist/`) und bricht ab, wenn der Zielordner andere Dateien enthält.
+
+## PDF-Schrift, Abschluss und PIN-Sperre
+
+- **Schrift:** PDFs werden mit der eingebetteten Noto Sans (Normal und Fett) gesetzt, deshalb funktionieren Namen wie Gül Şahin, Łukasz Ćwik oder Ayşe Yıldız. jsPDF übernimmt nur die benutzten Zeichen ins PDF. Zeichen, die die Schrift nicht darstellen kann (z. B. ✓, Emojis, Arabisch, Devanagari), meldet die App vor dem Erstellen, statt sie stillschweigend wegzulassen.
+- **Abschluss:** Die Einnahme wird erst gebucht, wenn der Inhaber die Ablage des PDFs bestätigt, und zwar genau einmal je Einwilligung. Bis dahin bleibt die offene Einwilligung auf dem Gerät: Metadaten ohne Gesundheitsdaten in `inkform.pending.v1`, das PDF in IndexedDB (`inkform-pending`). Nach der Bestätigung wird beides gelöscht. Ein Neuladen auf „Vielen Dank“ verliert nichts. Ist das PDF nicht mehr lesbar, kann der Inhaber die Einnahme als „PDF fehlt“ buchen; der Vermerk steht in Liste, CSV und Einnahmen-PDF und lässt sich im Eintrag wieder entfernen.
+- **PIN-Sperre:** Nach 5 Fehlversuchen 30 Sekunden Sperre, gespeichert in `inkform.admin.lock.v1`, also auch nach einem Neuladen wirksam. Eine zurückgestellte Uhr verlängert die Sperre nicht.
+- **Schriftgrößen:** Im Kundenbereich sind Eingaben, Beschriftungen und Fließtext mindestens 16 px groß, nichts ist kleiner als 14 px. Die Browser-Prüfung `schriftgroessen` misst das auf mehreren iPad-Größen.
 
 ## Leak-Tests
 

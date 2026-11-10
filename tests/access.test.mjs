@@ -40,3 +40,56 @@ test("blocked storage and malformed PIN configuration fail closed", async () => 
   assert.throws(() => broken.configured());
   await assert.rejects(broken.verify("839274"));
 });
+
+// ---------- persistent lockout (Phase 3) ----------
+import { createPinLockout, ADMIN_LOCK_KEY, MAX_PIN_FAILURES, PIN_LOCK_MS } from "../src/access.js";
+
+test("five failures lock for 30 seconds, and a reload (new instance) keeps the lock", () => {
+  const storage = memory();
+  let clock = 1_000_000;
+  const now = () => clock;
+  const first = createPinLockout(storage, now);
+  for (let i = 0; i < MAX_PIN_FAILURES - 1; i++) first.fail();
+  assert.equal(first.remainingMs(), 0);
+  // Reload after four failures: the counter is not reset.
+  const reloaded = createPinLockout(storage, now);
+  reloaded.fail();
+  assert.equal(reloaded.remainingMs(), PIN_LOCK_MS);
+  // Reload during the lock: still locked.
+  clock += 10_000;
+  assert.equal(createPinLockout(storage, now).remainingMs(), PIN_LOCK_MS - 10_000);
+  clock += PIN_LOCK_MS;
+  assert.equal(createPinLockout(storage, now).remainingMs(), 0);
+});
+
+test("a correct PIN resets the failure counter", () => {
+  const storage = memory(),
+    now = () => 5000,
+    lock = createPinLockout(storage, now);
+  for (let i = 0; i < MAX_PIN_FAILURES - 1; i++) lock.fail();
+  lock.reset();
+  lock.fail();
+  assert.equal(lock.remainingMs(), 0);
+  assert.deepEqual(JSON.parse(storage.getItem(ADMIN_LOCK_KEY)), { failures: 1, blockedUntil: 0 });
+});
+
+test("setting the clock back cannot extend the lock beyond one period", () => {
+  const storage = memory();
+  let clock = 10_000_000;
+  const lock = createPinLockout(storage, () => clock);
+  for (let i = 0; i < MAX_PIN_FAILURES; i++) lock.fail();
+  clock -= 3_600_000;
+  assert.equal(lock.remainingMs(), PIN_LOCK_MS);
+});
+
+test("lockout still works in memory when storage is blocked or corrupt", () => {
+  const blocked = {
+    getItem: () => "{kaputt",
+    setItem: () => {
+      throw Error("blocked");
+    },
+  };
+  const lock = createPinLockout(blocked, () => 0);
+  for (let i = 0; i < MAX_PIN_FAILURES; i++) lock.fail();
+  assert.equal(lock.remainingMs(), PIN_LOCK_MS);
+});

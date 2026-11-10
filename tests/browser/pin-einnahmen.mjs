@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 // Ported from the website archive (Pruefungen-Inkform-*, 2026-11-06). Synthetic test data only.
+// Phase 3: income is booked when the owner confirms the filing, not when the PDF is created.
 // Run via: npm run test:browser  (tests/browser/run.mjs sets the INKFORM_* variables).
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -19,7 +20,7 @@ ws.addEventListener('message',({data})=>{const m=JSON.parse(data);if(m.method===
 await cmd('Page.enable');await cmd('Runtime.enable');await cmd('Log.enable');await cmd('Log.clear');errors.length=0;await cmd('Network.enable');
 await cmd('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
 await cmd('Emulation.setDeviceMetricsOverride',{width:1280,height:1000,deviceScaleFactor:1,mobile:false});
-const pre=await cmd('Page.addScriptToEvaluateOnNewDocument',{source:`for(const k of ['inkform.admin.pin.v1','inkform.income.v1'])localStorage.removeItem(k);sessionStorage.clear();`});
+const pre=await cmd('Page.addScriptToEvaluateOnNewDocument',{source:`for(const k of ['inkform.admin.pin.v1','inkform.income.v1','inkform.admin.lock.v1','inkform.pending.v1'])localStorage.removeItem(k);sessionStorage.clear();`});
 await cmd('Page.navigate',{url:process.env.INKFORM_FILE_URL});
 await until(`typeof adminAccess!=='undefined' && document.getElementById('admin-pin-dialog')?.open`);
 await cmd('Page.removeScriptToEvaluateOnNewDocument',{identifier:pre.identifier});
@@ -41,8 +42,8 @@ window.fillConsent=(withPrice=true)=>{for(const [id,value] of Object.entries({fi
 fillConsent();form.requestSubmit();`);
 await until(`!document.getElementById('completion-screen').hidden`);
 check('PDF save ends in black thank-you screen and locks admin',await ev(`getComputedStyle(document.getElementById('completion-screen')).backgroundColor==='rgb(0, 0, 0)' && document.getElementById('completion-title').textContent==='Vielen Dank'&&document.getElementById('customer-app').hidden&&document.getElementById('admin-app').hidden&&!adminAccess.isUnlocked()&&!document.getElementById('pdf-dialog').open`));
-check('Signed consent automatically enters local list once',await ev(`JSON.parse(localStorage.getItem(INCOME_KEY)).records.length===1&&JSON.parse(localStorage.getItem(INCOME_KEY)).records[0].totalCents===45050`));
-check('Income entry excludes health answers and signature',await ev(`Object.keys(JSON.parse(localStorage.getItem(INCOME_KEY)).records[0]).every(k=>['id','date','artist','customer','source','updatedAt','totalCents','depositCents'].includes(k))`));
+check('Signed consent is not booked before the owner confirms the filing',await ev(`!localStorage.getItem(INCOME_KEY)&&JSON.parse(localStorage.getItem(PENDING_KEY)).income.totalCents===45050`));
+check('Prepared income entry excludes health answers and signature',await ev(`Object.keys(JSON.parse(localStorage.getItem(PENDING_KEY)).income).every(k=>['id','date','artist','customer','source','updatedAt','totalCents','depositCents'].includes(k))`));
 await writeFile(OUT+'/inkform-thank-you.png',Buffer.from((await cmd('Page.captureScreenshot',{format:'png'})).data,'base64'));
 await ev(`document.getElementById('completion-unlock').click();document.getElementById('admin-pin').value='000000';document.getElementById('admin-pin-form').requestSubmit()`);
 await until(`!document.getElementById('admin-pin-error').hidden`);
@@ -57,14 +58,16 @@ await ev(`document.getElementById('completion-unlock').click();unlockAdmin()`);a
 check('Owner recovers the original signed PDF after guide',await ev(`pdfArtifact===window.__firstConsent&&pdfArtifact.blob===window.__firstConsent.blob`));
 await ev(`document.getElementById('pdf-dialog').close();openAdminAuthorized('studio');const loc=document.getElementById('admin-studio-location');loc.value='Testort';loc.dispatchEvent(new Event('input',{bubbles:true}));saveAdmin()`);
 check('Saving admin settings preserves original pending PDF',await ev(`pendingConsent===window.__firstConsent&&pendingConsent.blob===window.__firstConsent.blob`));
-await ev(`openAdminAuthorized('income');const id=pendingConsent.incomeEntry.id;document.querySelector('[data-income-edit="'+id+'"]').click();document.getElementById('income-total').value='450,50';document.getElementById('income-edit-form').requestSubmit();runFilesTest()`);
+await ev(`openAdminAuthorized('income')`);
+check('Unconfirmed consent does not appear in the income list yet',await ev(`!document.querySelector('[data-income-edit="'+pendingConsent.incomeEntry.id+'"]')`));
+await ev(`runFilesTest()`);
 check('Storage test also preserves the pending original',await ev(`pdfArtifact.isTest&&pendingConsent===window.__firstConsent`));
 await ev(`document.getElementById('pdf-dialog').close();finishAdminLeave();document.getElementById('completion-unlock').click();unlockAdmin()`);await until(`document.getElementById('pdf-dialog').open&&!nativeShareInFlight`);
 await ev(`document.getElementById('pdf-next').click()`);
-check('Owner confirms PDF and releases a clean next form',await ev(`!document.getElementById('customer-app').hidden&&!document.getElementById('firstName').value&&!adminAccess.isUnlocked()&&JSON.parse(localStorage.getItem(INCOME_KEY)).records.length===1`));
+check('Owner confirms PDF: booked once, clean next form',await ev(`!document.getElementById('customer-app').hidden&&!document.getElementById('firstName').value&&!adminAccess.isUnlocked()&&JSON.parse(localStorage.getItem(INCOME_KEY)).records.length===1&&JSON.parse(localStorage.getItem(INCOME_KEY)).records[0].totalCents===45050&&!localStorage.getItem(PENDING_KEY)`));
 await ev(`window.__realSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k===INCOME_KEY)throw Error('QuotaExceededTest');return window.__realSet.call(this,k,v)};fillConsent(false);form.requestSubmit()`);
 await until(`!document.getElementById('completion-screen').hidden`);
-check('Storage failure still locks customer screen and retains PDF',await ev(`pdfArtifact&&!pdfArtifact.incomeSaved&&document.getElementById('firstName').value==='LEDGER-TEST'`));
+check('Customer screen locks and the PDF is retained while income storage is broken',await ev(`!!pendingConsent&&pendingConsent.blob.size>10000&&document.getElementById('firstName').value==='LEDGER-TEST'`));
 await ev(`document.getElementById('completion-unlock').click();unlockAdmin()`);await until(`document.getElementById('pdf-dialog').open&&!nativeShareInFlight`);
 await ev(`document.getElementById('pdf-next').click()`);
 check('Failed income storage prevents destructive next-customer reset',await ev(`pdfArtifact&&document.getElementById('firstName').value==='LEDGER-TEST'&&document.getElementById('share-status').textContent.includes('nicht lokal gespeichert')`));

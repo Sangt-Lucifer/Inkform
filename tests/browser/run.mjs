@@ -10,13 +10,13 @@
 // protocols go to test-results/ of the core (built-in profile) or of the studio folder, so a
 // studio's screenshots never end up in the core. The checks use synthetic data only.
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defaultOut, isBuiltin, resolveProfileDir, root } from "../../scripts/build.mjs";
 
-const CHECKS = ["formular", "pin-einnahmen", "offline"];
+const CHECKS = ["formular", "pin-einnahmen", "abschluss", "schriftgroessen", "offline"];
 const argv = process.argv.slice(2);
 const pi = argv.indexOf("--profile");
 const profile = pi >= 0 ? argv[pi + 1] : "beispiel";
@@ -50,6 +50,28 @@ async function until(url) {
   throw new Error(`Nicht erreichbar: ${url}`);
 }
 
+async function setDownloadFolder(cdp, folder) {
+  await mkdir(folder, { recursive: true });
+  const { webSocketDebuggerUrl } = await (await fetch(`${cdp}/json/version`)).json();
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await new Promise((r) => ws.addEventListener("open", r, { once: true }));
+  const reply = new Promise((resolve, reject) =>
+    ws.addEventListener("message", ({ data }) => {
+      const m = JSON.parse(data);
+      if (m.id === 1) (m.error ? reject(Error(JSON.stringify(m.error))) : resolve());
+    }),
+  );
+  ws.send(
+    JSON.stringify({
+      id: 1,
+      method: "Browser.setDownloadBehavior",
+      params: { behavior: "allow", downloadPath: folder, eventsEnabled: false },
+    }),
+  );
+  await reply;
+  ws.close();
+}
+
 if ((await run(process.execPath, [path.join(root, "scripts/build.mjs"), "--profile", profile])) !== 0)
   process.exit(1);
 const server = spawn(
@@ -58,6 +80,16 @@ const server = spawn(
   { stdio: "ignore" },
 );
 const chromeData = await mkdtemp(path.join(tmpdir(), "inkform-chrome-"));
+// Exports clicked by the checks (CSV, JSON, HTML, PDF) go to test-results/, never to ~/Downloads.
+const downloads = path.join(out, "downloads");
+await mkdir(path.join(chromeData, "Default"), { recursive: true });
+await writeFile(
+  path.join(chromeData, "Default", "Preferences"),
+  JSON.stringify({
+    download: { default_directory: downloads, prompt_for_download: false, directory_upgrade: true },
+    savefile: { default_directory: downloads },
+  }),
+);
 const chrome = spawn(
   CHROME,
   [
@@ -80,6 +112,8 @@ let failed = 0;
 try {
   await until(`http://127.0.0.1:${httpPort}/index.html`);
   await until(`http://127.0.0.1:${cdpPort}/json/version`);
+  // Exports clicked by the checks (CSV, JSON, HTML, PDF) go to test-results/, never to ~/Downloads.
+  await setDownloadFolder(`http://127.0.0.1:${cdpPort}`, downloads);
   const env = {
     ...process.env,
     INKFORM_CDP: `http://127.0.0.1:${cdpPort}`,

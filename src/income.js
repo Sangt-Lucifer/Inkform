@@ -9,6 +9,8 @@ const incomeFields = [
   "depositCents",
   "source",
   "updatedAt",
+  // Optional: true when the income was booked although the signed PDF was not filed.
+  "pdfMissing",
 ];
 export function incomeId() {
   return (
@@ -57,6 +59,10 @@ export function validateIncomeRecord(value) {
   }
   if (row.totalCents !== null && row.depositCents !== null && row.depositCents > row.totalCents)
     throw Error("Die Anzahlung darf die Gesamtkosten nicht überschreiten.");
+  if ("pdfMissing" in value && typeof value.pdfMissing !== "boolean")
+    throw Error("Ungültige Angabe: pdfMissing.");
+  // Stored only when set, so existing entries and backups stay unchanged.
+  if (value.pdfMissing === true) row.pdfMissing = true;
   return row;
 }
 export function validateIncomeBackup(value) {
@@ -186,7 +192,7 @@ export function incomeCsv(records) {
       r.customer,
       euros(r.totalCents),
       euros(r.depositCents),
-      r.totalCents === null ? "Preis offen" : "Preis erfasst",
+      (r.totalCents === null ? "Preis offen" : "Preis erfasst") + (r.pdfMissing ? " · PDF fehlt" : ""),
       r.source,
     ]),
   ];
@@ -205,6 +211,8 @@ export function incomeCsv(records) {
 
 export function createIncomeFeature({
   storage,
+  createPdf,
+  unsupportedChars,
   escape,
   money,
   parseMoney,
@@ -232,6 +240,7 @@ export function createIncomeFeature({
       <div class="ad-field"><label for="income-total">Gesamtkosten (€), optional</label><input id="income-total" name="total" inputmode="decimal" maxlength="10" placeholder="Preis noch offen"></div>
       <div class="ad-field"><label for="income-deposit">Anzahlung (€), optional</label><input id="income-deposit" name="deposit" inputmode="decimal" maxlength="10"></div>
       <div class="ad-field full"><label for="income-source">PDF-Dateiname / Referenz, optional</label><input id="income-source" name="source" maxlength="400"></div>
+      <div class="ad-field full"><label class="income-check"><input id="income-pdf-missing" name="pdfMissing" type="checkbox"> PDF fehlt (unterschriebene Einwilligung nicht abgelegt)</label></div>
     </div><p class="ad-section-copy">Die Änderung betrifft nur diese Übersicht. Ein bereits unterschriebenes PDF bleibt unverändert. Kein Gesamtpreis bedeutet „Preis offen“, nicht 0 €.</p>
     <div class="dialog-actions"><button type="button" class="secondary-button" data-income-cancel>Abbrechen</button><button type="submit" class="primary-button">Eintrag speichern</button></div></form>`;
   document.body.append(editor);
@@ -254,6 +263,7 @@ export function createIncomeFeature({
       : "Ältere Einwilligung nachtragen";
     input("date").value = record?.date || today();
     for (const key of ["artist", "customer", "source"]) input(key).value = record?.[key] || "";
+    input("pdfMissing").checked = !!record?.pdfMissing;
     for (const [key, field] of [
       ["total", "totalCents"],
       ["deposit", "depositCents"],
@@ -290,6 +300,7 @@ export function createIncomeFeature({
         depositCents: deposit,
         source: input("source").value,
         updatedAt: new Date().toISOString(),
+        pdfMissing: input("pdfMissing").checked,
       });
       if (editing) store.update(row, editing.updatedAt);
       else store.add(row);
@@ -389,8 +400,8 @@ export function createIncomeFeature({
       ).join("")}</select></label></div>
       <div class="income-summary"><strong>${money(summary.totalCents)}<small>Summe bekannter Gesamtpreise</small></strong><strong>${summary.count}<small>Einwilligungen</small></strong><strong>${summary.open}<small>Preise offen – nicht in der Summe</small></strong></div>
       <div class="ad-actions-row income-actions"><button class="ad-button primary" data-income-action="add">Einwilligung nachtragen</button><button class="ad-button" data-income-action="pdf"${rows.length ? "" : " disabled"}>Gefilterte Liste als PDF</button><button class="ad-button" data-income-action="csv"${rows.length ? "" : " disabled"}>Gefilterte Liste als CSV</button></div>
-      <p class="ad-preview-note">Neue Einwilligungen werden beim Erstellen des unterschriebenen PDFs übernommen. Ältere PDFs hier nachtragen; die App durchsucht keine Dateien-Ordner.</p>
-      <div class="income-table-wrap"><table class="income-table"><caption>Einwilligungen im gewählten Zeitraum</caption><thead><tr><th>Termin</th><th>Artist</th><th>Name</th><th>Gesamtkosten</th><th>Anzahlung</th><th>Bearbeiten</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td>${e(r.date.split("-").reverse().join("."))}</td><td>${e(r.artist || "Nicht zugeordnet")}</td><td>${e(r.customer)}${r.source ? `<small>${e(r.source)}</small>` : ""}</td><td>${r.totalCents === null ? '<span class="income-open">Preis offen</span>' : money(r.totalCents)}</td><td>${r.depositCents === null ? "–" : money(r.depositCents)}</td><td><button class="ad-button" data-income-edit="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} bearbeiten">Bearbeiten</button><button class="ad-button danger" data-income-remove="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} entfernen">Entfernen</button></td></tr>`).join("") : '<tr><td colspan="6">Keine Einwilligungen für diese Auswahl.</td></tr>'}</tbody></table></div>
+      <p class="ad-preview-note">Neue Einwilligungen werden übernommen, sobald du als Inhaber die Ablage des unterschriebenen PDFs bestätigst. Ältere PDFs hier nachtragen; die App durchsucht keine Dateien-Ordner.</p>
+      <div class="income-table-wrap"><table class="income-table"><caption>Einwilligungen im gewählten Zeitraum</caption><thead><tr><th>Termin</th><th>Artist</th><th>Name</th><th>Gesamtkosten</th><th>Anzahlung</th><th>Bearbeiten</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td>${e(r.date.split("-").reverse().join("."))}</td><td>${e(r.artist || "Nicht zugeordnet")}</td><td>${e(r.customer)}${r.pdfMissing ? ' <span class="income-open">PDF fehlt</span>' : ""}${r.source ? `<small>${e(r.source)}</small>` : ""}</td><td>${r.totalCents === null ? '<span class="income-open">Preis offen</span>' : money(r.totalCents)}</td><td>${r.depositCents === null ? "–" : money(r.depositCents)}</td><td><button class="ad-button" data-income-edit="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} bearbeiten">Bearbeiten</button><button class="ad-button danger" data-income-remove="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} entfernen">Entfernen</button></td></tr>`).join("") : '<tr><td colspan="6">Keine Einwilligungen für diese Auswahl.</td></tr>'}</tbody></table></div>
       <details class="income-daily"><summary>Tagessummen je Artist</summary><ul>${
         [...daily.values()]
           .map((day) => {
@@ -411,18 +422,12 @@ export function createIncomeFeature({
     if (host) host.innerHTML = view();
   }
   function report(rows) {
-    if (
-      rows.some(
-        (r) =>
-          !/^[\u0020-\u007E\u00A0-\u00FF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u2013-\u2015\u2018-\u201E]*$/.test(
-            r.artist + r.customer,
-          ),
-      )
-    )
+    const missing = unsupportedChars(rows.map((r) => r.artist + r.customer).join(""));
+    if (missing.length)
       throw Error(
-        "Ein Name enthält Zeichen, die die PDF-Schrift nicht unterstützt. Bitte für diese Liste den CSV-Export verwenden.",
+        `Ein Name enthält Zeichen, die die PDF-Schrift nicht darstellen kann (${missing.join(" ")}). Bitte für diese Liste den CSV-Export verwenden.`,
       );
-    const doc = new window.jspdf.jsPDF({ unit: "mm", format: "a4" });
+    const doc = createPdf({ unit: "mm", format: "a4" });
     let y = 20;
     const line = (text, bold = false) => {
       for (const part of doc.splitTextToSize(text, 172)) {
@@ -430,7 +435,7 @@ export function createIncomeFeature({
           doc.addPage();
           y = 20;
         }
-        doc.setFont("helvetica", bold ? "bold" : "normal");
+        doc.setFont(doc.getFont().fontName, bold ? "bold" : "normal");
         doc.setFontSize(10);
         doc.text(part, 19, y);
         y += 6;
@@ -443,7 +448,10 @@ export function createIncomeFeature({
     line("Gesamtpreise laut Einwilligungen; keine Zahlungseingangs- oder Gewinnabrechnung.");
     y += 4;
     for (const r of rows) {
-      line(`${r.date} | ${r.artist || "Nicht zugeordnet"} | ${r.customer}`, true);
+      line(
+        `${r.date} | ${r.artist || "Nicht zugeordnet"} | ${r.customer}${r.pdfMissing ? " | PDF fehlt" : ""}`,
+        true,
+      );
       line(
         `Gesamtkosten: ${r.totalCents === null ? "Preis offen" : money(r.totalCents)} | Anzahlung (nur Info): ${r.depositCents === null ? "nicht angegeben" : money(r.depositCents)}`,
       );
@@ -548,9 +556,13 @@ export function createIncomeFeature({
         updatedAt: new Date().toISOString(),
       });
     },
-    confirm(record) {
-      store.add(record);
+    // Books a prepared entry exactly once. Returns false if this consent was already booked
+    // (e.g. confirmation repeated after a reload), without changing the existing entry.
+    book(record, { pdfMissing = false } = {}) {
+      if (store.list().some((r) => r.id === record.id)) return false;
+      store.add(validateIncomeRecord({ ...record, pdfMissing }));
       refresh();
+      return true;
     },
   };
 }

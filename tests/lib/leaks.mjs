@@ -136,24 +136,39 @@ function pdfStrings(content) {
 
 export function pdfText(buffer) {
   const objects = pdfObjects(buffer);
-  const cmaps = new Map(); // font resource name -> code map
-  for (const { dict } of objects.values()) {
-    if (!/\/Type\s*\/Font/.test(dict)) continue;
+  // Font object -> { map, width }. Simple fonts use 1-byte codes; Type0 fonts with Identity-H
+  // (jsPDF with an embedded TrueType font) use 2-byte glyph codes.
+  const fonts = new Map();
+  for (const [num, { dict }] of objects) {
+    if (!/\/Type\s*\/Font\b/.test(dict) || /\/Subtype\s*\/CIDFontType/.test(dict)) continue;
     const ref = dict.match(/\/ToUnicode\s+(\d+)\s+0\s+R/)?.[1];
     const stream = ref && objects.get(ref)?.stream;
     const map = stream ? parseCmap(stream.toString("latin1")) : null;
-    for (const name of dict.matchAll(/\/Name\s*\/([^\s/\[\]()<>]+)/g)) if (map) cmaps.set(name[1], map);
+    fonts.set(num, { map, width: /\/Subtype\s*\/Type0/.test(dict) ? 2 : 1 });
   }
+  // Resource name used in content streams (e.g. /F1) -> font. ReportLab also writes /Name.
+  const byName = new Map();
+  for (const [num, { dict }] of objects)
+    for (const n of dict.matchAll(/\/Name\s*\/([^\s/\[\]()<>]+)/g)) if (fonts.has(num)) byName.set(n[1], fonts.get(num));
+  for (const { dict } of objects.values())
+    for (const block of dict.matchAll(/\/Font\s*<<([\s\S]*?)>>/g))
+      for (const m of block[1].matchAll(/\/([^\s/\[\]()<>]+)\s+(\d+)\s+0\s+R/g))
+        if (fonts.has(m[2])) byName.set(m[1], fonts.get(m[2]));
   // Non-stream parts (dictionaries, metadata such as /Author) plus decoded text of every stream.
   let text = buffer.toString("latin1").replace(/stream\r?\n[\s\S]*?endstream/g, " ");
   for (const { stream } of objects.values()) {
     if (!stream) continue;
     const content = stream.toString("latin1");
     if (!/\bT[jJ]\b/.test(content)) continue;
-    let map = null;
+    let font = null;
     for (const [kind, value] of pdfStrings(content)) {
-      if (kind === "font") map = cmaps.get(value) ?? null;
-      else text += map ? value.map((b) => map.get(b) ?? "").join("") : Buffer.from(value).toString("latin1");
+      if (kind === "font") font = byName.get(value) ?? null;
+      else if (!font?.map) text += Buffer.from(value).toString("latin1");
+      else
+        for (let i = 0; i < value.length; i += font.width) {
+          const code = font.width === 2 ? (value[i] << 8) | (value[i + 1] ?? 0) : value[i];
+          text += font.map.get(code) ?? "";
+        }
     }
     text += "\n";
   }

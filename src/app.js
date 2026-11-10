@@ -1,6 +1,9 @@
 import { createAdminAccess } from "./access.js";
 import { createIncomeFeature, incomeId } from "./income.js";
 import { STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
+import { PDF_FONT, createPdfDocument, unsupportedPdfChars } from "./pdf-fonts.js";
+import { createIndexedDbFiles, createPendingStore } from "./pending.js";
+import { birthDateValid, fileSlug, moneyCents, studioInitials } from "./consent.js";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -10,6 +13,7 @@ const APP_SOURCE_HTML = "<!DOCTYPE html>\n" + document.documentElement.outerHTML
 let studio = { ...STUDIO_DEFAULTS };
 let adminAccess = null,
   incomeFeature = null,
+  pendingStore = null,
   consentIncomeId = incomeId();
 const MEDICAL = clone(DEFAULT_SETTINGS.medical);
 const LEGAL = clone(DEFAULT_SETTINGS.legal);
@@ -381,21 +385,8 @@ function signatureImage() {
   ink.strokes.forEach((stroke) => drawStroke(context, stroke, output.width, output.height));
   return { data: output.toDataURL("image/png"), ratio: output.height / output.width };
 }
-function ageAt(birth, reference) {
-  const [by, bm, bd] = birth.split("-").map(Number),
-    [ry, rm, rd] = reference.split("-").map(Number);
-  return ry - by - (rm < bm || (rm === bm && rd < bd) ? 1 : 0);
-}
 function birthValid() {
-  const birth = fieldValue("birthDate"),
-    appointment = fieldValue("appointment");
-  return (
-    !!birth &&
-    birth >= "1900-01-01" &&
-    birth <= localDate() &&
-    ageAt(birth, localDate()) >= 18 &&
-    (!appointment || ageAt(birth, appointment) >= 18)
-  );
+  return birthDateValid(fieldValue("birthDate"), localDate(), fieldValue("appointment"));
 }
 function isSectionComplete(id) {
   if (id === "signature") return hasSignature() && !!ink.signedAt;
@@ -411,14 +402,6 @@ function isSectionComplete(id) {
     }) &&
     (id !== "personal" || (birthValid() && priceErrors().length === 0))
   );
-}
-// Parse euros into integer cents so subtraction never introduces rounding errors.
-function moneyCents(value) {
-  const text = String(value ?? "").trim();
-  if (!text) return null;
-  if (!/^\d{1,7}(?:[,.]\d{1,2})?$/.test(text)) return NaN;
-  const [euros, cents = ""] = text.split(/[,.]/);
-  return Number(euros) * 100 + Number(cents.padEnd(2, "0"));
 }
 const formatMoney = (cents) =>
   new Intl.NumberFormat("de-DE", {
@@ -658,7 +641,9 @@ function resetCustomerForm() {
 }
 $("reset-confirm").addEventListener("click", resetCustomerForm);
 window.addEventListener("beforeunload", (event) => {
-  if (dirty || adminChanged() || incomeFeature?.hasUnsavedChanges()) {
+  // A submitted consent whose PDF is stored on this device survives the reload: no warning.
+  const safe = pendingConsent && (pendingConsent.restored || pendingConsent.keptOk);
+  if ((dirty && !safe) || adminChanged() || incomeFeature?.hasUnsavedChanges()) {
     event.preventDefault();
     event.returnValue = "";
   }
@@ -701,8 +686,7 @@ function gatherData() {
   };
 }
 function createPdf(data) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({
+  const doc = createPdfDocument(window.jspdf.jsPDF, {
     orientation: "portrait",
     unit: "mm",
     format: "a4",
@@ -729,7 +713,7 @@ function createPdf(data) {
   });
   doc.setCreationDate(data.createdAt);
   function font(size = 10, bold = false, color = black) {
-    doc.setFont("helvetica", bold ? "bold" : "normal");
+    doc.setFont(PDF_FONT, bold ? "bold" : "normal");
     doc.setFontSize(size);
     doc.setTextColor(...color);
   }
@@ -940,32 +924,32 @@ form.addEventListener("submit", (event) => {
     invalidatePdf();
     const data = gatherData();
 
-    const supported =
-      /^[\u0009\u000A\u000D\u0020-\u007E\u00A0-\u00FF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013-\u2015\u2018-\u201A\u201C-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]*$/;
     const userText = [
       ...Object.values(data.fields),
       ...Object.values(data.studio),
       ...Object.values(data.template),
       ...data.medical.flatMap((q) => [q.title, q.hint, q.note]),
       ...data.legal.flatMap((item) => [item.title, item.text]),
+      data.privacy,
     ].join("\n");
-    if (!supported.test(userText)) {
+    const missing = unsupportedPdfChars(userText);
+    if (missing.length) {
       toast(
-        "Einige Zeichen benötigen eine zusätzliche PDF-Schrift. Bitte verwende für diesen Export lateinische Zeichen.",
+        `Diese Zeichen kann die PDF-Schrift nicht darstellen: ${missing.join(" ")} Bitte ersetzen oder weglassen.`,
       );
       return;
     }
     const result = createPdf(data),
       blob = result.doc.output("blob");
-    const slug = normalizeText(`${data.fields.lastName}_${data.fields.firstName}`)
-      .replace(/[^a-zA-Z0-9äöüÄÖÜßÀ-ÿ_-]/g, "_")
-      .slice(0, 100);
+    const slug = fileSlug(normalizeText(`${data.fields.lastName}_${data.fields.firstName}`));
     const clock = data.createdAt.toTimeString().slice(0, 8).replaceAll(":", "");
     const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
     const filename = `Tattoo_Einwilligung_${slug}_${data.fields.appointment}_${clock}_${suffix}.pdf`;
+    // Prepared now, booked only when the owner confirms the filing (pdf-next).
     const incomeEntry = incomeFeature.capture(data, filename, consentIncomeId);
     presentPdfArtifact(blob, filename, result.pages, { autoSave: true, incomeEntry });
     showCompletion();
+    keepPending(pendingConsent);
   } catch (error) {
     console.error("PDF-Erstellung fehlgeschlagen:", error);
     toast(
@@ -1009,16 +993,7 @@ function presentPdfArtifact(
     incomeEntry,
     confirmed: false,
   };
-  if (!isTest && !isReport) {
-    pendingConsent = artifact;
-    try {
-      incomeFeature.confirm(incomeEntry);
-      artifact.incomeSaved = true;
-    } catch (error) {
-      artifact.incomeSaved = false;
-      artifact.incomeError = error.message;
-    }
-  }
+  if (!isTest && !isReport) pendingConsent = artifact;
   const native = renderPdfArtifact(artifact);
   if (autoSave) {
     if (native) savePdfToFiles();
@@ -1029,33 +1004,49 @@ function renderPdfArtifact(artifact) {
   if (pdfArtifact && pdfArtifact !== artifact) invalidatePdf();
   pdfArtifact = artifact;
   const { blob, filename, pages, isTest, isReport, reportTitle } = artifact;
+  // A consent restored after a reload whose PDF could not be read back from this device.
+  const missing = !blob;
   $("pdf-title").textContent = isReport
     ? reportTitle
     : isTest
       ? "Speichertest für dein iPad"
-      : "Dein PDF ist bereit.";
+      : missing
+        ? "PDF nicht mehr verfügbar"
+        : "Dein PDF ist bereit.";
   $("pdf-filename").textContent = filename;
-  $("pdf-meta").textContent =
-    `${pages} ${pages === 1 ? "Seite" : "Seiten"} · DIN A4 · ${Math.ceil(blob.size / 1024)} KB${isReport ? " · Dokument" : isTest ? " · Test ohne Kundendaten" : " · mit Unterschrift"}`;
-  $("pdf-preview").src = pdfArtifact.url;
-  $("pdf-open").href = pdfArtifact.url;
-  $("pdf-download").href = pdfArtifact.url;
-  $("pdf-download").download = filename;
-  $("pdf-next").hidden = isTest || isReport;
-  $("pdf-review-notice").hidden = isTest || isReport;
-  $("income-capture-note").hidden = isTest || isReport;
-  $("income-capture-note").textContent = artifact.incomeError
-    ? "Einnahmen noch nicht gespeichert: " +
-      artifact.incomeError +
-      ". Bitte nach der PDF-Ablage erneut bestätigen. Das Formular bleibt erhalten."
-    : "Name, Termin, Artist und Preise sind Teil der lokalen Einnahmenliste. Gesundheitsangaben und Unterschrift werden dort nicht gespeichert.";
+  $("pdf-meta").textContent = missing
+    ? "Die App wurde vor der Bestätigung neu geladen und konnte das PDF nicht wiederherstellen."
+    : `${pages} ${pages === 1 ? "Seite" : "Seiten"} · DIN A4 · ${Math.ceil(blob.size / 1024)} KB${isReport ? " · Dokument" : isTest ? " · Test ohne Kundendaten" : " · mit Unterschrift"}`;
+  if (missing) {
+    $("pdf-preview").removeAttribute("src");
+    $("pdf-open").removeAttribute("href");
+    $("pdf-download").removeAttribute("href");
+  } else {
+    $("pdf-preview").src = artifact.url;
+    $("pdf-open").href = artifact.url;
+    $("pdf-download").href = artifact.url;
+    $("pdf-download").download = filename;
+  }
+  const consent = !isTest && !isReport;
+  for (const id of ["pdf-preview-details", "pdf-open", "pdf-download", "pdf-archive-note"])
+    $(id).hidden = missing;
+  document.querySelector("#pdf-dialog .files-instructions").hidden = missing;
+  $("pdf-next").hidden = !consent || missing;
+  $("pdf-missing").hidden = !consent || !missing;
+  $("pdf-review-notice").hidden = !consent || missing;
+  $("income-capture-note").hidden = !consent;
+  $("income-capture-note").textContent = missing
+    ? "Bitte die Einwilligung erneut ausfüllen lassen, falls sie gebraucht wird. Die vorbereitete Einnahme (Name, Termin, Artist, Preise) kannst du hier mit dem Vermerk „PDF fehlt“ buchen; der Vermerk lässt sich später in der Einnahmenliste entfernen."
+    : "Sobald du als Inhaber die Ablage bestätigst, werden Name, Termin, Artist und Preise in der lokalen Einnahmenliste gebucht. Gesundheitsangaben und Unterschrift werden dort nicht gespeichert.";
   $("pdf-preview-details").open = false;
-  const file = new File([blob], filename, { type: "application/pdf" }),
-    native = canSharePdf(file);
+  const native =
+    !missing && canSharePdf(new File([blob], filename, { type: "application/pdf" }));
   $("pdf-share").hidden = !native;
-  $("share-status").textContent = native
-    ? "Wähle im iPad-Systemdialog „In Dateien sichern“ und bestätige dort mit „Sichern“."
-    : "Das PDF kann über den Safari-Download oder „PDF öffnen“ abgelegt werden. Prüfe danach den gewählten Speicherort in der Dateien-App.";
+  $("share-status").textContent = missing
+    ? ""
+    : native
+      ? "Wähle im iPad-Systemdialog „In Dateien sichern“ und bestätige dort mit „Sichern“."
+      : "Das PDF kann über den Safari-Download oder „PDF öffnen“ abgelegt werden. Prüfe danach den gewählten Speicherort in der Dateien-App.";
   showDialog("pdf-dialog");
   return native;
 }
@@ -1095,32 +1086,79 @@ $("pdf-download").addEventListener("click", () => {
   $("share-status").textContent =
     "Download an den Browser übergeben. Prüfe das Dokument anschließend in der Dateien-App im Downloadordner. Falls Safari das PDF öffnet, verwende dort Teilen → In Dateien sichern.";
 });
-$("pdf-next").addEventListener("click", () => {
-  if (!pdfArtifact || pdfArtifact.isTest || pdfArtifact.isReport || nativeShareInFlight) return;
+// Keeps the unconfirmed consent on this device until the owner confirms the filing.
+function keepPending(artifact) {
+  if (!artifact?.incomeEntry || !pendingStore) return;
+  const save = pendingStore.save({
+    id: artifact.incomeEntry.id,
+    filename: artifact.filename,
+    pages: artifact.pages,
+    income: artifact.incomeEntry,
+    blob: artifact.blob,
+  });
+  artifact.kept = save
+    .then((stored) => (artifact.keptOk = stored))
+    .catch((error) => {
+      console.error("Offene Einwilligung nicht gesichert:", error);
+      return false;
+    });
+}
+async function restorePending() {
+  let saved;
+  try {
+    await pendingStore.sweep();
+    saved = await pendingStore.load();
+  } catch (error) {
+    toast(error.message);
+    return false;
+  }
+  if (!saved) return false;
+  pendingConsent = {
+    blob: saved.blob,
+    filename: saved.filename,
+    url: saved.blob ? URL.createObjectURL(saved.blob) : "",
+    pages: saved.pages,
+    isTest: false,
+    isReport: false,
+    reportTitle: "",
+    incomeEntry: saved.income,
+    confirmed: false,
+    restored: true,
+  };
+  consentIncomeId = saved.income.id;
+  return true;
+}
+function bookPendingConsent(pdfMissing) {
+  const artifact = pdfArtifact;
+  if (!artifact || artifact !== pendingConsent || nativeShareInFlight) return;
   if (!adminAccess.isUnlocked()) {
-    adminAccess.request(() => $("pdf-next").click());
+    adminAccess.request(() => bookPendingConsent(pdfMissing));
     return;
   }
   try {
-    if (!pdfArtifact.incomeEntry)
+    if (!artifact.incomeEntry)
       throw Error("Der Einnahmeneintrag fehlt. Bitte das PDF erneut erstellen.");
-    if (!pdfArtifact.incomeSaved) {
-      incomeFeature.confirm(pdfArtifact.incomeEntry);
-      pdfArtifact.incomeSaved = true;
-      pdfArtifact.incomeError = "";
-    }
+    // Booking is idempotent per consent: a repeated confirmation never adds a second entry.
+    incomeFeature.book(artifact.incomeEntry, { pdfMissing });
   } catch (error) {
     $("share-status").textContent =
       "Einnahmen konnten nicht lokal gespeichert werden: " +
       error.message +
-      " Das Formular und PDF bleiben erhalten. Bitte Browser-Speicher prüfen und erneut versuchen.";
-    toast("Einnahmen nicht gespeichert. Formular bleibt erhalten.");
+      " Das PDF bleibt erhalten. Bitte Browser-Speicher prüfen und erneut versuchen.";
+    toast("Einnahme nicht gebucht. PDF bleibt erhalten.");
     return;
   }
-  pdfArtifact.confirmed = true;
+  artifact.confirmed = true;
+  const id = artifact.incomeEntry.id;
+  // Remove the device copy of the PDF only after the booking has been written.
+  Promise.resolve(artifact.kept)
+    .then(() => pendingStore.clear(id))
+    .catch((error) => console.error("Offene Einwilligung nicht entfernt:", error));
   resetCustomerForm();
   finishAdminLeave();
-});
+}
+$("pdf-next").addEventListener("click", () => bookPendingConsent(false));
+$("pdf-missing").addEventListener("click", () => bookPendingConsent(true));
 function runFilesTest() {
   if (!libraryAvailable()) {
     toast(
@@ -1128,11 +1166,11 @@ function runFilesTest() {
     );
     return;
   }
-  const doc = new window.jspdf.jsPDF({ unit: "mm", format: "a4" });
-  doc.setFont("helvetica", "bold");
+  const doc = createPdfDocument(window.jspdf.jsPDF, { unit: "mm", format: "a4" });
+  doc.setFont(PDF_FONT, "bold");
   doc.setFontSize(22);
   doc.text("INKFORM / Speichertest", 20, 30);
-  doc.setFont("helvetica", "normal");
+  doc.setFont(PDF_FONT, "normal");
   doc.setFontSize(12);
   doc.text("Dieses Testdokument enthält keine Kundendaten.", 20, 48);
   doc.text("Wenn du diese Datei in der Dateien-App öffnen kannst,", 20, 61);
@@ -1731,14 +1769,7 @@ function updateAdminChrome() {
   $("admin-discard").disabled = !changed;
   const name = (adminDraft?.studio.name || settings.studio.name).trim();
   $("admin-workspace-name").textContent = name || "Dein Tattoo-Studio";
-  $("admin-avatar").textContent = name
-    ? name
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((word) => word[0])
-        .join("")
-        .toUpperCase()
-    : "IS";
+  $("admin-avatar").textContent = studioInitials(name);
 }
 function configError(message) {
   $("admin-error").textContent = message;
@@ -1905,10 +1936,12 @@ function showCompletion(setup = false) {
   $("completion-title").focus();
 }
 $("completion-unlock").addEventListener("click", () => {
-  adminAccess.request(() => {
-    openAdminAuthorized("overview");
-    if (pendingConsent && !pendingConsent.confirmed) renderPdfArtifact(pendingConsent);
-  });
+  adminAccess.request(() =>
+    restoring.then(() => {
+      openAdminAuthorized("overview");
+      if (pendingConsent && !pendingConsent.confirmed) renderPdfArtifact(pendingConsent);
+    }),
+  );
 });
 function requestAdminLeave() {
   if (adminChanged()) showDialog("admin-leave-dialog");
@@ -2169,6 +2202,8 @@ adminAccess = createAdminAccess({
 });
 incomeFeature = createIncomeFeature({
   isUnlocked: () => adminAccess.isUnlocked(),
+  createPdf: (options) => createPdfDocument(window.jspdf.jsPDF, options),
+  unsupportedChars: unsupportedPdfChars,
   storage: {
     getItem: (key) => localStorage.getItem(key),
     setItem: (key, value) => localStorage.setItem(key, value),
@@ -2188,13 +2223,31 @@ try {
 } catch (_) {}
 setTheme(initialTheme, false);
 if (configLoadError) toast(configLoadError);
+pendingStore = createPendingStore({
+  storage: {
+    getItem: (key) => localStorage.getItem(key),
+    setItem: (key, value) => localStorage.setItem(key, value),
+    removeItem: (key) => localStorage.removeItem(key),
+  },
+  files: createIndexedDbFiles(),
+});
+let hasPending = false,
+  restoring = Promise.resolve(false);
+try {
+  hasPending = !!pendingStore.read();
+} catch (error) {
+  toast(error.message);
+}
 try {
   if (!adminAccess.configured()) {
     showCompletion(true);
     openAdmin("overview");
-  } else if (sessionStorage.getItem("inkform.completion")) showCompletion();
+  } else if (hasPending || sessionStorage.getItem("inkform.completion")) showCompletion();
   else if (location.hash === "#admin") openAdmin();
 } catch (error) {
   showCompletion(true);
   toast(error.message);
 }
+// An unconfirmed consent from before a reload: keep the thank-you screen and restore it for
+// the owner (PDF from this device, or "PDF fehlt" if it cannot be read back).
+if (hasPending) restoring = restorePending();

@@ -7,6 +7,7 @@ const PATHS = [
   "/icons/icon-512.png",
   "/licenses/jsPDF.txt",
   "/licenses/Tailwind.txt",
+  "/licenses/NotoSans.txt",
 ];
 self.addEventListener("install", (event) => {
   event.waitUntil(

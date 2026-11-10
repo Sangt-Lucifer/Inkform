@@ -1,4 +1,44 @@
 export const ADMIN_PIN_KEY = "inkform.admin.pin.v1";
+// Failed attempts and the lockout survive a reload, so reloading does not reset the counter.
+export const ADMIN_LOCK_KEY = "inkform.admin.lock.v1";
+export const MAX_PIN_FAILURES = 5;
+export const PIN_LOCK_MS = 30000;
+export function createPinLockout(storage, now = () => Date.now()) {
+  let memory = { failures: 0, blockedUntil: 0 };
+  function read() {
+    try {
+      const value = JSON.parse(storage.getItem(ADMIN_LOCK_KEY) || "null");
+      if (
+        value &&
+        Number.isInteger(value.failures) &&
+        value.failures >= 0 &&
+        Number.isFinite(value.blockedUntil)
+      )
+        memory = { failures: value.failures, blockedUntil: value.blockedUntil };
+    } catch (_) {}
+    // A clock set back must not extend the lockout beyond one period.
+    if (memory.blockedUntil > now() + PIN_LOCK_MS) memory.blockedUntil = now() + PIN_LOCK_MS;
+    return memory;
+  }
+  function write(value) {
+    memory = value;
+    try {
+      storage.setItem(ADMIN_LOCK_KEY, JSON.stringify(value));
+    } catch (_) {}
+  }
+  return {
+    remainingMs: () => Math.max(0, read().blockedUntil - now()),
+    fail() {
+      const failures = read().failures + 1;
+      if (failures >= MAX_PIN_FAILURES) write({ failures: 0, blockedUntil: now() + PIN_LOCK_MS });
+      else write({ failures, blockedUntil: read().blockedUntil });
+    },
+    reset() {
+      const current = read();
+      if (current.failures || current.blockedUntil) write({ failures: 0, blockedUntil: 0 });
+    },
+  };
+}
 export async function deriveAdminPinHash(pin, salt) {
   if (!globalThis.crypto?.subtle)
     throw Error("Bitte einen aktuellen Browser mit lokaler WebCrypto-Unterstützung verwenden.");
@@ -49,13 +89,12 @@ export function createAdminPinStore(storage) {
     },
   };
 }
-export function createAdminAccess({ storage, onExternalLock }) {
-  const pins = createAdminPinStore(storage);
+export function createAdminAccess({ storage, onExternalLock, now = () => Date.now() }) {
+  const pins = createAdminPinStore(storage),
+    lockout = createPinLockout(storage, now);
   let unlocked = false,
     pending = null,
     busy = false,
-    failures = 0,
-    blockedUntil = 0,
     epoch = 0;
   const dialog = document.createElement("dialog");
   dialog.id = "admin-pin-dialog";
@@ -89,21 +128,22 @@ export function createAdminAccess({ storage, onExternalLock }) {
     button.disabled = true;
     errorNode.hidden = true;
     try {
-      if (Date.now() < blockedUntil)
-        throw Error("Zu viele Fehlversuche. Bitte 30 Sekunden warten.");
+      const wait = lockout.remainingMs();
+      if (wait)
+        throw Error(`Zu viele Fehlversuche. Bitte noch ${Math.ceil(wait / 1000)} Sekunden warten.`);
       const configured = pins.configured();
       if (configured) {
         if (!(await pins.verify(form.elements.pin.value))) {
-          failures++;
-          if (failures >= 5) {
-            blockedUntil = Date.now() + 30000;
-            failures = 0;
-          }
-          throw Error("PIN nicht korrekt.");
+          lockout.fail();
+          throw Error(
+            lockout.remainingMs()
+              ? "PIN nicht korrekt. Zu viele Fehlversuche: Bitte 30 Sekunden warten."
+              : "PIN nicht korrekt.",
+          );
         }
       } else await pins.setup(form.elements.pin.value, form.elements.repeat.value);
       if (token !== epoch || !dialog.open) return;
-      failures = 0;
+      lockout.reset();
       unlocked = true;
       const action = pending;
       pending = null;
