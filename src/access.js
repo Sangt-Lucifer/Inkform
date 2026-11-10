@@ -4,8 +4,11 @@ export const ADMIN_LOCK_KEY = "inkform.admin.lock.v1";
 export const MAX_PIN_FAILURES = 5;
 export const PIN_LOCK_MS = 30000;
 export function createPinLockout(storage, now = () => Date.now()) {
-  let memory = { failures: 0, blockedUntil: 0 };
-  function read() {
+  // memory is authoritative while the last write could not be persisted (e.g. storage full);
+  // otherwise the stored record wins, so a reload or a second window sees the same counter.
+  let memory = { failures: 0, blockedUntil: 0 },
+    unsynced = false;
+  function stored() {
     try {
       const value = JSON.parse(storage.getItem(ADMIN_LOCK_KEY) || "null");
       if (
@@ -14,24 +17,34 @@ export function createPinLockout(storage, now = () => Date.now()) {
         value.failures >= 0 &&
         Number.isFinite(value.blockedUntil)
       )
-        memory = { failures: value.failures, blockedUntil: value.blockedUntil };
+        return { failures: value.failures, blockedUntil: value.blockedUntil };
     } catch (_) {}
-    // A clock set back must not extend the lockout beyond one period.
-    if (memory.blockedUntil > now() + PIN_LOCK_MS) memory.blockedUntil = now() + PIN_LOCK_MS;
-    return memory;
+    return null;
   }
   function write(value) {
     memory = value;
     try {
       storage.setItem(ADMIN_LOCK_KEY, JSON.stringify(value));
-    } catch (_) {}
+      unsynced = false;
+    } catch (_) {
+      unsynced = true;
+    }
+  }
+  function read() {
+    if (!unsynced) memory = stored() ?? memory;
+    // A clock set back must not extend the lockout beyond one period. The corrected deadline is
+    // stored, so it is not renewed on every check.
+    if (memory.blockedUntil > now() + PIN_LOCK_MS)
+      write({ failures: memory.failures, blockedUntil: now() + PIN_LOCK_MS });
+    return memory;
   }
   return {
     remainingMs: () => Math.max(0, read().blockedUntil - now()),
     fail() {
-      const failures = read().failures + 1;
+      const current = read(),
+        failures = current.failures + 1;
       if (failures >= MAX_PIN_FAILURES) write({ failures: 0, blockedUntil: now() + PIN_LOCK_MS });
-      else write({ failures, blockedUntil: read().blockedUntil });
+      else write({ failures, blockedUntil: current.blockedUntil });
     },
     reset() {
       const current = read();

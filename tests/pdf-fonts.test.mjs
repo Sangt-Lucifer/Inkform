@@ -59,3 +59,30 @@ test("a jsPDF document with Noto Sans prints the test names correctly in both st
   assert.equal((pdf.toString("latin1").match(/\/FontFile2/g) ?? []).length, 2);
   assert.ok(pdf.length < 200_000, `PDF zu groß: ${pdf.length} Bytes`);
 });
+
+// ---------- Review findings ----------
+test("characters above U+FFFF are rejected (jsPDF would drop them)", () => {
+  assert.deepEqual(unsupportedPdfChars("Before \u{10780} After", ranges), ["\u{10780}"]);
+  assert.ok(ranges.every(([, end]) => end <= 0xffff));
+});
+
+test("every character the app accepts really comes out of jsPDF, in both styles", async () => {
+  const chars = ranges.flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, i) => String.fromCharCode(a + i)));
+  const PDF = await jsPDF();
+  for (const style of ["normal", "bold"]) {
+    const doc = createPdfDocument(PDF, { unit: "mm", format: "a4" }, fonts);
+    doc.setFont(PDF_FONT, style);
+    doc.setFontSize(8);
+    let y = 10;
+    for (const c of chars) {
+      doc.text(`[${c}]`, 10, y);
+      if ((y += 3) > 290) {
+        doc.addPage();
+        y = 10;
+      }
+    }
+    const text = pdfText(Buffer.from(doc.output("arraybuffer")));
+    const lost = chars.filter((c) => !text.includes(`[${c}]`));
+    assert.deepEqual(lost, [], `${style}: ${lost.length} Zeichen fehlen im PDF`);
+  }
+});

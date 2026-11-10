@@ -101,7 +101,9 @@ export async function loadPdfFonts(vendorDir) {
   );
   const boldPoints = fontCodepoints(bold);
   const both = [...fontCodepoints(normal)].filter(
-    (c) => c >= 0x20 && boldPoints.has(c) && !UNSHAPED.some(([a, b]) => c >= a && c <= b),
+    // Only the Basic Multilingual Plane: the bundled jsPDF drops characters above U+FFFF.
+    (c) =>
+      c >= 0x20 && c <= 0xffff && boldPoints.has(c) && !UNSHAPED.some(([a, b]) => c >= a && c <= b),
   );
   return {
     normal: normal.toString("base64"),

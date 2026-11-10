@@ -117,6 +117,14 @@ const report = pdfText(Buffer.from(await ev(`blobBase64(pdfArtifact.blob)`), "ba
 check("Einnahmen-PDF mit Unicode-Namen und „PDF fehlt“", ["Gül Şahin", "Łukasz Ćwik", "Ayşe Yıldız | PDF fehlt"].every((n) => report.includes(n)));
 await ev(`document.getElementById('pdf-dialog').close();finishAdminLeave()`);
 
+// 4b. Leftover PDF without an open consent (interrupted cleanup) is deleted at the next start
+await ev(`createIndexedDbFiles().put('verwaist', new Blob(['%PDF test'],{type:'application/pdf'}))`);
+check("Testweise verwaistes PDF liegt im Gerätespeicher", (await pendingFiles()) === 1 && (await ev(`!localStorage.getItem(PENDING_KEY)`)));
+await reload();
+await helpers();
+await until(`createIndexedDbFiles().keys().then(k=>k.length===0)`);
+check("Beim Start wird ein verwaistes PDF gelöscht, die App startet normal", await ev(`document.getElementById('completion-screen').hidden&&!document.getElementById('customer-app').hidden`));
+
 // 5. Characters the font cannot print ----------------------------------------------------
 await ev(`fillConsent({firstName:'Anna ✓',lastName:'Test'});form.requestSubmit()`);
 await until(`!document.getElementById('toast').hidden`);

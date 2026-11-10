@@ -55,16 +55,17 @@ test("if the PDF cannot be stored or read back, the income entry is still kept (
   const restored = await createPendingStore({ storage, files: broken }).load();
   assert.equal(restored.blob, null);
   assert.deepEqual(restored.income, income);
-  // Without IndexedDB at all.
+  // Without IndexedDB at all: metadata kept, PDF reported as not stored.
   const plain = createPendingStore({ storage: memory(), files: null });
-  assert.equal(await plain.save(entry()), true);
+  assert.equal(await plain.save(entry()), false);
+  assert.deepEqual((await plain.load()).income, income);
   assert.equal((await plain.load()).blob, null);
 });
 
 test("a second consent cannot replace an unconfirmed one", async () => {
   const store = createPendingStore({ storage: memory(), files: fileStore() });
   await store.save(entry());
-  await assert.rejects(store.save({ ...entry(), id: "other" }), /offene Einwilligung/);
+  assert.throws(() => store.save({ ...entry(), id: "other" }), /offene Einwilligung/);
   // Saving the same consent again (retry) is fine.
   assert.equal(await store.save(entry()), true);
 });
@@ -74,7 +75,8 @@ test("clear removes metadata and PDF; sweep removes PDFs left without metadata",
     files = fileStore(),
     store = createPendingStore({ storage, files });
   await store.save(entry());
-  await assert.rejects(store.clear("someone-else"));
+  await store.clear("someone-else");
+  assert.notEqual(storage.getItem(PENDING_KEY), null, "another consent's metadata stays");
   await store.clear(income.id);
   assert.equal(storage.getItem(PENDING_KEY), null);
   assert.equal(files.map.size, 0);
@@ -90,6 +92,74 @@ test("corrupt metadata fails loudly instead of silently dropping the consent", a
   storage.setItem(PENDING_KEY, JSON.stringify({ version: 1, id: "../x" }));
   const store = createPendingStore({ storage, files: fileStore() });
   assert.throws(() => store.read(), /beschädigt/);
-  await assert.rejects(store.save(entry()), /beschädigt/);
+  assert.throws(() => store.save(entry()), /beschädigt/);
   assert.notEqual(storage.getItem(PENDING_KEY), null);
+});
+
+// ---------- Review findings ----------
+const delayed = () => {
+  const store = fileStore(),
+    gates = [];
+  const put = store.put;
+  store.put = (k, v) => new Promise((resolve) => gates.push(() => resolve(put(k, v))));
+  // put() starts one microtask after save(): wait a turn so every pending write is queued.
+  store.release = async () => {
+    await new Promise((r) => setImmediate(r));
+    gates.splice(0).forEach((open) => open());
+  };
+  return store;
+};
+
+test("metadata is stored synchronously; a failing metadata write throws instead of being hidden", () => {
+  const storage = memory(),
+    store = createPendingStore({ storage, files: delayed() });
+  store.save(entry());
+  assert.notEqual(storage.getItem(PENDING_KEY), null, "metadata present before any await");
+  const full = { ...memory(), setItem: () => { throw Error("QuotaExceededError"); } };
+  assert.throws(() => createPendingStore({ storage: full, files: fileStore() }).save(entry()), /Quota/);
+});
+
+test("confirming while the PDF is still being written leaves no PDF behind", async () => {
+  const storage = memory(),
+    files = delayed(),
+    store = createPendingStore({ storage, files });
+  const kept = store.save(entry());
+  const cleared = store.clear(income.id); // owner confirms before the write has finished
+  assert.equal(storage.getItem(PENDING_KEY), null, "metadata removed at once");
+  await files.release();
+  assert.equal(await kept, true);
+  await cleared;
+  assert.equal(files.map.size, 0);
+});
+
+test("the next customer can start at once, and the previous cleanup never deletes their PDF", async () => {
+  const storage = memory(),
+    files = delayed(),
+    store = createPendingStore({ storage, files });
+  store.save(entry()); // customer A, write still pending
+  const cleanupA = store.clear(income.id);
+  const b = { ...entry(new Blob(["%PDF B"])), id: "abc-2", income: { ...income, id: "abc-2", customer: "B" } };
+  const keptB = store.save(b); // must not be rejected because of A
+  await files.release();
+  await Promise.all([cleanupA, keptB]);
+  assert.deepEqual([...files.map.keys()], ["abc-2"]);
+  const restored = await createPendingStore({ storage, files }).load();
+  assert.equal(restored.income.customer, "B");
+  assert.equal(await restored.blob.text(), "%PDF B");
+});
+
+test("a PDF whose deletion failed is removed by the sweep at the next start", async () => {
+  const storage = memory(),
+    files = fileStore(),
+    store = createPendingStore({ storage, files });
+  await store.save(entry());
+  const del = files.delete;
+  files.delete = async () => { throw Error("transaction aborted"); };
+  await assert.rejects(store.clear(income.id));
+  assert.equal(storage.getItem(PENDING_KEY), null);
+  assert.equal(files.map.size, 1, "orphaned health PDF");
+  files.delete = del;
+  // Next app start, no pending metadata at all:
+  assert.equal(await createPendingStore({ storage, files }).sweep(), 1);
+  assert.equal(files.map.size, 0);
 });

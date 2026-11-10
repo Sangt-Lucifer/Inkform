@@ -25,21 +25,28 @@ export function createPendingStore({ storage, files }) {
       throw Error("Die offene Einwilligung auf diesem Gerät ist beschädigt.");
     return value;
   }
+  // PDF writes still running, per consent: cleanup waits for them, so a late write can never
+  // leave a PDF behind (and never touches another consent's PDF).
+  const writing = new Map();
   return {
     read,
-    // Metadata is written synchronously first, so the income entry is never lost; the PDF follows.
-    async save({ id, filename, pages, income, blob }) {
+    // Metadata is written synchronously before the first await, so the prepared income entry is
+    // stored at once; a failure throws. Resolves true once the PDF is stored, false if it is not.
+    save({ id, filename, pages, income, blob }) {
       const existing = read();
       if (existing && existing.id !== id)
         throw Error("Es gibt noch eine offene Einwilligung. Bitte zuerst deren Ablage bestätigen.");
       const meta = { version: 1, id, filename, pages, income, savedAt: new Date().toISOString() };
       storage.setItem(PENDING_KEY, JSON.stringify(meta));
-      try {
-        await files?.put(id, blob);
-        return true;
-      } catch (_) {
-        return false;
-      }
+      const write = Promise.resolve()
+        .then(() => (files ? files.put(id, blob) : Promise.reject(Error("kein Dateispeicher"))))
+        .then(
+          () => true,
+          () => false,
+        );
+      writing.set(id, write);
+      write.finally(() => writing.get(id) === write && writing.delete(id));
+      return write;
     },
     async load() {
       const meta = read();
@@ -50,20 +57,25 @@ export function createPendingStore({ storage, files }) {
       } catch (_) {}
       return { ...meta, blob };
     },
+    // Metadata of this consent is removed synchronously (the next consent can start at once);
+    // then only this consent's PDF is deleted, after a write still in progress has finished.
+    // Rejects if the PDF could not be deleted; sweep() at the next start removes it then.
     async clear(id) {
-      const meta = read();
-      if (meta && meta.id !== id) throw Error("Die offene Einwilligung wurde inzwischen ersetzt.");
-      storage.removeItem(PENDING_KEY);
-      try {
-        await files?.clear();
-      } catch (_) {}
+      if (read()?.id === id) storage.removeItem(PENDING_KEY);
+      await writing.get(id);
+      if (files) await files.delete(id);
     },
-    // Remove PDFs left behind without metadata (e.g. after an interrupted confirmation).
+    // Remove PDFs without metadata (interrupted or failed cleanup). Runs at every app start.
     async sweep() {
       const meta = read();
-      try {
-        for (const key of (await files?.keys()) ?? []) if (key !== meta?.id) await files.delete(key);
-      } catch (_) {}
+      if (!files) return 0;
+      let removed = 0;
+      for (const key of await files.keys())
+        if (key !== meta?.id && !writing.has(key)) {
+          await files.delete(key);
+          removed++;
+        }
+      return removed;
     },
   };
 }

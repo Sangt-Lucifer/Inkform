@@ -642,7 +642,7 @@ function resetCustomerForm() {
 $("reset-confirm").addEventListener("click", resetCustomerForm);
 window.addEventListener("beforeunload", (event) => {
   // A submitted consent whose PDF is stored on this device survives the reload: no warning.
-  const safe = pendingConsent && (pendingConsent.restored || pendingConsent.keptOk);
+  const safe = pendingConsent && !pendingConsent.keepError && (pendingConsent.restored || pendingConsent.keptOk);
   if ((dirty && !safe) || adminChanged() || incomeFeature?.hasUnsavedChanges()) {
     event.preventDefault();
     event.returnValue = "";
@@ -1038,6 +1038,10 @@ function renderPdfArtifact(artifact) {
   $("income-capture-note").textContent = missing
     ? "Bitte die Einwilligung erneut ausfüllen lassen, falls sie gebraucht wird. Die vorbereitete Einnahme (Name, Termin, Artist, Preise) kannst du hier mit dem Vermerk „PDF fehlt“ buchen; der Vermerk lässt sich später in der Einnahmenliste entfernen."
     : "Sobald du als Inhaber die Ablage bestätigst, werden Name, Termin, Artist und Preise in der lokalen Einnahmenliste gebucht. Gesundheitsangaben und Unterschrift werden dort nicht gespeichert.";
+  if (consent && artifact.keepError)
+    $("income-capture-note").textContent =
+      `Achtung: ${artifact.keepError} Bitte das PDF jetzt ablegen und die App bis zur Bestätigung nicht neu laden. ` +
+      $("income-capture-note").textContent;
   $("pdf-preview-details").open = false;
   const native =
     !missing && canSharePdf(new File([blob], filename, { type: "application/pdf" }));
@@ -1087,26 +1091,42 @@ $("pdf-download").addEventListener("click", () => {
     "Download an den Browser übergeben. Prüfe das Dokument anschließend in der Dateien-App im Downloadordner. Falls Safari das PDF öffnet, verwende dort Teilen → In Dateien sichern.";
 });
 // Keeps the unconfirmed consent on this device until the owner confirms the filing.
+// Until the PDF is stored (keptOk), leaving the page asks for confirmation; if storing fails, the
+// thank-you screen and the owner's PDF dialog say so: the consent then exists only in memory.
 function keepPending(artifact) {
   if (!artifact?.incomeEntry || !pendingStore) return;
-  const save = pendingStore.save({
-    id: artifact.incomeEntry.id,
-    filename: artifact.filename,
-    pages: artifact.pages,
-    income: artifact.incomeEntry,
-    blob: artifact.blob,
-  });
-  artifact.kept = save
-    .then((stored) => (artifact.keptOk = stored))
-    .catch((error) => {
-      console.error("Offene Einwilligung nicht gesichert:", error);
-      return false;
-    });
+  const failed = (message) => {
+    artifact.keepError = message;
+    if (pendingConsent === artifact && !$("completion-screen").hidden)
+      $("completion-copy").textContent =
+        "Bitte gib das iPad an das Studio zurück. Hinweis für das Studio: Diese Einwilligung ist nicht auf dem Gerät zwischengespeichert. Bitte nicht neu laden, sondern jetzt entsperren und ablegen.";
+    if (pdfArtifact === artifact) renderPdfArtifact(artifact);
+  };
+  try {
+    artifact.kept = pendingStore
+      .save({
+        id: artifact.incomeEntry.id,
+        filename: artifact.filename,
+        pages: artifact.pages,
+        income: artifact.incomeEntry,
+        blob: artifact.blob,
+      })
+      .then((stored) => {
+        artifact.keptOk = stored;
+        if (!stored) failed("Das PDF konnte nicht auf dem Gerät zwischengespeichert werden.");
+        return stored;
+      });
+  } catch (error) {
+    console.error("Offene Einwilligung nicht gesichert:", error);
+    artifact.kept = Promise.resolve(false);
+    failed(`Die Einwilligung konnte nicht auf dem Gerät zwischengespeichert werden (${error.message}).`);
+  }
 }
 async function restorePending() {
   let saved;
   try {
-    await pendingStore.sweep();
+    // Every start: delete PDFs left without metadata (e.g. interrupted cleanup).
+    await pendingStore.sweep().catch((error) => console.error("Aufräumen fehlgeschlagen:", error));
     saved = await pendingStore.load();
   } catch (error) {
     toast(error.message);
@@ -1149,11 +1169,12 @@ function bookPendingConsent(pdfMissing) {
     return;
   }
   artifact.confirmed = true;
-  const id = artifact.incomeEntry.id;
-  // Remove the device copy of the PDF only after the booking has been written.
-  Promise.resolve(artifact.kept)
-    .then(() => pendingStore.clear(id))
-    .catch((error) => console.error("Offene Einwilligung nicht entfernt:", error));
+  // Booking is written: remove this consent's device copy. The metadata goes at once, so the next
+  // customer can start; the PDF is deleted once a write still in progress has finished. If that
+  // fails, the start-up sweep removes it.
+  pendingStore
+    .clear(artifact.incomeEntry.id)
+    .catch((error) => console.error("PDF-Kopie nicht entfernt, wird beim nächsten Start gelöscht:", error));
   resetCustomerForm();
   finishAdminLeave();
 }
@@ -2250,4 +2271,4 @@ try {
 }
 // An unconfirmed consent from before a reload: keep the thank-you screen and restore it for
 // the owner (PDF from this device, or "PDF fehlt" if it cannot be read back).
-if (hasPending) restoring = restorePending();
+restoring = restorePending();

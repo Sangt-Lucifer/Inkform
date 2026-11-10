@@ -93,3 +93,28 @@ test("lockout still works in memory when storage is blocked or corrupt", () => {
   for (let i = 0; i < MAX_PIN_FAILURES; i++) lock.fail();
   assert.equal(lock.remainingMs(), PIN_LOCK_MS);
 });
+
+// ---------- Review findings ----------
+test("readable but unwritable storage (e.g. full) still locks after five failures", () => {
+  const map = new Map([[ADMIN_LOCK_KEY, JSON.stringify({ failures: 0, blockedUntil: 0 })]]);
+  const storage = { getItem: (k) => map.get(k) ?? null, setItem: () => { throw Error("QuotaExceededError"); } };
+  const lock = createPinLockout(storage, () => 1000);
+  for (let i = 0; i < MAX_PIN_FAILURES; i++) lock.fail();
+  assert.equal(lock.remainingMs(), PIN_LOCK_MS);
+  for (let i = 0; i < 20; i++) lock.fail();
+  assert.ok(lock.remainingMs() > 0);
+});
+
+test("after the clock is set back, the lock still ends one period later (checked repeatedly)", () => {
+  const storage = memory();
+  let clock = 10_000_000;
+  const lock = createPinLockout(storage, () => clock);
+  for (let i = 0; i < MAX_PIN_FAILURES; i++) lock.fail();
+  clock -= 3_600_000; // one hour back
+  assert.equal(lock.remainingMs(), PIN_LOCK_MS);
+  clock += 10_000;
+  assert.equal(lock.remainingMs(), PIN_LOCK_MS - 10_000);
+  clock += 25_000;
+  assert.equal(lock.remainingMs(), 0, "not renewed by repeated checks");
+  assert.equal(createPinLockout(storage, () => clock).remainingMs(), 0, "nor by a reload");
+});
