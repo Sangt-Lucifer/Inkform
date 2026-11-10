@@ -66,15 +66,16 @@ export function createPendingStore({ storage, files }) {
       if (files) await files.delete(id);
     },
     // Remove PDFs without metadata (interrupted or failed cleanup). Runs at every app start.
+    // The current metadata is re-read right before each deletion: metadata is always written
+    // before its PDF (also by another window), so a consent saved meanwhile is never deleted.
     async sweep() {
-      const meta = read();
       if (!files) return 0;
       let removed = 0;
-      for (const key of await files.keys())
-        if (key !== meta?.id && !writing.has(key)) {
-          await files.delete(key);
-          removed++;
-        }
+      for (const key of await files.keys()) {
+        if (key === read()?.id || writing.has(key)) continue;
+        await files.delete(key);
+        removed++;
+      }
       return removed;
     },
   };

@@ -31,7 +31,21 @@ export function createPinLockout(storage, now = () => Date.now()) {
     }
   }
   function read() {
-    if (!unsynced) memory = stored() ?? memory;
+    const saved = stored();
+    if (!unsynced) memory = saved ?? memory;
+    else if (saved) {
+      // Our last write failed: merge with what is stored (another window may have locked), never
+      // dropping a lock or failures from either side, and try to persist the merged state.
+      const merged = {
+        failures: Math.max(memory.failures, saved.failures),
+        blockedUntil: Math.max(memory.blockedUntil, saved.blockedUntil),
+      };
+      if (merged.failures !== saved.failures || merged.blockedUntil !== saved.blockedUntil) write(merged);
+      else {
+        memory = merged;
+        unsynced = false;
+      }
+    }
     // A clock set back must not extend the lockout beyond one period. The corrected deadline is
     // stored, so it is not renewed on every check.
     if (memory.blockedUntil > now() + PIN_LOCK_MS)

@@ -125,6 +125,17 @@ await helpers();
 await until(`createIndexedDbFiles().keys().then(k=>k.length===0)`);
 check("Beim Start wird ein verwaistes PDF gelöscht, die App startet normal", await ev(`document.getElementById('completion-screen').hidden&&!document.getElementById('customer-app').hidden`));
 
+// 4c. Storage fails during submission: warning on the thank-you screen, no PDF dialog for the customer
+await ev(`window.__set=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k===PENDING_KEY)throw Error('QuotaExceededTest');return window.__set.call(this,k,v)};fillConsent({firstName:'Speicher',lastName:'Voll'});form.requestSubmit()`);
+await until(`!document.getElementById('completion-screen').hidden && !!pendingConsent?.keepError`);
+check("Speicherfehler: Hinweis fürs Studio auf „Vielen Dank“, kein PDF-Dialog für den Kunden", await ev(`document.getElementById('completion-copy').textContent.includes('nicht auf dem Gerät zwischengespeichert')&&!document.getElementById('pdf-dialog').open&&!adminAccess.isUnlocked()`));
+await ev(`Storage.prototype.setItem=window.__set`);
+await unlockFromThanks();
+check("Inhaber sieht den Speicherfehler im PDF-Dialog und kann normal ablegen", await ev(`document.getElementById('income-capture-note').textContent.startsWith('Achtung:')&&!document.getElementById('pdf-next').hidden`));
+await ev(`document.getElementById('pdf-next').click()`);
+await until(`!document.getElementById('customer-app').hidden`);
+check("Nach Ablage gebucht", await ev(`incomeRecords().some(r=>r.customer==='Speicher Voll')`));
+
 // 5. Characters the font cannot print ----------------------------------------------------
 await ev(`fillConsent({firstName:'Anna ✓',lastName:'Test'});form.requestSubmit()`);
 await until(`!document.getElementById('toast').hidden`);

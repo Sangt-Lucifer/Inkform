@@ -1100,7 +1100,9 @@ function keepPending(artifact) {
     if (pendingConsent === artifact && !$("completion-screen").hidden)
       $("completion-copy").textContent =
         "Bitte gib das iPad an das Studio zurück. Hinweis für das Studio: Diese Einwilligung ist nicht auf dem Gerät zwischengespeichert. Bitte nicht neu laden, sondern jetzt entsperren und ablegen.";
-    if (pdfArtifact === artifact) renderPdfArtifact(artifact);
+    // Only refresh a dialog the unlocked owner already has open; never open it for the customer.
+    if (pdfArtifact === artifact && $("pdf-dialog").open && adminAccess.isUnlocked())
+      renderPdfArtifact(artifact);
   };
   try {
     artifact.kept = pendingStore

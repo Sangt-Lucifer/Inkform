@@ -163,3 +163,23 @@ test("a PDF whose deletion failed is removed by the sweep at the next start", as
   assert.equal(await createPendingStore({ storage, files }).sweep(), 1);
   assert.equal(files.map.size, 0);
 });
+
+test("sweep never deletes a consent saved while it is running (re-review)", async () => {
+  const storage = memory(),
+    files = fileStore(),
+    store = createPendingStore({ storage, files });
+  files.map.set("orphan", new Blob(["x"]));
+  const keys = files.keys;
+  let open;
+  files.keys = () => new Promise((r) => (open = () => r(keys())));
+  const sweeping = store.sweep(); // started at app start, keys() delayed
+  await store.save(entry()); // consent saved meanwhile (this or another window)
+  open();
+  await sweeping;
+  assert.deepEqual([...files.map.keys()], [income.id]);
+  // Same with a second store instance (another window) that has no in-memory write record.
+  files.keys = keys;
+  files.map.set("orphan2", new Blob(["y"]));
+  await createPendingStore({ storage, files }).sweep();
+  assert.deepEqual([...files.map.keys()], [income.id]);
+});

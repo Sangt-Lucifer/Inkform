@@ -118,3 +118,25 @@ test("after the clock is set back, the lock still ends one period later (checked
   assert.equal(lock.remainingMs(), 0, "not renewed by repeated checks");
   assert.equal(createPinLockout(storage, () => clock).remainingMs(), 0, "nor by a reload");
 });
+
+test("a window whose write failed does not ignore or overwrite another window's lock (re-review)", () => {
+  const map = new Map();
+  let broken = true;
+  const storage = {
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => {
+      if (broken) throw Error("QuotaExceededError");
+      map.set(k, v);
+    },
+  };
+  const clock = () => 50_000;
+  const first = createPinLockout(storage, clock);
+  first.fail(); // write fails -> first is unsynced with 1 failure
+  broken = false; // storage recovers
+  const second = createPinLockout(storage, clock);
+  for (let i = 0; i < MAX_PIN_FAILURES; i++) second.fail();
+  assert.equal(second.remainingMs(), PIN_LOCK_MS);
+  assert.equal(first.remainingMs(), PIN_LOCK_MS, "first window sees the lock");
+  first.fail();
+  assert.equal(second.remainingMs(), PIN_LOCK_MS, "lock not overwritten");
+});
