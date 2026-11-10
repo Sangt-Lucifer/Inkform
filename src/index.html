@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6f5f1" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="INKFORM" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta
+      name="description"
+      content="%%metaName%% · Tattoo-Einwilligung mit Unterschrift und PDF-Erstellung auf diesem Gerät."
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; worker-src 'self'; manifest-src 'self'; frame-src blob:; form-action 'none'; base-uri 'none'"
+    />
+    <link rel="icon" type="image/png" href="__STUDIO_LOGO__" />
+    <title>%%titlePrefix%%INKFORM — Tattoo-Einwilligung</title>
+    <script src="../public/vendor/tailwind-browser.js"></script>
+    <script defer src="../public/vendor/jspdf.umd.min.js" id="pdf-library"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      style="position: absolute; width: 0; height: 0; overflow: hidden"
+      aria-hidden="true"
+    >
+      <symbol id="i-lock" viewBox="0 0 24 24">
+        <rect x="5" y="10" width="14" height="11" rx="2" />
+        <path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2" />
+      </symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6" /></symbol>
+      <symbol id="i-doc" viewBox="0 0 24 24">
+        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
+        <path d="M14 3v6h6M8 13h8m-8 4h5" />
+      </symbol>
+      <symbol id="i-pen" viewBox="0 0 24 24">
+        <path d="m15 4 5 5M4 20l5-1L20 8a2.1 2.1 0 0 0-5-5L4 14ZM4 14l5 5M3 22h18" />
+      </symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 11v6m0-10v.1" />
+      </symbol>
+      <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 10a9 9 0 1 1 1 7M3 4v6h6" /></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24">
+        <path d="M4 7h16M4 17h16" />
+        <circle cx="9" cy="7" r="3" fill="var(--paper)" />
+        <circle cx="15" cy="17" r="3" fill="var(--paper)" />
+      </symbol>
+      <symbol id="i-warning" viewBox="0 0 24 24"><path d="m12 3 10 18H2ZM12 9v5m0 3v.1" /></symbol>
+      <symbol id="i-share" viewBox="0 0 24 24">
+        <path d="M12 16V3m-5 5 5-5 5 5M5 12H3v9h18v-9h-2" />
+      </symbol>
+      <symbol id="i-download" viewBox="0 0 24 24">
+        <path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" />
+      </symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      </symbol>
+      <symbol id="i-building" viewBox="0 0 24 24">
+        <rect x="5" y="3" width="14" height="18" rx="2" />
+        <path d="M9 7h.1m5.9 0h.1M9 11h.1m5.9 0h.1M10 21v-6h4v6" />
+      </symbol>
+      <symbol id="i-heart" viewBox="0 0 24 24">
+        <path d="M20 5c-3-3-6-1-8 1-2-2-5-4-8-1-4 4 0 9 8 15 8-6 12-11 8-15Z" />
+        <path d="M5 12h4l2-4 2 8 2-4h4" />
+      </symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24">
+        <path d="M4 7h16M4 17h16" />
+        <circle cx="9" cy="7" r="3" fill="var(--ad-sidebar)" />
+        <circle cx="15" cy="17" r="3" fill="var(--ad-sidebar)" />
+      </symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
+      </symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24">
+        <path d="M21 13a9 9 0 0 1-10-10A9 9 0 1 0 21 13Z" />
+      </symbol>
+      <symbol id="i-external" viewBox="0 0 24 24">
+        <path d="M14 3h7v7m0-7-12 12m1-12H3v18h18v-7" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7" /></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24">
+        <path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7" />
+      </symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24">
+        <path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5" />
+      </symbol>
+      <symbol id="i-tablet" viewBox="0 0 24 24">
+        <rect x="4" y="2" width="16" height="20" rx="2" />
+        <path d="M11 18h2" />
+      </symbol>
+    </svg>
+    <noscript
+      >Bitte aktiviere JavaScript, um das Formular auszufüllen, zu unterschreiben und als PDF zu
+      speichern.</noscript
+    >
+    <section
+      id="completion-screen"
+      class="completion-screen"
+      hidden
+      aria-labelledby="completion-title"
+    >
+      <div>
+        <h1 id="completion-title" tabindex="-1">Vielen Dank</h1>
+        <p id="completion-copy">Bitte gib das iPad an das Studio zurück.</p>
+        <button type="button" id="completion-unlock">Studio entsperren</button>
+      </div>
+    </section>
+    <div id="customer-app">
+      <header class="topbar">
+        <div class="shell topbar-inner">
+          <a href="#start" class="wordmark" aria-label="%%wordmarkLabel%% Start">
+            <img
+              class="studio-logo"
+              src="__STUDIO_LOGO__"
+              alt="%%logoAlt%%"
+              width="72"
+              height="72"
+            />
+            <span class="brand-copy"
+              ><strong id="customer-brand">INKFORM</strong
+              ><small id="customer-studio-name">%%customerStudioName%%</small></span
+            ></a
+          >
+          <div class="top-actions">
+            <button
+              type="button"
+              class="theme-button"
+              data-theme-toggle
+              aria-label="Farbschema wechseln"
+            ></button>
+            <button
+              type="button"
+              class="text-button"
+              id="studio-open"
+              aria-label="Admin-Konsole öffnen"
+            >
+              <svg class="icon" aria-hidden="true"><use href="#i-settings" /></svg
+              ><span id="studio-button-label">Admin-Konsole</span>
+            </button>
+          </div>
+        </div>
+      </header>
+      <div class="shell layout" id="start">
+        <aside class="sidebar" aria-label="Formularübersicht">
+          <div class="eyebrow">EINWILLIGUNG</div>
+          <h2 class="side-title">Vor deinem Termin</h2>
+          <p class="side-copy">
+            Bitte fülle alle Pflichtangaben aus. Offene Fragen klärst du mit deinem Tätowierer.
+          </p>
+          <nav aria-label="Formularabschnitte">
+            <ol class="steps">
+              <li>
+                <a class="step-link" href="#personal" data-step="personal" aria-current="step"
+                  ><span class="step-number">01</span
+                  ><span class="step-name"
+                    >Deine Angaben<span class="step-note">Person & Tattoo</span></span
+                  ></a
+                >
+              </li>
+              <li>
+                <a class="step-link" href="#health" data-step="health"
+                  ><span class="step-number">02</span
+                  ><span class="step-name"
+                    >Deine Gesundheit<span class="step-note">Medizinische Anamnese</span></span
+                  ></a
+                >
+              </li>
+              <li>
+                <a class="step-link" href="#consent" data-step="consent"
+                  ><span class="step-number">03</span
+                  ><span class="step-name"
+                    >Dein Einverständnis<span class="step-note"
+                      >Aufklärung & Datenschutz</span
+                    ></span
+                  ></a
+                >
+              </li>
+              <li>
+                <a class="step-link" href="#signature" data-step="signature"
+                  ><span class="step-number">04</span
+                  ><span class="step-name"
+                    >Deine Unterschrift<span class="step-note"
+                      >Unterschreiben & speichern</span
+                    ></span
+                  ></a
+                >
+              </li>
+            </ol>
+          </nav>
+          <div class="side-card">
+            <svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg
+            ><strong>Deine Angaben bleiben hier.</strong>
+            <p>
+              Das Formular verarbeitet deine Daten auf diesem Gerät. Erst du entscheidest, wo du das
+              PDF speicherst.
+            </p>
+          </div>
+          <p class="offline-status" id="offline-status" role="status">
+            Lokale Datei: ohne Internet nutzbar.
+          </p>
+          <div class="side-footer">
+            <button type="button" class="text-button" data-open="sources-dialog">
+              <svg class="icon" aria-hidden="true"><use href="#i-info" /></svg>Vorlage & Quellen
+            </button>
+            <button type="button" class="text-button" data-open="reset-dialog">
+              <svg class="icon" aria-hidden="true"><use href="#i-reset" /></svg>Neues Formular
+            </button>
+          </div>
+        </aside>
+        <main class="main">
+          <div class="intro">
+            <div class="intro-meta">
+              <span class="eyebrow" id="customer-eyebrow">KUNDENFORMULAR</span>
+            </div>
+            <h1 id="customer-headline">Einwilligung zur Tätowierung</h1>
+            <p id="customer-description">
+              Bitte ergänze deine Angaben und besprich offene Fragen mit deinem Tätowierer.
+            </p>
+            <p class="studio-contact" id="customer-studio-contact"></p>
+            <div class="intro-bottom">
+              <span
+                ><svg class="icon" aria-hidden="true"><use href="#i-clock" /></svg>Etwa 5–7
+                Minuten</span
+              ><span id="overall-label">0 von 4 Abschnitten vollständig</span>
+            </div>
+            <div
+              class="overall-track"
+              role="progressbar"
+              aria-label="Formularfortschritt"
+              aria-valuemin="0"
+              aria-valuemax="4"
+              aria-valuenow="0"
+              id="progress"
+            >
+              <div class="overall-fill" id="progress-fill"></div>
+            </div>
+          </div>
+          <nav class="mobile-steps" aria-label="Formularabschnitte mobil">
+            <a href="#personal" data-step="personal" aria-current="step">01 Angaben</a
+            ><a href="#health" data-step="health">02 Gesundheit</a
+            ><a href="#consent" data-step="consent">03 Einwilligung</a
+            ><a href="#signature" data-step="signature">04 Unterschrift</a>
+          </nav>
+          <div id="error-summary" class="error-summary" role="alert" tabindex="-1" hidden></div>
+          <div id="dependency-error" class="error-summary" role="alert" hidden>
+            Die eingebettete PDF-Bibliothek ist nicht verfügbar. Du kannst den Status
+            <button type="button" id="retry-library" style="text-decoration: underline">
+              erneut prüfen</button
+            >. Deine Eingaben bleiben dabei erhalten.
+          </div>
+          <form id="consent-form" novalidate autocomplete="off">
+            <section class="card" id="personal" aria-labelledby="personal-title">
+              <div class="card-head">
+                <span class="section-number">01</span>
+                <div>
+                  <h2 id="personal-title">Deine Angaben</h2>
+                  <p>Deine Angaben und die Details zu deinem Tattoo.</p>
+                </div>
+                <span class="section-status" data-status="personal">Offen</span>
+              </div>
+              <div class="card-body">
+                <div class="field-grid">
+                  <div class="field">
+                    <label for="firstName">Vorname<span class="required">*</span></label
+                    ><input
+                      id="firstName"
+                      name="firstName"
+                      autocomplete="off"
+                      maxlength="80"
+                      placeholder="Dein Vorname"
+                      required
+                    />
+                  </div>
+                  <div class="field">
+                    <label for="lastName">Nachname<span class="required">*</span></label
+                    ><input
+                      id="lastName"
+                      name="lastName"
+                      autocomplete="off"
+                      maxlength="80"
+                      placeholder="Dein Nachname"
+                      required
+                    />
+                  </div>
+                  <div class="field">
+                    <label for="birthDate">Geburtsdatum<span class="required">*</span></label
+                    ><input
+                      id="birthDate"
+                      name="birthDate"
+                      type="date"
+                      required
+                      aria-describedby="age-hint"
+                    /><span
+                      id="age-hint"
+                      style="font-size: 10px; color: var(--muted); display: block; margin-top: 6px"
+                      >Dieses Formular ist für Personen ab 18 Jahren.</span
+                    >
+                  </div>
+                  <div class="field">
+                    <label for="phone">Telefonnummer<span class="optional">optional</span></label
+                    ><input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      inputmode="tel"
+                      maxlength="50"
+                      placeholder="+49 170 1234567"
+                    />
+                  </div>
+                  <div class="field full">
+                    <label for="street"
+                      >Straße & Hausnummer<span class="optional">optional</span></label
+                    ><input
+                      id="street"
+                      name="street"
+                      maxlength="140"
+                      placeholder="Musterstraße 12"
+                    />
+                  </div>
+                  <div class="address-row full">
+                    <div class="field">
+                      <label for="postalCode"
+                        >Postleitzahl<span class="optional">optional</span></label
+                      ><input
+                        id="postalCode"
+                        name="postalCode"
+                        inputmode="text"
+                        maxlength="16"
+                        placeholder="10115"
+                      />
+                    </div>
+                    <div class="field">
+                      <label for="city">Ort<span class="optional">optional</span></label
+                      ><input id="city" name="city" maxlength="100" placeholder="Berlin" />
+                    </div>
+                  </div>
+                  <div class="field full">
+                    <label for="email">E-Mail-Adresse<span class="optional">optional</span></label
+                    ><input
+                      id="email"
+                      name="email"
+                      type="email"
+                      inputmode="email"
+                      autocapitalize="none"
+                      spellcheck="false"
+                      maxlength="160"
+                      placeholder="du@beispiel.de"
+                    />
+                  </div>
+                </div>
+                <div class="field-divider">
+                  <h3>DEIN TATTOO</h3>
+                  <span>Für diesen Termin</span>
+                </div>
+                <div class="field-grid">
+                  <div class="field">
+                    <label for="appointment">Datum des Termins<span class="required">*</span></label
+                    ><input id="appointment" name="appointment" type="date" required />
+                  </div>
+                  <div class="field">
+                    <label for="artist">Tätowierer / Artist<span class="required">*</span></label
+                    ><input
+                      id="artist"
+                      name="artist"
+                      maxlength="100"
+                      placeholder="Name oder Kürzel"
+                      required
+                    />
+                  </div>
+                  <div class="field">
+                    <label for="placement">Körperstelle<span class="required">*</span></label
+                    ><input
+                      id="placement"
+                      name="placement"
+                      maxlength="140"
+                      placeholder="z. B. linker Unterarm"
+                      required
+                    />
+                  </div>
+                  <div class="field">
+                    <label for="size">Ungefähre Größe<span class="optional">optional</span></label
+                    ><input id="size" name="size" maxlength="80" placeholder="z. B. 10 × 8 cm" />
+                  </div>
+                  <div class="field full">
+                    <label for="motif">Motiv / Beschreibung<span class="required">*</span></label
+                    ><textarea
+                      id="motif"
+                      name="motif"
+                      rows="2"
+                      maxlength="2000"
+                      placeholder="Was wird tätowiert? Motiv, Stil, Farben, Besonderheiten …"
+                      required
+                    ></textarea>
+                  </div>
+                  <div class="field">
+                    <label for="totalPrice"
+                      >Vereinbarte Gesamtkosten (€)<span class="optional">optional</span></label
+                    >
+                    <input
+                      id="totalPrice"
+                      name="totalPrice"
+                      inputmode="decimal"
+                      maxlength="10"
+                      placeholder="z. B. 450,00"
+                      aria-describedby="price-help"
+                    />
+                  </div>
+                  <div class="field">
+                    <label for="depositPaid"
+                      >Bereits angezahlt (€)<span class="optional">optional</span></label
+                    >
+                    <input
+                      id="depositPaid"
+                      name="depositPaid"
+                      inputmode="decimal"
+                      maxlength="10"
+                      placeholder="z. B. 100,00"
+                      aria-describedby="price-help"
+                    />
+                  </div>
+                  <p class="price-help full" id="price-help">
+                    Besprochenen Gesamtpreis einschließlich gegebenenfalls anfallender Umsatzsteuer
+                    eintragen. Wenn nichts angezahlt wurde, „0“ eintragen. Ohne Preisvereinbarung
+                    beide Felder leer lassen.
+                  </p>
+                  <p class="price-balance full" id="price-balance" role="status" hidden></p>
+                </div>
+              </div>
+            </section>
+            <section class="card" id="health" aria-labelledby="health-title">
+              <div class="card-head">
+                <span class="section-number">02</span>
+                <div>
+                  <h2 id="health-title">Gesundheit</h2>
+                  <p>Bitte beantworte jede Frage mit Ja oder Nein.</p>
+                </div>
+                <span class="section-status" data-status="health">Offen</span>
+              </div>
+              <div class="card-body">
+                <div class="callout">
+                  <svg class="icon" aria-hidden="true"><use href="#i-info" /></svg
+                  ><span
+                    >Ein „Ja“ ist ein Hinweis für das persönliche Gespräch. Bitte besprich
+                    Besonderheiten vor dem Tätowieren mit deinem Artist. Das Formular ersetzt keine
+                    ärztliche Beurteilung.</span
+                  >
+                </div>
+                <label class="check-row"
+                  ><input type="checkbox" id="sober" name="sober" required /><span
+                    class="check-text"
+                    ><strong
+                      >Ich stehe aktuell nicht unter Alkohol- oder Drogeneinfluss.<span
+                        class="required"
+                        >*</span
+                      ></strong
+                    ><small
+                      >Ich kann die Aufklärung verstehen und frei über die Tätowierung
+                      entscheiden.</small
+                    ></span
+                  ></label
+                >
+                <div id="medical-questions"></div>
+                <div class="callout" id="medical-notice" hidden>
+                  <svg class="icon" aria-hidden="true"><use href="#i-info" /></svg
+                  ><span
+                    >Du hast mindestens eine Frage mit „Ja“ beantwortet. Bitte kläre diese Angaben
+                    vor Beginn persönlich mit dem Studio. Ein exportiertes PDF bedeutet keine
+                    medizinische Freigabe.</span
+                  >
+                </div>
+                <div class="field" style="margin-top: 20px">
+                  <label for="medicationNotes"
+                    >Weitere Medikamente & Hinweise<span class="optional">optional</span></label
+                  ><textarea
+                    id="medicationNotes"
+                    name="medicationNotes"
+                    rows="2"
+                    maxlength="3000"
+                    placeholder="z. B. Medikamente der letzten 24 Stunden, frühere Reaktionen auf Tattoos oder Besonderheiten bei der Wundheilung"
+                  ></textarea>
+                </div>
+              </div>
+            </section>
+            <section class="card" id="consent" aria-labelledby="consent-title">
+              <div class="card-head">
+                <span class="section-number">03</span>
+                <div>
+                  <h2 id="consent-title">Aufklärung & Einwilligung</h2>
+                  <p>Lies die Erklärungen und bestätige die Pflichtangaben.</p>
+                </div>
+                <span class="section-status" data-status="consent">Offen</span>
+              </div>
+              <div class="card-body">
+                <div class="review" style="margin-bottom: 13px">
+                  <span class="review-label"
+                    ><svg class="icon" aria-hidden="true"><use href="#i-warning" /></svg>VOR EINSATZ
+                    RECHTLICH PRÜFEN</span
+                  >%%legalReviewNote%%. Die Angaben zu
+                  Fotoverwendung, Zugriff und Aufbewahrung müssen den tatsächlichen Studioabläufen
+                  entsprechen. Eine verbindliche anwaltliche Freigabe liegt nicht vor. Die
+                  verbleibenden Prüfhinweise erscheinen auch im PDF.
+                </div>
+                <div id="legal-confirmations"></div>
+                <fieldset class="photo-box" id="photo-fieldset" style="min-width: 0">
+                  <legend class="field-label" style="float: left; width: 100%">
+                    Fotoverwendung <span class="optional">freiwillige Einwilligung</span>
+                  </legend>
+                  <div style="clear: both"></div>
+                  <span class="inline-review">Vor Einsatz rechtlich prüfen</span>
+                  <p id="photo-text"></p>
+                  <div class="photo-options">
+                    <label class="choice"
+                      ><input
+                        type="radio"
+                        name="photo"
+                        value="yes"
+                        required
+                        aria-label="Ja, Fotoverwendung erlauben"
+                      /><span>Ja, ich bin einverstanden</span></label
+                    ><label class="choice"
+                      ><input
+                        type="radio"
+                        name="photo"
+                        value="no"
+                        required
+                        aria-label="Nein, keine Fotoverwendung"
+                      /><span>Nein, keine Veröffentlichung</span></label
+                    >
+                  </div>
+                  <p style="font-size: 10px; margin: 10px 0 0">
+                    Bitte wähle eine Option. Ein Nein hat keine Auswirkungen auf deine Behandlung.
+                  </p>
+                </fieldset>
+                <details class="privacy-details">
+                  <summary>Datenschutzhinweise lesen · Entwurf zur Prüfung</summary>
+                  <div class="review">
+                    <span class="review-label">VOR EINSATZ RECHTLICH PRÜFEN</span>
+                    <p id="privacy-text"></p>
+                  </div>
+                </details>
+              </div>
+            </section>
+            <section class="card" id="signature" aria-labelledby="signature-title">
+              <div class="card-head">
+                <span class="section-number">04</span>
+                <div>
+                  <h2 id="signature-title">Unterschrift</h2>
+                  <p>Direkt mit dem Finger oder Apple Pencil unterschreiben.</p>
+                </div>
+                <span class="section-status" data-status="signature">Offen</span>
+              </div>
+              <div class="card-body">
+                <p
+                  id="signature-confirmation"
+                  style="font-size: 12px; line-height: 1.9; color: var(--muted); margin: 0"
+                >
+                  Mit meiner Unterschrift bestätige ich meine Angaben und die von mir ausgewählten
+                  Erklärungen. Ich willige freiwillig in die beschriebene Tätowierung ein. Die
+                  Fotoentscheidung bleibt davon unabhängig.
+                </p>
+                <div class="signature-tools">
+                  <label for="signature-canvas"
+                    >Unterschrift der Kundin / des Kunden<span class="required">*</span></label
+                  ><button type="button" class="text-button" id="clear-signature">
+                    <svg class="icon" aria-hidden="true"><use href="#i-reset" /></svg>Unterschrift
+                    zurücksetzen
+                  </button>
+                </div>
+                <div class="canvas-wrap" id="signature-wrap">
+                  <div class="canvas-placeholder" id="signature-placeholder">
+                    <svg class="icon" aria-hidden="true"><use href="#i-pen" /></svg
+                    ><span>Hier unterschreiben</span>
+                  </div>
+                  <div class="sign-baseline"></div>
+                  <span class="sign-x">×</span
+                  ><canvas
+                    id="signature-canvas"
+                    tabindex="0"
+                    aria-label="Unterschriftsfeld. Mit Finger, Apple Pencil oder Maus unterschreiben."
+                    aria-describedby="signature-help signature-error"
+                    >Für die Unterschrift wird ein Browser mit Canvas-Unterstützung
+                    benötigt.</canvas
+                  >
+                </div>
+                <div class="signature-meta">
+                  <span id="signature-name">Dein Name erscheint hier</span
+                  ><span id="signature-time">Datum & Uhrzeit werden automatisch erfasst.</span>
+                </div>
+                <p
+                  id="signature-help"
+                  style="font-size: 10px; color: var(--muted); line-height: 1.7; margin: 12px 0 0"
+                >
+                  Änderst du danach deine Angaben, ist eine neue Unterschrift nötig. Die
+                  Unterschrift bleibt beim Drehen des Geräts erhalten.
+                </p>
+                <p class="signature-error" id="signature-error" role="status"></p>
+              </div>
+            </section>
+            <div class="export-footnote">
+              <svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg>PDF-Erstellung auf
+              deinem Gerät · keine automatische Cloud-Übertragung
+            </div>
+            <div
+              class="flex justify-center gap-5 mt-5"
+              style="display: flex; justify-content: center; gap: 20px; margin-top: 20px"
+            >
+              <button type="button" class="text-button" data-open="sources-dialog">
+                Vorlage & Quellen</button
+              ><button type="button" class="text-button" data-open="reset-dialog">
+                Neues Formular
+              </button>
+            </div>
+          </form>
+        </main>
+      </div>
+      <footer class="bottom-bar">
+        <div class="shell bottom-inner">
+          <div class="bottom-info">
+            <span class="bottom-doc"
+              ><svg class="icon" aria-hidden="true"><use href="#i-doc" /></svg></span
+            ><span
+              ><strong>Deine Einwilligung als PDF</strong
+              ><small id="export-status">Bitte fülle die vier Abschnitte aus.</small></span
+            >
+          </div>
+          <div class="bottom-export">
+            <span class="format-tag">DIN A4 · inkl. Unterschrift</span
+            ><button type="submit" form="consent-form" class="primary-button" id="export-button">
+              PDF erstellen & sichern<svg class="icon" aria-hidden="true">
+                <use href="#i-arrow" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </footer>
+    </div>
+    <div id="admin-app" hidden>
+      <div class="admin-layout">
+        <aside class="ad-sidebar" aria-label="Administration">
+          <div class="ad-brand">
+            <img
+              class="studio-logo"
+              src="__STUDIO_LOGO__"
+              alt="%%logoAlt%%"
+              width="48"
+              height="48"
+            /><strong>INKFORM</strong>
+          </div>
+          <div class="ad-workspace">
+            <span class="ad-workspace-avatar" id="admin-avatar">IS</span
+            ><span
+              ><strong id="admin-workspace-name">Dein Tattoo-Studio</strong
+              ><small>Studioeinstellungen</small></span
+            >
+          </div>
+          <div class="ad-nav-label">VERWALTUNG</div>
+          <nav class="ad-nav" id="admin-nav" aria-label="Admin-Bereiche"></nav>
+          <div class="ad-nav-spacer"></div>
+          <div class="ad-local">
+            <strong
+              ><svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg>Lokal auf diesem
+              Gerät</strong
+            >
+            <p>
+              Studioeinstellungen und die separate Einnahmenliste bleiben lokal. Gesundheitsangaben
+              und Unterschriften werden nicht im Browser archiviert.
+            </p>
+          </div>
+          <div class="ad-sidebar-foot"><span>INKFORM ADMIN</span><span>v1.2</span></div>
+        </aside>
+        <div class="ad-main">
+          <header class="ad-topbar">
+            <div class="ad-breadcrumb">
+              <span>Verwaltung</span><span>/</span><strong id="admin-breadcrumb">Übersicht</strong>
+            </div>
+            <div class="ad-top-actions">
+              <button
+                class="ad-button"
+                type="button"
+                data-admin-action="guide"
+                aria-label="Anleitung für iPad und Admin als PDF öffnen"
+              >
+                <svg class="icon" aria-hidden="true"><use href="#i-info" /></svg
+                ><span>Anleitung (PDF)</span>
+              </button>
+              <button
+                class="ad-button"
+                type="button"
+                data-open="install-dialog"
+                aria-label="Zum Home-Bildschirm hinzufügen"
+              >
+                <svg class="icon" aria-hidden="true"><use href="#i-tablet" /></svg
+                ><span>Zum Home-Bildschirm</span>
+              </button>
+              <button
+                class="theme-button"
+                type="button"
+                data-theme-toggle
+                aria-label="Farbschema wechseln"
+              ></button
+              ><button class="ad-button" type="button" id="admin-preview">
+                <svg class="icon" aria-hidden="true"><use href="#i-external" /></svg
+                ><span>Zum Formular</span>
+              </button>
+            </div>
+          </header>
+          <main class="ad-content" id="admin-main">
+            <div id="admin-error" class="ad-error" role="alert" tabindex="-1" hidden></div>
+            <div class="ad-page-eyebrow">STUDIOVERWALTUNG</div>
+            <div class="ad-page-heading">
+              <div>
+                <h1 id="admin-page-title">Übersicht</h1>
+                <p id="admin-page-description">
+                  Studioangaben, Formulartexte und Geräteeinstellungen verwalten.
+                </p>
+              </div>
+              <span class="ad-version">Version 1.2</span>
+            </div>
+            <div id="admin-section"></div>
+          </main>
+        </div>
+      </div>
+      <footer class="ad-savebar" id="admin-savebar">
+        <div class="ad-save-info">
+          <strong
+            ><span class="ad-save-status-dot"></span
+            ><span id="admin-save-state">Alles auf dem aktuellen Stand</span></strong
+          ><small id="admin-save-detail">Studio-Einstellungen werden lokal gespeichert.</small>
+        </div>
+        <div class="ad-actions-row">
+          <button type="button" class="ad-button" id="admin-discard">Verwerfen</button
+          ><button type="button" class="ad-button primary" id="admin-save">
+            <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg
+            ><span class="ad-save-label">Änderungen speichern</span>
+          </button>
+        </div>
+      </footer>
+    </div>
+    <input id="admin-import-file" type="file" accept="application/json,.json" hidden />
+    <dialog id="admin-leave-dialog" aria-labelledby="admin-leave-title">
+      <div class="dialog-head">
+        <h2 id="admin-leave-title">Änderungen übernehmen?</h2>
+        <button type="button" class="close-button" data-close aria-label="Dialog schließen">
+          ×
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p>
+          Deine Änderungen sind noch nicht gespeichert. Du kannst sie übernehmen oder zum zuletzt
+          gespeicherten Stand zurückkehren.
+        </p>
+        <div class="dialog-actions">
+          <button class="secondary-button" type="button" data-close>Weiter bearbeiten</button
+          ><button class="secondary-button" type="button" id="admin-leave-discard">
+            Verwerfen & wechseln</button
+          ><button class="primary-button" type="button" id="admin-leave-save">
+            Speichern & wechseln
+          </button>
+        </div>
+      </div>
+    </dialog>
+    <dialog id="admin-defaults-dialog" aria-labelledby="admin-defaults-title">
+      <div class="dialog-head">
+        <h2 id="admin-defaults-title">Standardvorlage laden?</h2>
+        <button type="button" class="close-button" data-close aria-label="Dialog schließen">
+          ×
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p>
+          Die ursprünglichen Studio-Einstellungen und Formulartexte werden als Entwurf geladen. Erst
+          „Änderungen speichern“ übernimmt sie dauerhaft. Du kannst den Entwurf jederzeit verwerfen.
+        </p>
+        <div class="dialog-actions">
+          <button class="secondary-button" type="button" data-close>Abbrechen</button
+          ><button class="primary-button" type="button" id="admin-defaults-confirm">
+            Standardvorlage laden
+          </button>
+        </div>
+      </div>
+    </dialog>
+    <script type="application/json" id="inkform-config">
+      null
+    </script>
+    <dialog id="pdf-dialog" aria-labelledby="pdf-title">
+      <div class="dialog-head">
+        <h2 id="pdf-title">Dein PDF ist bereit.</h2>
+        <button class="close-button" type="button" data-close aria-label="PDF-Vorschau schließen">
+          ×
+        </button>
+      </div>
+      <div class="dialog-body">
+        <div class="pdf-file">
+          <span class="bottom-doc"
+            ><svg class="icon" aria-hidden="true"><use href="#i-doc" /></svg
+          ></span>
+          <div><strong id="pdf-filename"></strong><small id="pdf-meta"></small></div>
+        </div>
+        <details class="pdf-preview-details" id="pdf-preview-details">
+          <summary>PDF-Vorschau einblenden</summary>
+          <iframe
+            id="pdf-preview"
+            class="pdf-preview"
+            title="Vorschau der ausgefüllten Tattoo-Einwilligung"
+          ></iframe>
+        </details>
+        <div class="files-instructions">
+          <strong>Auf dem iPad in „Dateien“ ablegen</strong>
+          <ol>
+            <li>Im Systemdialog <b>„In Dateien sichern“</b> wählen.</li>
+            <li>
+              „Auf meinem iPad“ und deinen Studioordner auswählen, damit die Datei lokal bleibt.
+            </li>
+            <li>Oben rechts auf <b>„Sichern“</b> tippen.</li>
+          </ol>
+          <p>
+            Falls der Dialog nicht erscheint, tippe unten auf „In Dateien sichern“. Alternativ „PDF
+            öffnen“ und dort das Teilen-Menü verwenden.
+          </p>
+        </div>
+        <div class="review" id="pdf-review-notice" style="padding: 10px 13px">
+          Enthält rot markierte Rechtstext-Entwürfe zur Prüfung.
+        </div>
+        <div class="dialog-actions">
+          <a id="pdf-open" target="_blank" rel="noopener" class="secondary-button">PDF öffnen</a
+          ><a id="pdf-download" class="secondary-button"
+            ><svg class="icon" aria-hidden="true"><use href="#i-download" /></svg>Herunterladen</a
+          ><button type="button" id="pdf-share" class="primary-button">
+            <svg class="icon" aria-hidden="true"><use href="#i-share" /></svg>In Dateien sichern
+          </button>
+        </div>
+        <p id="share-status" role="status" style="margin-bottom: 0"></p>
+        <p id="income-capture-note" class="ad-section-copy">
+          Beim Erstellen des unterschriebenen PDFs werden Name, Termin, Artist und Preise in der
+          lokalen Einnahmenliste gespeichert. Gesundheitsangaben und Unterschrift werden dort nicht
+          gespeichert.
+        </p>
+        <button type="button" class="secondary-button pdf-next-button" id="pdf-next">
+          PDF ist gespeichert · Nächster Kunde
+        </button>
+        <p style="font-size: 10px">
+          Das PDF ist noch nicht automatisch im Studio archiviert. Bitte sichere eine Kopie für
+          Studio und Kundin / Kunden.
+        </p>
+      </div>
+    </dialog>
+    <dialog id="reset-dialog" aria-labelledby="reset-title">
+      <div class="dialog-head">
+        <h2 id="reset-title">Neues Formular beginnen?</h2>
+        <button type="button" class="close-button" data-close aria-label="Dialog schließen">
+          ×
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p class="review" id="reset-save-warning" hidden>
+          Die Ablage des aktuellen PDFs wurde noch nicht bestätigt. Prüfe zuerst in der Dateien-App,
+          ob das Dokument gespeichert wurde.
+        </p>
+        <p>
+          Alle Kundenangaben und die Unterschrift werden von dieser Seite entfernt. Sichere das PDF
+          vorher. Bereits heruntergeladene oder geteilte Dateien bleiben erhalten. Die Studioangaben
+          bleiben für die nächste Person eingerichtet.
+        </p>
+        <div class="dialog-actions">
+          <button type="button" class="secondary-button" data-close>Zurück zum Formular</button
+          ><button type="button" class="primary-button" id="reset-confirm">Formular leeren</button>
+        </div>
+      </div>
+    </dialog>
+    <dialog id="install-dialog" aria-labelledby="install-title">
+      <div class="dialog-head">
+        <h2 id="install-title">Inkform auf dem Home-Bildschirm</h2>
+        <button type="button" class="close-button" data-close aria-label="Dialog schließen">
+          ×
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p><strong>Auf dem iPad in Safari:</strong></p>
+        <ol class="ipad-steps">
+          <li>Öffne den eingerichteten Inkform-Weblink in Safari.</li>
+          <li>Tippe auf „Teilen“ und dann „Zum Home-Bildschirm“.</li>
+          <li>
+            Lasse „Als Web-App öffnen“ aktiviert, falls diese Auswahl erscheint, und bestätige
+            „Hinzufügen“.
+          </li>
+          <li>
+            Starte Inkform über das %%homeIconName%%-Symbol. Warte auf „Offline bereit“ und teste die App
+            im Flugmodus.
+          </li>
+        </ol>
+        <p>
+          Das Symbol muss von dir bestätigt werden. Der Button kann es auf dem iPad nicht
+          automatisch anlegen.
+        </p>
+        <p>
+          Für die lokale HTML-Datei auf dem Mac ist kein Weblink nötig. Der iPad-Weblink wird später
+          eingerichtet; aktuell wird nichts veröffentlicht.
+        </p>
+        <p>
+          Über das Symbol läuft Inkform als eigene Web-App. Studioeinstellungen können vom
+          ursprünglichen Safari-Tab getrennt sein: Bei Bedarf dort als JSON exportieren und in der
+          Web-App importieren.
+        </p>
+        <p>
+          PDFs unter „Auf meinem iPad“ sichern, wenn sie ausschließlich auf dem Gerät bleiben
+          sollen.
+        </p>
+        <div class="dialog-actions">
+          <button class="primary-button" type="button" data-close>Verstanden</button>
+        </div>
+      </div>
+    </dialog>
+    <dialog id="sources-dialog" aria-labelledby="sources-title">
+      <div class="dialog-head">
+        <h2 id="sources-title">Vorlage & Quellen</h2>
+        <button type="button" class="close-button" data-close aria-label="Dialog schließen">
+          ×
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p><strong>INKFORM · Admin-Version 1.2 · Recherche: 6. November 2026</strong></p>
+        <p>
+          Eigenständig formulierte Vorlage für volljährige Kundinnen und Kunden. Der Vergleich
+          öffentlicher Studioformulare führte zu Ergänzungen bei Motivbeschreibung, Medikamenten,
+          Gerinnung, Aufklärungsgespräch, Dauerhaftigkeit und Motivfreigabe.
+        </p>
+        <ul>
+          <li>
+            <a
+              class="source-link"
+              href="https://www.allstyletattoo.de/wp-content/uploads/2020/07/tattoo-einversta%CC%88ndniserkla%CC%88rung.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              >All Style Tattoo · ProTattoo-Muster</a
+            >: Motiv, Medikamente der letzten 24 Stunden, persönliche Angaben und Dauerhaftigkeit.
+          </li>
+          <li>
+            <a
+              class="source-link"
+              href="https://www.blackrabbit.ink/einverstaendnis"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Black Rabbit Ink, München</a
+            >: Freiwilligkeit, Pflege, Motiv und Position.
+          </li>
+          <li>
+            <a
+              class="source-link"
+              href="https://leguantattoo.at/wp/wp-content/uploads/Einverstaendniserklaerung_Tattoo.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Leguan Tattoo, Österreich</a
+            >: weitere gesundheitliche Angaben und Aufklärung; keine Übernahme österreichischer
+            Rechtsvorgaben.
+          </li>
+          <li>
+            <a
+              class="source-link"
+              href="https://www.wko.at/gewerbe-handwerk/fusspfleger-kosmetiker-masseure/einwilligungserklaerung-neu"
+              target="_blank"
+              rel="noopener noreferrer"
+              >WKO · Musterformulare</a
+            >: getrennte Bereiche für Einwilligung, Nachsorge und Fotoverwendung; österreichische
+            Muster, keine deutsche Rechtsprüfung.
+          </li>
+          <li>
+            <a
+              class="source-link"
+              href="https://www.bfr.bund.de/fragen-und-antworten/thema/fragen-und-antworten-zu-taetowiermitteln/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >BfR · Fragen und Antworten zu Tätowiermitteln</a
+            >
+            sowie
+            <a
+              class="source-link"
+              href="https://www.bfr.bund.de/cm/343/infektionsrisiken-durch-taetowierungen.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              >BfR · Infektionsrisiken</a
+            >: Risikohinweise, Wundheilung und medizinische Abklärung.
+          </li>
+          <li>
+            <a
+              class="source-link"
+              href="https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX%3A32016R0679"
+              target="_blank"
+              rel="noopener noreferrer"
+              >DSGVO · insbesondere Art. 6, 7, 9 und 13</a
+            >: ausdrückliche Gesundheitsdaten-Einwilligung und Informationspflichten.
+          </li>
+        </ul>
+        <div class="review">
+          <span class="review-label">VOR EINSATZ RECHTLICH PRÜFEN</span>Pauschale
+          Haftungsfreistellungen aus Studioformularen wurden nicht übernommen. Die Haftungs-, Foto-
+          und Datenschutzpassagen bleiben deutlich markierte Entwürfe. Keine Ausweiskopie oder
+          Ausweisnummer wird erhoben. Eine gezeichnete Unterschrift mit Gerätezeitstempel ist keine
+          qualifizierte elektronische Signatur und kein manipulationssicherer Zeitnachweis.
+        </div>
+        <p>
+          Logo und Bibliotheken sind in dieser Datei enthalten. Es werden keine externen
+          Bibliotheken geladen. Beim ersten Aufruf über einen Weblink erhält der Hostinganbieter
+          übliche Verbindungsdaten. Danach ist die vorbereitete iPad-App offline nutzbar. Es gibt
+          keine Analyse-Tools, Kundendaten-Uploads, automatische Speicherung ausgefüllter
+          Kundenformulare oder automatische Cloud-Ablage. Kundeneingaben gehen beim Neuladen
+          verloren. Studio-Konfiguration und Farbschema können über die Admin-Konsole lokal
+          gespeichert und exportiert werden.
+        </p>
+        <p>
+          iPad: Die vorbereitete App einmal über eine HTTPS-Adresse in Safari öffnen und über
+          „Teilen → Zum Home-Bildschirm“ ablegen. Vor dem Einsatz im Flugmodus testen. Kundendaten
+          werden nicht an den Webserver gesendet. PDFs unter „Auf meinem iPad“ sichern, wenn keine
+          Cloud-Ablage gewünscht ist. Die Dateien-App kann stattdessen nur eine Quick-Look-Vorschau
+          anzeigen; siehe
+          <a
+            class="source-link"
+            href="https://support.apple.com/de-de/guide/ipad/ipadb3b759ed/ipados"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Apple · Dateien auf dem iPad öffnen</a
+          >. Ein reiner HTTP-Aufruf kann den nativen Teilen-Dialog einschränken; PDF-Öffnen und
+          Download dienen als Alternative.
+        </p>
+      </div>
+    </dialog>
+    <div class="toast" id="toast" role="status" hidden></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

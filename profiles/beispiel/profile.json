@@ -1,0 +1,43 @@
+{
+  "id": "beispiel",
+  "name": "Musterstudio (Beispiel)",
+  "description": "Neutrale Vorlage mit einem erfundenen Musterstudio. Alle Angaben sind fiktiv und vor dem Einsatz zu ersetzen.",
+  "markers": [
+    "Musterstudio",
+    "Max Mustermann",
+    "musterstudio.example",
+    "12345 Musterstadt"
+  ],
+  "logo": "logo.png",
+  "guide": {
+    "header": "INKFORM",
+    "date": "07.11.2026",
+    "author": "INKFORM"
+  },
+  "text": {
+    "accessText": "Beispieltext, vor dem Einsatz vom Studio anzupassen: Zugriff auf das Einwilligungs-PDF und die darin enthaltenen Gesundheitsdaten hat ausschließlich der Inhaber Max Mustermann. Ablage und Sicherung erfolgen lokal; es gibt keine automatische Cloud-Synchronisierung oder Übermittlung durch diese App. Eine etwa gesetzlich erforderliche Offenlegung bleibt vorbehalten. Die gesondert gewählte Veröffentlichung von Tattoo-Fotos umfasst nicht die Weitergabe dieses Formulars, der Gesundheitsdaten oder der Unterschrift.",
+    "complaintAuthority": "der für dein Studio zuständigen Datenschutzaufsichtsbehörde beschweren. Die zuständige Behörde ist vom Studio zu ergänzen",
+    "cssBrandNote": "Neutral application mark",
+    "customerStudioName": "Musterstudio",
+    "eyebrowPrefix": "MUSTERSTUDIO · ",
+    "filesFolder": "Musterstudio",
+    "healthStudio": "das Musterstudio (Beispiel), Inhaber Max Mustermann,",
+    "homeIconName": "INKFORM",
+    "legalReviewNote": "Diese neutralen Textvorlagen sind vor dem Einsatz an das konkrete Studio anzupassen und rechtlich zu prüfen",
+    "locationPlaceholder": "Musterstadt",
+    "logoAlt": "INKFORM",
+    "metaName": "Musterstudio (Beispiel)",
+    "photoChannels": "auf www.musterstudio.example sowie auf dem eigenen Instagram-Profil @musterstudio.example",
+    "photoStudio": "dem Musterstudio (Beispiel)",
+    "reportStudio": "Musterstudio (Beispiel)",
+    "retentionText": "Beispieltext, vor dem Einsatz vom Studio anzupassen: Die Dokumentation wird während der Terminvorbereitung und Durchführung und anschließend nur so lange aufbewahrt, wie sie zum Nachweis der Einwilligung oder zur Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen erforderlich ist. Maßgeblich sind die jeweils einschlägigen Verjährungsfristen und die Erforderlichkeit im Einzelfall. Bei Ansprüchen wegen Körper- oder Gesundheitsschäden kann die Verjährungshöchstfrist nach § 199 Abs. 2 BGB 30 Jahre betragen; daraus folgt keine pauschale Aufbewahrungspflicht von 30 Jahren. Entfallen die Zwecke und besteht keine weitere Rechtsgrundlage, löscht der Inhaber die Unterlagen einschließlich der lokalen Sicherungskopien. Bei einem konkreten Rechtsstreit bleiben die hierfür erforderlichen Unterlagen bis zu dessen Abschluss und dem Wegfall weiterer Aufbewahrungsgründe erhalten.",
+    "revocationContact": "per E-Mail an datenschutz@musterstudio.example",
+    "studioAddress": "Musterstraße 1, 12345 Musterstadt",
+    "studioContact": "datenschutz@musterstudio.example",
+    "studioLocation": "Musterstadt",
+    "studioName": "Musterstudio (Beispiel) · Max Mustermann",
+    "titlePrefix": "Musterstudio · ",
+    "welcomeStudio": "im Musterstudio",
+    "wordmarkLabel": "Musterstudio · Inkform"
+  }
+}

@@ -1,0 +1,54 @@
+# Erzeugte Dateien (npm run build schreibt nach build/<profil>/)
+/build/
+/dist/
+/index.html
+node_modules/
+# Ausgaben der Browser-Prüfung (Screenshots, Protokolle)
+/test-results/
+
+# System und Logs
+.DS_Store
+Thumbs.db
+*.log
+
+# Kunden- und Betriebsdaten dürfen NIE in Git landen.
+# App-Exporte (Einwilligungen, Einnahmen, Einstellungen, Speichertests)
+Tattoo_Einwilligung_*
+Inkform_Einnahmen_*
+INKFORM_Einstellungen_*
+INKFORM_Studio_*
+INKFORM_Speichertest_*
+
+# Grundsätzlich keine PDFs, CSVs, Tabellen, JSON-Sicherungen oder Fotos.
+# Erlaubte Projektdateien werden unten ausdrücklich freigegeben.
+*.pdf
+*.csv
+*.xlsx
+*.xls
+*.numbers
+*.json
+*.jpg
+*.jpeg
+*.heic
+*.heif
+*.mov
+*.mp4
+*.zip
+!/package.json
+!/.prettierrc.json
+!/profiles/*/profile.json
+!/profiles/*/Anleitung-iPad-und-Admin.pdf
+
+# Typische Ablageordner für echte Daten
+Exporte/
+Sicherungen/
+Backups/
+Kundendaten/
+Einwilligungen/
+
+# Geheimnisse
+.env
+.env.*
+*.key
+*.pem
+secrets/
