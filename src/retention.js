@@ -46,10 +46,11 @@ export function dueForPdfDeletion(records, pdfYears, today) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// A signed PDF may still exist in the Files app: it has a file name and is neither marked as
-// deleted nor booked as "PDF fehlt". Such entries keep their name and file name, because that is
-// how the owner finds the PDF; they are anonymized only after the PDF is marked as deleted.
-export const pdfMayExist = (r) => !!r.source && !r.pdfDeletedAt && !r.pdfMissing;
+// Whether a signed PDF still exists in the Files app is unknown until the owner marks it as
+// deleted or the entry was booked as "PDF fehlt" - also for entries without a file name (added by
+// hand). Such entries keep their name, because that is how the owner finds the PDF; they are
+// anonymized only afterwards.
+export const pdfMayExist = (r) => !r.pdfDeletedAt && !r.pdfMissing;
 
 // Income entries whose name and PDF reference can be removed now.
 export function dueForAnonymization(records, incomeYears, today) {

@@ -87,9 +87,17 @@ test("updateMany changes several entries at once or none", () => {
   const store = createIncomeStore(memory());
   store.add(row("a", "2010-01-01"));
   store.add(row("b", "2011-01-01"));
-  store.updateMany([anonymizeRecord(store.list()[0], "2026-11-11"), anonymizeRecord(store.list()[1], "2026-11-11")]);
+  const change = (r) => ({ record: anonymizeRecord(r, "2026-11-11"), expected: r.updatedAt });
+  store.updateMany(store.list().map(change));
   assert.ok(store.list().every((r) => r.customer === ANONYMIZED));
-  assert.throws(() => store.updateMany([row("a", "2010-01-01"), row("gone", "2010-01-01")]));
+  const [a] = store.list();
+  assert.throws(() =>
+    store.updateMany([
+      { record: { ...a, artist: "Robin" }, expected: a.updatedAt },
+      { record: row("gone", "2010-01-01"), expected: "x" },
+    ]),
+  );
+  assert.equal(store.list()[0].artist, "Alex", "nothing changed on error");
   assert.ok(store.list().every((r) => r.customer === ANONYMIZED), "nothing changed on error");
 });
 
@@ -107,8 +115,9 @@ test("an entry whose PDF may still exist is not anonymized, but listed as waitin
     row("missing", "2010-01-01", { pdfMissing: true }),
     row("noref", "2010-01-01", { source: "" }),
   ];
-  assert.deepEqual(dueForAnonymization(records, 10, "2026-11-11").map((r) => r.id), ["deleted", "missing", "noref"]);
-  assert.deepEqual(waitingForPdfDeletion(records, 10, "2026-11-11").map((r) => r.id), ["pdf"]);
+  assert.deepEqual(dueForAnonymization(records, 10, "2026-11-11").map((r) => r.id), ["deleted", "missing"]);
+  // Without a file name the PDF may still exist too (entry added by hand): it waits as well.
+  assert.deepEqual(waitingForPdfDeletion(records, 10, "2026-11-11").map((r) => r.id), ["pdf", "noref"]);
   assert.equal(pdfMayExist(records[0]), true);
   // Even with no PDF deadline at all, the PDF entry is never silently anonymized.
   assert.equal(dueForPdfDeletion(records, null, "2026-11-11").length, 0);
@@ -121,10 +130,36 @@ test("an anonymized entry cannot get a name or PDF reference back (edit, import)
   assert.throws(() => validateIncomeRecord({ ...anon, source: "Tattoo_Einwilligung_a.pdf" }), /anonymisierter Eintrag/);
   const store = createIncomeStore(memory());
   store.add(row("a", "2010-01-01", { pdfDeletedAt: "2026-01-01" }));
-  store.updateMany([anonymizeRecord(store.list()[0], "2026-11-11")]);
+  store.updateMany([{ record: anonymizeRecord(store.list()[0], "2026-11-11"), expected: store.list()[0].updatedAt }]);
   const current = store.list()[0];
   assert.throws(() => store.update({ ...current, customer: "Kunde a" }, current.updatedAt));
   // Re-importing an old backup with the original name is refused as a whole.
   assert.throws(() => store.merge({ schemaVersion: 1, records: [row("a", "2010-01-01")] }), /abweichend/);
   assert.equal(store.list()[0].customer, ANONYMIZED);
+});
+
+test("a stale confirmation from another window cannot undo an anonymization (second review)", () => {
+  const map = new Map(),
+    storage = { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) };
+  const windowA = createIncomeStore(storage),
+    windowB = createIncomeStore(storage);
+  windowA.add(row("a", "2010-01-01"));
+  const seenByA = windowA.list()[0]; // A shows "Ist das PDF gelöscht?" and waits
+  // Meanwhile B marks the PDF deleted and anonymizes the entry.
+  const b0 = windowB.list()[0];
+  windowB.updateMany([{ record: { ...b0, pdfDeletedAt: "2026-11-11", updatedAt: "2026-11-11T09:00:00.000Z" }, expected: b0.updatedAt }]);
+  const b1 = windowB.list()[0];
+  windowB.updateMany([{ record: anonymizeRecord(b1, "2026-11-11", "2026-11-11T09:01:00.000Z"), expected: b1.updatedAt }]);
+  // A's confirmation is based on the old state and must fail without writing anything.
+  assert.throws(
+    () => windowA.updateMany([{ record: { ...seenByA, pdfDeletedAt: "2026-11-11", updatedAt: "2026-11-11T09:02:00.000Z" }, expected: seenByA.updatedAt }]),
+    /inzwischen geändert/,
+  );
+  assert.equal(windowA.list()[0].customer, ANONYMIZED);
+  // Even with a matching updatedAt, removing the anonymization is refused.
+  const now = windowA.list()[0];
+  const { anonymizedAt, ...named } = { ...now, customer: "Kunde a" };
+  assert.throws(() => windowA.updateMany([{ record: named, expected: now.updatedAt }]), /nicht wiederhergestellt/);
+  assert.throws(() => windowA.update(named, now.updatedAt), /nicht wiederhergestellt/);
+  assert.equal(windowA.list()[0].customer, ANONYMIZED);
 });

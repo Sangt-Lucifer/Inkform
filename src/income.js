@@ -106,6 +106,11 @@ export function validateIncomeBackup(value) {
     throw Error("Die Sicherung enthält doppelte Eintragskennungen.");
   return records;
 }
+// Anonymization is one-way: no write may turn an anonymized entry back into a named one.
+function keepAnonymized(old, row) {
+  if (old?.anonymizedAt && !row.anonymizedAt)
+    throw Error("Ein anonymisierter Eintrag kann nicht wiederhergestellt werden.");
+}
 export function createIncomeStore(storage) {
   function read() {
     const raw = storage.getItem(INCOME_KEY);
@@ -140,15 +145,23 @@ export function createIncomeStore(storage) {
           old = records.find((r) => r.id === row.id);
         if (!old || old.updatedAt !== expectedTime)
           throw Error("Dieser Eintrag wurde inzwischen geändert oder entfernt. Bitte neu öffnen.");
+        keepAnonymized(old, row);
         return records.map((r) => (r.id === row.id ? row : r));
       }),
-    // Several entries at once, all or nothing (retention actions).
-    updateMany: (rows) =>
+    // Several entries at once, all or nothing (retention actions). Each change names the
+    // updatedAt it was based on; if any entry changed meanwhile (e.g. in another window), nothing
+    // is written.
+    updateMany: (changes) =>
       mutate((records) => {
-        const changed = new Map(rows.map((r) => [r.id, validateIncomeRecord(r)]));
-        for (const id of changed.keys())
-          if (!records.some((r) => r.id === id))
-            throw Error("Ein Eintrag wurde inzwischen entfernt. Bitte neu öffnen.");
+        const changed = new Map();
+        for (const { record, expected } of changes) {
+          const row = validateIncomeRecord(record),
+            old = records.find((r) => r.id === row.id);
+          if (!old || old.updatedAt !== expected)
+            throw Error("Ein Eintrag wurde inzwischen geändert oder entfernt. Bitte neu öffnen.");
+          keepAnonymized(old, row);
+          changed.set(row.id, row);
+        }
         return records.map((r) => changed.get(r.id) ?? r);
       }),
     remove: (id, expectedTime) =>
@@ -526,7 +539,7 @@ export function createIncomeFeature({
             .slice(0, 50)
             .map(
               (r) =>
-                `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.customer)}</td><td>${e(r.source)}</td><td><button class="ad-button" data-retention-deleted="${e(r.id)}" aria-label="PDF für ${e(r.customer)} als gelöscht markieren">PDF gelöscht</button></td></tr>`,
+                `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.customer)}</td><td>${r.source ? e(r.source) : "<em>kein Dateiname</em>"}</td><td><button class="ad-button" data-retention-deleted="${e(r.id)}" aria-label="PDF für ${e(r.customer)} als gelöscht markieren">PDF gelöscht</button></td></tr>`,
             )
             .join("")}</tbody></table></div>`
           : ""
@@ -617,7 +630,12 @@ export function createIncomeFeature({
             `Ist das PDF ${row.source ? `„${row.source}“` : `für ${row.customer}`} in der Dateien-App und in allen Sicherungen gelöscht?`,
           )
         ) {
-          store.updateMany([{ ...row, pdfDeletedAt: today(), updatedAt: new Date().toISOString() }]);
+          store.updateMany([
+            {
+              record: { ...row, pdfDeletedAt: today(), updatedAt: new Date().toISOString() },
+              expected: row.updatedAt,
+            },
+          ]);
           refresh();
           notify("Als gelöscht markiert.");
         }
@@ -639,7 +657,7 @@ export function createIncomeFeature({
             `${rows.length} Einträge anonymisieren? Name und PDF-Dateiname werden entfernt, Beträge bleiben. Das lässt sich nicht rückgängig machen. Hast du vorher eine Sicherung erstellt?`,
           )
         ) {
-          store.updateMany(rows.map((r) => anonymizeRecord(r, day)));
+          store.updateMany(rows.map((r) => ({ record: anonymizeRecord(r, day), expected: r.updatedAt })));
           refresh();
           notify(`${rows.length} Einträge anonymisiert.`);
         }
