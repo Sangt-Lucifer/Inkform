@@ -11,6 +11,7 @@
 | `aufbewahrung.mjs` | neu (Phase 4) | Erinnerung an offene Einwilligung, Sicherheits-Checkliste, Fristen, Löschliste, Anonymisieren, Sicherungsdatum |
 | `schriftgroessen.mjs` | neu (Phase 3) | Kundenbereich auf vier iPad-Größen: Eingaben, Beschriftungen und Fließtext ≥ 16 px, nichts < 14 px, kein seitliches Scrollen; mit `INKFORM_FONT_BASELINE=<datei>` zusätzlich: keine Schrift kleiner als vorher |
 | `update.mjs` | neu (Phase 4) | simuliertes App-Update: wartet bei angefangenem Formular, übernimmt im Leerlauf ohne Neuladen und löscht die alte Version aus dem Offline-Speicher |
+| `werkstatt.mjs` | neu (Werkstatt Phase 1) | Werkstatt-Oberfläche mit Wegwerf-Studio: nicht freigegebenes Studio ohne Knöpfe, Bauen von Blanko, keine CSP-Fehler. Läuft nur beim Beispielprofil. |
 | `lib.mjs` | neu | gemeinsamer CDP-Client für die neuen Prüfungen |
 | `../income-independent.test.mjs` | `Pruefungen-Inkform-Einnahmen-PIN-2026-11-06/Unabhaengige-Einnahmenpruefung.mjs` | Grenzfälle des Einnahmenmoduls (läuft mit `npm test`) |
 

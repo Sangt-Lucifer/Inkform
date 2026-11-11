@@ -16,12 +16,14 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defaultOut, isBuiltin, resolveProfileDir, root } from "../../scripts/build.mjs";
 
-const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "schriftgroessen", "offline", "update"];
+const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "schriftgroessen", "offline", "update", "werkstatt"];
+// Checks of the core itself, not of a studio's app: only with the built-in profile.
+const CORE_ONLY = ["werkstatt"];
 const argv = process.argv.slice(2);
 const pi = argv.indexOf("--profile");
 const profile = pi >= 0 ? argv[pi + 1] : "beispiel";
 const selected = argv.filter((a, i) => !a.startsWith("--") && argv[i - 1] !== "--profile");
-const checks = selected.length ? selected : CHECKS;
+let checks = selected.length ? selected : CHECKS;
 for (const c of checks) if (!CHECKS.includes(c)) throw new Error(`Unbekannte Prüfung: ${c}`);
 
 const CHROME =
@@ -29,6 +31,7 @@ const CHROME =
 const httpPort = 18080 + Math.floor(Math.random() * 800);
 const cdpPort = 19900 + Math.floor(Math.random() * 90);
 const profileDir = resolveProfileDir(profile);
+if (!isBuiltin(profileDir)) checks = checks.filter((c) => !CORE_ONLY.includes(c));
 const buildDir = defaultOut(profileDir);
 const results = isBuiltin(profileDir) ? root : profileDir;
 const out = path.join(results, "test-results", `${path.basename(profileDir)}-${new Date().toISOString().replace(/[:.]/g, "-")}`);

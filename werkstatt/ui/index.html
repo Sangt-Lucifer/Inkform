@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="werkstatt-token" content="__WERKSTATT_TOKEN__" />
+    <title>Inkform Werkstatt</title>
+    <link rel="stylesheet" href="werkstatt.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>Inkform Werkstatt</h1>
+        <p class="sub">Studios bauen und prüfen. Läuft nur auf diesem Mac, ohne Internet.</p>
+      </div>
+      <button type="button" id="refresh">Status aktualisieren</button>
+    </header>
+    <main>
+      <p id="error" class="error" role="alert" hidden></p>
+      <section id="cert" class="note" hidden></section>
+      <section id="studios" class="grid" aria-live="polite"></section>
+      <section id="run" class="run" hidden aria-labelledby="run-title">
+        <div class="run-head">
+          <h2 id="run-title">Lauf</h2>
+          <span id="run-state" class="badge"></span>
+        </div>
+        <ul id="run-steps" class="steps"></ul>
+        <details id="run-details">
+          <summary>Ausführliches Protokoll</summary>
+          <pre id="run-log"></pre>
+        </details>
+      </section>
+    </main>
+    <script src="werkstatt.js"></script>
+  </body>
+</html>

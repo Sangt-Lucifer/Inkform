@@ -1,0 +1,172 @@
+// Werkstatt (Phase 1): studio list, protection, summaries and access control. Uses a throw-away
+// studio in a temporary folder and a temporary state folder; never ../Inkform-Studios.
+import assert from "node:assert/strict";
+import test from "node:test";
+import { request } from "node:http";
+import { cp, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { root } from "../scripts/build.mjs";
+import { summarizeBrowser, summarizeBuild, summarizeTests, testFileArgs } from "../werkstatt/runs.mjs";
+import { listStudios } from "../werkstatt/status.mjs";
+import { startWerkstatt } from "../werkstatt/server.mjs";
+
+const base = await mkdtemp(path.join(tmpdir(), "inkform-werkstatt-"));
+const studiosDir = path.join(base, "studios"),
+  stateDir = path.join(base, "state"),
+  studioDir = path.join(studiosDir, "testatelier");
+await cp(path.join(root, "profiles", "beispiel"), studioDir, { recursive: true });
+const profile = JSON.parse(await readFile(path.join(studioDir, "profile.json"), "utf8"));
+await writeFile(path.join(studioDir, "profile.json"), JSON.stringify({ ...profile, id: "testatelier", name: "Testatelier" }, null, 2));
+const env = { ...process.env, INKFORM_STUDIOS: studiosDir };
+test.after(() => rm(base, { recursive: true, force: true }));
+
+async function snapshot(dir) {
+  const out = [];
+  for (const name of (await readdir(dir, { recursive: true })).sort()) {
+    const s = await stat(path.join(dir, name));
+    out.push(`${name}:${s.size}:${s.mtimeMs}`);
+  }
+  return out.join("\n");
+}
+function http(port, { method = "GET", pathname = "/", headers = {}, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = request({ host: "127.0.0.1", port, method, path: pathname, headers: { host: `127.0.0.1:${port}`, ...headers } }, (res) => {
+      let text = "";
+      res.on("data", (c) => (text += c));
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, text }));
+    });
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+test("studios are display-only unless released; Blanko is always available", async () => {
+  const list = await listStudios({ env, stateDir });
+  const blanko = list.find((s) => s.key === "blanko"),
+    studio = list.find((s) => s.key === "s-testatelier");
+  assert.equal(blanko.actionable, true);
+  assert.equal(studio.actionable, false);
+  assert.match(studio.protectedReason, /Nur Anzeige/);
+  await writeFile(path.join(stateDir, "freigegeben.json"), JSON.stringify({ studios: [studioDir] }));
+  assert.equal((await listStudios({ env, stateDir })).find((s) => s.key === "s-testatelier").actionable, true);
+  await rm(path.join(stateDir, "freigegeben.json"));
+});
+
+test("summaries: build, tests (with leak findings) and browser checks", () => {
+  assert.deepEqual(summarizeBuild("x\nbuild/a (a): self-contained index.html\n", 0).ok, true);
+  assert.match(summarizeBuild("Platzhalter %%x%% in src/app.js fehlt im Profil.\n", 1).text, /fehlt im Profil/);
+  const tests = summarizeTests(
+    "✖ studio-a: build and profile folder contain nothing from studio-b (5ms)\n  +   'build/dist/index.html: Kennzeichen Studio B'\nℹ tests 3\nℹ pass 2\nℹ fail 1\n✖ failing tests:\n",
+    1,
+  );
+  assert.equal(tests.ok, false);
+  assert.match(tests.text, /2 von 3 Tests bestanden, 1 fehlgeschlagen/);
+  assert.deepEqual(tests.failing, ["studio-a: build and profile folder contain nothing from studio-b"]);
+  assert.deepEqual(tests.leaks, ["build/dist/index.html: Kennzeichen Studio B"]);
+  assert.equal(summarizeTests("ℹ pass 94\nℹ fail 0\n", 0).ok, true);
+  const browser = summarizeBrowser("FAIL abschluss\nAssertionError [ERR_ASSERTION]: Keine Fehler\n6/7 Browser-Prüfungen bestanden.", 1);
+  assert.equal(browser.ok, false);
+  assert.deepEqual(browser.failing, ["abschluss"]);
+  assert.deepEqual(browser.reasons, ["Keine Fehler"]);
+  assert.equal(summarizeBrowser("7/7 Browser-Prüfungen bestanden.", 0).ok, true);
+});
+
+test("server: only 127.0.0.1 with the right Host, API only with the session token", async () => {
+  const { server, token } = await startWerkstatt({ port: 0, env, stateDir, certDir: path.join(base, "keine-zertifikate") });
+  const port = server.address().port;
+  try {
+    assert.equal(server.address().address, "127.0.0.1");
+    const page = await http(port);
+    assert.equal(page.status, 200);
+    assert.ok(page.text.includes(token), "token embedded in the page");
+    assert.match(page.headers["content-security-policy"], /default-src 'none'/);
+    // DNS rebinding: a foreign host name is refused.
+    assert.equal((await http(port, { headers: { host: `evil.example:${port}` } })).status, 403);
+    // API without or with a wrong token.
+    assert.equal((await http(port, { pathname: "/api/overview" })).status, 403);
+    assert.equal((await http(port, { pathname: "/api/overview", headers: { "x-werkstatt-token": "falsch" } })).status, 403);
+    // Cross-site request with a valid token is still refused by its origin.
+    assert.equal(
+      (await http(port, { method: "POST", pathname: "/api/run", headers: { "x-werkstatt-token": token, origin: "https://evil.example" }, body: "{}" })).status,
+      403,
+    );
+    const overview = JSON.parse((await http(port, { pathname: "/api/overview?refresh=1", headers: { "x-werkstatt-token": token } })).text);
+    const studio = overview.studios.find((s) => s.key === "s-testatelier");
+    assert.equal(studio.actionable, false);
+    assert.equal(studio.build.state, "fehlt");
+    assert.ok(studio.warnings.some((w) => w.includes("Musterstudio")), "sample texts left in a studio are reported");
+    assert.equal(overview.studios.find((s) => s.key === "blanko").kind, "blanko");
+    assert.equal(overview.cert, null);
+    // Static files: only the UI, no path traversal.
+    assert.equal((await http(port, { pathname: "/werkstatt.js" })).status, 200);
+    assert.equal((await http(port, { pathname: "/../server.mjs" })).status, 404);
+    assert.equal((await http(port, { pathname: "/%2e%2e/status.mjs" })).status, 404);
+  } finally {
+    server.close();
+  }
+});
+
+test("a protected studio cannot be built or checked, and its folder stays unchanged", async () => {
+  const { server, token } = await startWerkstatt({ port: 0, env, stateDir, certDir: base });
+  const port = server.address().port;
+  try {
+    const before = await snapshot(studioDir);
+    for (const kind of ["build", "test", "browser", "alles"]) {
+      const res = await http(port, {
+        method: "POST",
+        pathname: "/api/run",
+        headers: { "x-werkstatt-token": token, "content-type": "application/json" },
+        body: JSON.stringify({ studio: "s-testatelier", kind }),
+      });
+      assert.equal(res.status, 403, kind);
+      assert.match(JSON.parse(res.text).error, /Nur Anzeige/);
+    }
+    assert.equal(await snapshot(studioDir), before);
+    assert.equal(
+      (await http(port, { method: "POST", pathname: "/api/run", headers: { "x-werkstatt-token": token }, body: JSON.stringify({ studio: "blanko", kind: "rm -rf" }) })).status,
+      400,
+    );
+  } finally {
+    server.close();
+  }
+});
+
+test("building Blanko through the Werkstatt works and is recorded outside the repositories", async () => {
+  const { server, token, runner } = await startWerkstatt({ port: 0, env, stateDir, certDir: base });
+  const port = server.address().port;
+  try {
+    const res = await http(port, {
+      method: "POST",
+      pathname: "/api/run",
+      headers: { "x-werkstatt-token": token },
+      body: JSON.stringify({ studio: "blanko", kind: "build" }),
+    });
+    assert.equal(res.status, 202);
+    const second = await http(port, {
+      method: "POST",
+      pathname: "/api/run",
+      headers: { "x-werkstatt-token": token },
+      body: JSON.stringify({ studio: "blanko", kind: "build" }),
+    });
+    assert.equal(second.status, 409, "only one run at a time");
+    for (let i = 0; i < 200 && !runner.current().endedAt; i++) await new Promise((r) => setTimeout(r, 50));
+    const run = runner.current();
+    assert.equal(run.ok, true, run.log);
+    assert.equal(run.steps[0].kind, "build");
+    for (let i = 0; i < 40 && !(await readdir(path.join(stateDir, "laeufe")).catch(() => [])).length; i++)
+      await new Promise((r) => setTimeout(r, 50));
+    const files = await readdir(path.join(stateDir, "laeufe"));
+    assert.equal(files.length, 1);
+    assert.ok(stateDir.startsWith(base), "state lives in the given folder, not in a repository");
+  } finally {
+    server.close();
+  }
+});
+
+test("test files are passed relative to the core (folder names with [brackets] are glob syntax)", async () => {
+  const args = await testFileArgs();
+  assert.ok(args.length >= 10);
+  assert.ok(args.every((a) => /^tests\/[\w.-]+\.test\.mjs$/.test(a)), args.join());
+});

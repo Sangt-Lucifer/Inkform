@@ -1,0 +1,163 @@
+// Inkform Werkstatt: local overview to build and check the iPad app per studio.
+//
+//   npm run werkstatt                 http://127.0.0.1:8090
+//   node werkstatt/server.mjs --port 8091
+//
+// Only on 127.0.0.1. Every request must carry the right Host header and, for the API, the session
+// token embedded in the page: another website open in the browser can therefore neither read the
+// overview nor start anything (DNS rebinding, cross-site requests). No customer data is read or
+// stored here; run logs and state live in ~/Library/Application Support/Inkform/werkstatt/.
+import { createServer } from "node:http";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createRunner } from "./runs.mjs";
+import {
+  blankoMarkers,
+  buildState,
+  certInfo,
+  defaultCertDir,
+  defaultStateDir,
+  gitInfo,
+  listStudios,
+  warnings,
+} from "./status.mjs";
+
+const UI = fileURLToPath(new URL("./ui/", import.meta.url));
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
+const SECURITY = {
+  "Content-Security-Policy":
+    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+  "Cache-Control": "no-store",
+};
+
+export async function startWerkstatt({
+  port = 8090,
+  env = process.env,
+  stateDir = defaultStateDir(),
+  certDir = defaultCertDir(),
+} = {}) {
+  const token = randomBytes(24).toString("hex");
+  const runner = createRunner({ stateDir, env });
+  let statusCache = null;
+
+  async function studios() {
+    return listStudios({ env, stateDir });
+  }
+  async function overview(refresh) {
+    const entries = await studios();
+    if (refresh || !statusCache) {
+      const markers = await blankoMarkers();
+      statusCache = {};
+      for (const e of entries)
+        statusCache[e.key] = {
+          git: await gitInfo(e.dir),
+          build: await buildState(e.dir),
+          warnings: await warnings(e, markers),
+          checkedAt: new Date().toISOString(),
+        };
+    }
+    const latest = await runner.latest();
+    const current = runner.current();
+    return {
+      studios: entries.map((e) => ({
+        key: e.key,
+        id: e.id,
+        name: e.name,
+        kind: e.kind,
+        folder: e.dir,
+        actionable: e.actionable,
+        protectedReason: e.protectedReason ?? null,
+        ...(statusCache[e.key] ?? {}),
+        runs: Object.fromEntries(
+          ["build", "test", "browser"].map((k) => [k, latest[`${e.key}:${k}`] ?? null]),
+        ),
+      })),
+      cert: await certInfo(certDir),
+      running: current && !current.endedAt ? { id: current.id, studio: current.studio, label: current.label } : null,
+    };
+  }
+
+  const send = (res, status, body, type = "application/json; charset=utf-8") => {
+    res.writeHead(status, { "Content-Type": type, ...SECURITY });
+    res.end(type.startsWith("application/json") ? JSON.stringify(body) : body);
+  };
+  const tokenOk = (value) => {
+    const a = Buffer.from(String(value ?? "")),
+      b = Buffer.from(token);
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
+  async function body(req) {
+    let text = "";
+    for await (const chunk of req) {
+      text += chunk;
+      if (text.length > 10_000) throw Object.assign(Error("Anfrage zu groß."), { status: 413 });
+    }
+    return text ? JSON.parse(text) : {};
+  }
+
+  const server = createServer(async (req, res) => {
+    try {
+      const host = `127.0.0.1:${server.address().port}`;
+      if (req.headers.host !== host) return send(res, 403, { error: "Nur über http://" + host + " erreichbar." });
+      const origin = req.headers.origin;
+      if (origin && origin !== `http://${host}`) return send(res, 403, { error: "Fremde Herkunft." });
+      const url = new URL(req.url, `http://${host}`);
+
+      if (url.pathname.startsWith("/api/")) {
+        if (!tokenOk(req.headers["x-werkstatt-token"])) return send(res, 403, { error: "Sitzung ungültig. Seite neu laden." });
+        if (req.method === "GET" && url.pathname === "/api/overview")
+          return send(res, 200, await overview(url.searchParams.get("refresh") === "1"));
+        if (req.method === "POST" && url.pathname === "/api/run") {
+          const { studio, kind } = await body(req);
+          const entry = (await studios()).find((e) => e.key === studio);
+          if (!entry) return send(res, 404, { error: "Studio nicht gefunden." });
+          const record = await runner.start(entry, kind);
+          statusCache = null;
+          return send(res, 202, { id: record.id });
+        }
+        if (req.method === "GET" && url.pathname === "/api/run") {
+          const current = runner.current();
+          if (!current || current.id !== url.searchParams.get("id")) return send(res, 404, { error: "Lauf nicht gefunden." });
+          const from = Math.max(0, Number(url.searchParams.get("from")) || 0);
+          return send(res, 200, {
+            id: current.id,
+            label: current.label,
+            name: current.name,
+            endedAt: current.endedAt,
+            ok: current.ok,
+            steps: current.steps,
+            log: current.log.slice(from),
+            offset: current.log.length,
+          });
+        }
+        return send(res, 404, { error: "Unbekannt." });
+      }
+
+      if (req.method !== "GET") return send(res, 405, { error: "Nicht erlaubt." });
+      if (url.pathname === "/favicon.ico") {
+        res.writeHead(204, SECURITY).end();
+        return;
+      }
+      const file = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
+      if (!/^[a-z-]+\.(html|js|css)$/.test(file)) return send(res, 404, "Nicht gefunden.", "text/plain; charset=utf-8");
+      let content = await readFile(path.join(UI, file), "utf8").catch(() => null);
+      if (content === null) return send(res, 404, "Nicht gefunden.", "text/plain; charset=utf-8");
+      if (file === "index.html") content = content.replace("__WERKSTATT_TOKEN__", token);
+      return send(res, 200, content, TYPES[path.extname(file)]);
+    } catch (error) {
+      send(res, error.status ?? 500, { error: error.message });
+    }
+  });
+  await new Promise((resolve, reject) => server.once("error", reject).listen(port, "127.0.0.1", resolve));
+  return { server, token, url: `http://127.0.0.1:${server.address().port}/`, runner };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const i = process.argv.indexOf("--port");
+  const { url } = await startWerkstatt({ port: i > 0 ? Number(process.argv[i + 1]) : 8090 });
+  console.log(`Inkform Werkstatt: ${url}  (nur auf diesem Mac, beenden mit Ctrl+C)`);
+}

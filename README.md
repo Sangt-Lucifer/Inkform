@@ -64,6 +64,22 @@ Durchsucht werden Text, dekodierte Base64-Blöcke, PNG-Textfelder und der Text v
 
 Die **Browser-Prüfungen** starten Google Chrome headless mit leerem Wegwerf-Profil, die Vorschau nur auf `127.0.0.1`, und verwenden ausschließlich erfundene Testdaten. Ihre Ausgaben landen im `test-results/` des jeweiligen Profils (Kern oder Studio-Ordner). Details stehen in `tests/browser/README.md`.
 
+## Werkstatt (lokal, Phase 1)
+
+```sh
+npm run werkstatt          # http://127.0.0.1:8090, nur auf diesem Mac
+```
+
+**Übersicht:** Blanko (`profiles/beispiel`) und alle Studios neben dem Kern. Jede Karte zeigt Git-Stand, ob der Build aktuell ist, die letzten Ergebnisse von Tests und Browser-Prüfungen sowie Warnungen: noch Musterstudio-Texte im Studio, Anleitungs-PDF älter als `Anleitung.md`. Dazu Restlaufzeit des Vor-Ort-Zertifikats.
+
+**Knöpfe:** Bauen (`build.mjs`), Unit- und Leak-Tests über Kreuz (`npm test`) und Browser-Prüfungen (`tests/browser/run.mjs`). Das Ergebnis wird verständlich zusammengefasst, das ausführliche Protokoll ist aufklappbar. Es läuft immer nur eine Prüfung gleichzeitig.
+
+**Schutz:** Studios sind standardmäßig **nur Anzeige**. Aktionen gibt es für Blanko und für Studios, deren Ordner in `~/Library/Application Support/Inkform/werkstatt/freigegeben.json` steht (`{"studios": ["/pfad/zum/studio"]}`). Bestehende Installationen werden so nie aus Versehen neu gebaut.
+
+**Zugriff:** Die Oberfläche lauscht nur auf `127.0.0.1`. Jede Anfrage muss den richtigen Host und ein Sitzungs-Token tragen; dazu kommt eine strenge CSP. So kann keine andere Webseite im Browser die Werkstatt auslesen oder Aktionen starten.
+
+**Ablage:** Laufprotokolle liegen unter `~/Library/Application Support/Inkform/werkstatt/laeufe/`. Kundendaten liest oder speichert die Werkstatt nicht. Der Plan für die weiteren Phasen steht in [docs/Plan-Studio-Werkstatt.md](docs/Plan-Studio-Werkstatt.md).
+
 ## Aufs iPad bringen, ohne Cloud
 
 Die Web-App braucht für den Offline-Betrieb einmalig HTTPS. Statt eines Hosters liefert der Mac sie im eigenen WLAN aus, nur solange der Befehl läuft:
