@@ -79,10 +79,11 @@ export function createRunner({ stateDir, env = process.env }) {
   let current = null;
   const runsDir = path.join(stateDir, "laeufe");
 
-  function step(kind, ref, record) {
-    return new Promise(async (resolve) => {
-      const spec = STEPS[kind](ref);
-      const args = spec.glob ? ["--test", "--test-timeout=60000", ...(await testFileArgs())] : spec.args;
+  // Errors before the process starts (e.g. reading the test list) reject and end the run as red.
+  async function step(kind, ref, record) {
+    const spec = STEPS[kind](ref);
+    const args = spec.glob ? ["--test", "--test-timeout=60000", ...(await testFileArgs())] : spec.args;
+    return new Promise((resolve) => {
       record.log += `\n▶ ${KINDS[kind].label}\n`;
       const child = spawn(process.execPath, args, { cwd: root, env: { ...env, FORCE_COLOR: "0" } });
       let output = "";
@@ -93,7 +94,16 @@ export function createRunner({ stateDir, env = process.env }) {
       };
       child.stdout.on("data", take);
       child.stderr.on("data", take);
+      let finished = false;
+      child.on("error", (error) => {
+        if (finished) return;
+        finished = true;
+        record.steps.push({ kind, label: KINDS[kind].label, code: null, ok: false, text: `Start fehlgeschlagen: ${error.message}` });
+        resolve(false);
+      });
       child.on("close", (code) => {
+        if (finished) return;
+        finished = true;
         const summary = spec.summarize(output, code ?? 1);
         record.steps.push({ kind, label: KINDS[kind].label, code, ...summary });
         resolve(summary.ok);
@@ -104,9 +114,10 @@ export function createRunner({ stateDir, env = process.env }) {
   async function start(entry, kind) {
     if (!KINDS[kind]) throw Object.assign(Error("Unbekannte Aktion."), { status: 400 });
     if (!entry.actionable) throw Object.assign(Error(entry.protectedReason), { status: 403 });
+    // The slot is taken synchronously, before the first await: two requests arriving at the same
+    // time can never both start a run.
     if (current && !current.endedAt)
       throw Object.assign(Error("Es läuft bereits eine Prüfung. Bitte warten."), { status: 409 });
-    const [core, studio] = await Promise.all([gitInfo(root), entry.kind === "studio" ? gitInfo(entry.dir) : null]);
     const record = {
       id: randomUUID(),
       studio: entry.key,
@@ -119,21 +130,37 @@ export function createRunner({ stateDir, env = process.env }) {
       steps: [],
       log: "",
       // Which sources were checked: Phase 3 exports only if these match the current state.
-      core: { commit: core.commit, clean: core.clean },
-      profile: studio ? { commit: studio.commit, clean: studio.clean } : null,
+      core: null,
+      profile: null,
     };
     current = record;
     const ref = entry.kind === "blanko" ? entry.id : entry.dir;
     (async () => {
-      let ok = true;
-      for (const k of kind === "alles" ? ["build", "test", "browser"] : [kind]) {
-        ok = await step(k, ref, record);
-        if (!ok) break;
+      let ok = false;
+      try {
+        const [core, studio] = await Promise.all([gitInfo(root), entry.kind === "studio" ? gitInfo(entry.dir) : null]);
+        record.core = { commit: core.commit ?? null, clean: core.clean ?? false };
+        record.profile = studio ? { commit: studio.commit ?? null, clean: studio.clean ?? false } : null;
+        ok = true;
+        for (const k of kind === "alles" ? ["build", "test", "browser"] : [kind]) {
+          ok = await step(k, ref, record);
+          if (!ok) break;
+        }
+      } catch (error) {
+        ok = false;
+        record.log += `\nFehler: ${error.message}\n`;
+      } finally {
+        // Always release the slot; a run that did not finish cleanly is never green.
+        record.ok = ok;
+        record.endedAt = new Date().toISOString();
+        try {
+          await mkdir(runsDir, { recursive: true, mode: 0o700 });
+          await writeFile(
+            path.join(runsDir, `${record.startedAt.replace(/[:.]/g, "-")}_${entry.key}_${kind}.json`),
+            JSON.stringify(record, null, 2),
+          );
+        } catch (_) {}
       }
-      record.ok = ok;
-      record.endedAt = new Date().toISOString();
-      await mkdir(runsDir, { recursive: true, mode: 0o700 });
-      await writeFile(path.join(runsDir, `${record.startedAt.replace(/[:.]/g, "-")}_${entry.key}_${kind}.json`), JSON.stringify(record, null, 2));
     })();
     return record;
   }

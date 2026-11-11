@@ -61,9 +61,16 @@ export async function listStudios({ env = process.env, stateDir = defaultStateDi
   return entries;
 }
 
+// Read-only Git: without optional locks "git status" never rewrites .git/index (it would otherwise
+// refresh cached file stats), so looking at a protected studio writes nothing into its folder.
 async function git(dir, args) {
   try {
-    return (await run("git", ["-C", dir, ...args], { encoding: "utf8" })).stdout.trim();
+    return (
+      await run("git", ["--no-optional-locks", "-C", dir, ...args], {
+        encoding: "utf8",
+        env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+      })
+    ).stdout.trim();
   } catch {
     return null;
   }

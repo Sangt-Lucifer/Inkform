@@ -170,3 +170,55 @@ test("test files are passed relative to the core (folder names with [brackets] a
   assert.ok(args.length >= 10);
   assert.ok(args.every((a) => /^tests\/[\w.-]+\.test\.mjs$/.test(a)), args.join());
 });
+
+// ---------- Review Phase 1 ----------
+import { execFileSync } from "node:child_process";
+import { utimes } from "node:fs/promises";
+
+test("two simultaneous start requests: exactly one run starts", async () => {
+  const state = path.join(base, "state-race");
+  const { server, token, runner } = await startWerkstatt({ port: 0, env, stateDir: state, certDir: base });
+  const port = server.address().port;
+  try {
+    const post = () =>
+      http(port, { method: "POST", pathname: "/api/run", headers: { "x-werkstatt-token": token }, body: JSON.stringify({ studio: "blanko", kind: "build" }) });
+    const results = await Promise.all([post(), post(), post()]);
+    assert.deepEqual(results.map((r) => r.status).sort(), [202, 409, 409]);
+    for (let i = 0; i < 200 && !runner.current().endedAt; i++) await new Promise((r) => setTimeout(r, 50));
+    for (let i = 0; i < 40 && !(await readdir(path.join(state, "laeufe")).catch(() => [])).length; i++)
+      await new Promise((r) => setTimeout(r, 50));
+    assert.equal((await readdir(path.join(state, "laeufe"))).length, 1, "only one run was recorded");
+    assert.equal(runner.current().steps.length, 1);
+    assert.equal(runner.current().ok, true);
+  } finally {
+    server.close();
+  }
+});
+
+test("showing a protected studio with its own Git repo writes nothing, not even .git/index", async () => {
+  const studios = path.join(base, "studios-git"),
+    dir = path.join(studios, "gitatelier");
+  await cp(path.join(root, "profiles", "beispiel"), dir, { recursive: true });
+  const p = JSON.parse(await readFile(path.join(dir, "profile.json"), "utf8"));
+  await writeFile(path.join(dir, "profile.json"), JSON.stringify({ ...p, id: "gitatelier", name: "Gitatelier" }));
+  const g = (...args) => execFileSync("git", ["-C", dir, ...args], { stdio: "ignore" });
+  g("init", "-q");
+  g("add", "-A");
+  g("-c", "user.name=Test", "-c", "user.email=test@inkform.invalid", "commit", "-qm", "x");
+  // Same content, new modification time: a normal "git status" would rewrite .git/index.
+  const old = new Date("2026-01-01T00:00:00Z");
+  await utimes(path.join(dir, "profile.json"), old, old);
+  await new Promise((r) => setTimeout(r, 1100));
+  const before = await snapshot(dir);
+  const { server, token } = await startWerkstatt({ port: 0, env: { ...process.env, INKFORM_STUDIOS: studios }, stateDir: path.join(base, "state-git"), certDir: base });
+  const port = server.address().port;
+  try {
+    const res = await http(port, { pathname: "/api/overview?refresh=1", headers: { "x-werkstatt-token": token } });
+    const studio = JSON.parse(res.text).studios.find((s) => s.key === "s-gitatelier");
+    assert.equal(studio.actionable, false);
+    assert.equal(studio.git.repo, true);
+    assert.equal(await snapshot(dir), before, "protected studio folder including .git unchanged");
+  } finally {
+    server.close();
+  }
+});
