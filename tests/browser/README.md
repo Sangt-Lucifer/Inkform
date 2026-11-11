@@ -10,6 +10,7 @@
 | `abschluss.mjs` | neu (Phase 3) | Validierung (Alter, Unterschrift, Pflicht-Einwilligungen), Unicode-Namen im PDF (Noto Sans), Buchung erst nach Bestätigung und nur einmal, Neuladen auf „Vielen Dank“, „PDF fehlt“, nicht darstellbare Zeichen, PIN-Sperre über Neuladen hinweg; alles im Flugmodus |
 | `aufbewahrung.mjs` | neu (Phase 4) | Erinnerung an offene Einwilligung, Sicherheits-Checkliste, Fristen, Löschliste, Anonymisieren, Sicherungsdatum |
 | `schriftgroessen.mjs` | neu (Phase 3) | Kundenbereich auf vier iPad-Größen: Eingaben, Beschriftungen und Fließtext ≥ 16 px, nichts < 14 px, kein seitliches Scrollen; mit `INKFORM_FONT_BASELINE=<datei>` zusätzlich: keine Schrift kleiner als vorher |
+| `update.mjs` | neu (Phase 4) | simuliertes App-Update: wartet bei angefangenem Formular, übernimmt im Leerlauf ohne Neuladen und löscht die alte Version aus dem Offline-Speicher |
 | `lib.mjs` | neu | gemeinsamer CDP-Client für die neuen Prüfungen |
 | `../income-independent.test.mjs` | `Pruefungen-Inkform-Einnahmen-PIN-2026-11-06/Unabhaengige-Einnahmenpruefung.mjs` | Grenzfälle des Einnahmenmoduls (läuft mit `npm test`) |
 

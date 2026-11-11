@@ -96,3 +96,35 @@ test("updateMany changes several entries at once or none", () => {
 test("days between two dates", () => {
   assert.equal(daysBetween("2026-11-01T12:00:00.000Z", new Date("2026-11-08T12:00:00.000Z")), 7);
 });
+
+// ---------- Review Phase 4 ----------
+import { pdfMayExist, waitingForPdfDeletion } from "../src/retention.js";
+
+test("an entry whose PDF may still exist is not anonymized, but listed as waiting", () => {
+  const records = [
+    row("pdf", "2010-01-01"), // PDF not yet marked as deleted
+    row("deleted", "2010-01-01", { pdfDeletedAt: "2026-01-01" }),
+    row("missing", "2010-01-01", { pdfMissing: true }),
+    row("noref", "2010-01-01", { source: "" }),
+  ];
+  assert.deepEqual(dueForAnonymization(records, 10, "2026-11-11").map((r) => r.id), ["deleted", "missing", "noref"]);
+  assert.deepEqual(waitingForPdfDeletion(records, 10, "2026-11-11").map((r) => r.id), ["pdf"]);
+  assert.equal(pdfMayExist(records[0]), true);
+  // Even with no PDF deadline at all, the PDF entry is never silently anonymized.
+  assert.equal(dueForPdfDeletion(records, null, "2026-11-11").length, 0);
+  assert.ok(!dueForAnonymization(records, 1, "2026-11-11").some((r) => r.id === "pdf"));
+});
+
+test("an anonymized entry cannot get a name or PDF reference back (edit, import)", () => {
+  const anon = validateIncomeRecord(anonymizeRecord(row("a", "2010-01-01", { pdfDeletedAt: "2026-01-01" }), "2026-11-11"));
+  assert.throws(() => validateIncomeRecord({ ...anon, customer: "Kunde a" }), /anonymisierter Eintrag/);
+  assert.throws(() => validateIncomeRecord({ ...anon, source: "Tattoo_Einwilligung_a.pdf" }), /anonymisierter Eintrag/);
+  const store = createIncomeStore(memory());
+  store.add(row("a", "2010-01-01", { pdfDeletedAt: "2026-01-01" }));
+  store.updateMany([anonymizeRecord(store.list()[0], "2026-11-11")]);
+  const current = store.list()[0];
+  assert.throws(() => store.update({ ...current, customer: "Kunde a" }, current.updatedAt));
+  // Re-importing an old backup with the original name is refused as a whole.
+  assert.throws(() => store.merge({ schemaVersion: 1, records: [row("a", "2010-01-01")] }), /abweichend/);
+  assert.equal(store.list()[0].customer, ANONYMIZED);
+});

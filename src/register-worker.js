@@ -14,7 +14,20 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
   });
   window.addEventListener("load", async () => {
     try {
-      await navigator.serviceWorker.register("./sw.js");
+      const registered = await navigator.serviceWorker.register("./sw.js");
+      // A newer version is installed and waiting: let it take over as soon as the app is idle.
+      const takeOver = () => {
+        if (registered.waiting && navigator.serviceWorker.controller && window.inkformIdle?.())
+          registered.waiting.postMessage({ type: "SKIP_WAITING" });
+      };
+      registered.addEventListener("updatefound", () =>
+        registered.installing?.addEventListener("statechange", takeOver),
+      );
+      setInterval(takeOver, 15000);
+      takeOver();
+      navigator.serviceWorker.addEventListener("controllerchange", () =>
+        navigator.serviceWorker.ready.then((r) => r.active?.postMessage({ type: "CHECK_OFFLINE" })),
+      );
       const registration = await navigator.serviceWorker.ready;
       registration.active?.postMessage({ type: "CHECK_OFFLINE" });
     } catch (error) {

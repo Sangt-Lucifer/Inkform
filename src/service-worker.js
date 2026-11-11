@@ -27,7 +27,12 @@ self.addEventListener("install", (event) => {
     })(),
   );
 });
-// Updates wait until all app windows are closed; never reload an active form.
+// Updates wait until all app windows are closed, or until the app reports that it is idle (no form
+// in progress, no unconfirmed consent): then the page asks this worker to take over at once, so an
+// older cached version can never start again on data written by the newer one. Nothing reloads.
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+});
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {

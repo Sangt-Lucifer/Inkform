@@ -46,7 +46,7 @@ check("Ohne Fristen wird nichts zur Löschung oder Anonymisierung angezeigt", aw
 await ev(`document.getElementById('retention-pdf-years').value='0';document.querySelector('[data-retention-action="save"]').click()`);
 check("Ungültige Frist wird abgelehnt", await ev(`document.getElementById('toast').textContent.includes('ganze Jahre')`));
 await ev(`document.getElementById('retention-pdf-years').value='3';document.getElementById('retention-income-years').value='10';document.querySelector('[data-retention-action="save"]').click()`);
-check("Löschliste zeigt nur fällige PDFs (älter als 3 Jahre, ohne „PDF fehlt“)", await ev(`JSON.stringify([...document.querySelectorAll('[data-retention-deleted]')].map(b=>b.dataset.retentionDeleted))===JSON.stringify(['r1','r2'])`));
+check("Löschliste zeigt nur fällige PDFs (älter als 3 Jahre, ohne „PDF fehlt“)", await ev(`JSON.stringify([...document.querySelectorAll('#retention-pdf-list [data-retention-deleted]')].map(b=>b.dataset.retentionDeleted))===JSON.stringify(['r1','r2'])`));
 await screenshot("aufbewahrung-seite");
 await ev(`document.querySelector('[data-retention-deleted="r1"]').click()`);
 check("Als gelöscht markiert: Datum gespeichert, Eintrag verschwindet aus der Liste", await ev(`incomeRecords().find(r=>r.id==='r1').pdfDeletedAt===localDate()&&!document.querySelector('[data-retention-deleted="r1"]')`));
@@ -56,6 +56,14 @@ check("Vorschau: 2 Einträge zur Anonymisierung", await ev(`document.querySelect
 await ev(`document.querySelector('[data-retention-action="anonymize"]').click()`);
 check("Anonymisiert: Name und PDF-Dateiname entfernt, Beträge erhalten", await ev(`(()=>{const r=incomeRecords();const a=r.filter(x=>x.anonymizedAt);return a.length===2&&a.every(x=>x.customer==='anonymisiert'&&x.source===''&&x.totalCents===20000)&&r.find(x=>x.id==='r2').customer==='Alt r2'})()`));
 check("Zweiter Durchlauf findet nichts mehr", await ev(`document.querySelector('[data-retention-action="anonymize"]').disabled`));
+// Review: an entry whose PDF may still exist waits; anonymized entries stay anonymized.
+await ev(`document.getElementById('retention-income-years').value='4';document.querySelector('[data-retention-action="save"]').click()`);
+check("Eintrag mit noch vorhandenem PDF wird nicht anonymisiert, sondern als wartend angezeigt", await ev(`document.querySelector('[data-retention-action="anonymize"]').disabled&&document.getElementById('retention-content').textContent.includes('1 weitere Einträge warten')&&incomeRecords().find(r=>r.id==='r2').customer==='Alt r2'`));
+await ev(`document.getElementById('retention-income-years').value='10';document.querySelector('[data-retention-action="save"]').click();openAdminAuthorized('income');(()=>{const el=document.getElementById('income-filter-year');el.value='';el.dispatchEvent(new Event('change',{bubbles:true}))})();document.querySelector('[data-income-edit="r1"]').click()`);
+check("Bearbeiten eines anonymisierten Eintrags: Name und Dateiname gesperrt", await ev(`document.getElementById('income-customer').readOnly&&document.getElementById('income-source').readOnly&&!document.getElementById('income-anonymized-note').hidden`));
+await ev(`document.getElementById('income-customer').readOnly=false;document.getElementById('income-customer').value='Alt r1';document.getElementById('income-edit-form').requestSubmit()`);
+check("Auch mit umgangener Sperre wird kein Name gespeichert", await ev(`!document.getElementById('income-edit-error').hidden&&incomeRecords().find(r=>r.id==='r1').customer==='anonymisiert'`));
+await ev(`document.getElementById('income-editor').close();openAdminAuthorized('retention')`);
 await reload();
 await ev(HELPERS);
 await until(`!document.getElementById('completion-screen').hidden`);

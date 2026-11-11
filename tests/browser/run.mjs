@@ -16,7 +16,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defaultOut, isBuiltin, resolveProfileDir, root } from "../../scripts/build.mjs";
 
-const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "schriftgroessen", "offline"];
+const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "schriftgroessen", "offline", "update"];
 const argv = process.argv.slice(2);
 const pi = argv.indexOf("--profile");
 const profile = pi >= 0 ? argv[pi + 1] : "beispiel";

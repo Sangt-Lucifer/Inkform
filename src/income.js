@@ -6,6 +6,7 @@ import {
   dueForAnonymization,
   dueForPdfDeletion,
   readRetention,
+  waitingForPdfDeletion,
   writeRetention,
   yearsBefore,
 } from "./retention.js";
@@ -87,6 +88,9 @@ export function validateIncomeRecord(value) {
       throw Error(`Ungültige Angabe: ${key}.`);
     row[key] = value[key];
   }
+  // An anonymized entry stays anonymized: no name or PDF reference can be put back.
+  if (row.anonymizedAt && (row.customer !== ANONYMIZED || row.source))
+    throw Error(`Ein anonymisierter Eintrag darf keinen Namen und keinen PDF-Dateinamen enthalten.`);
   return row;
 }
 export function validateIncomeBackup(value) {
@@ -277,6 +281,7 @@ export function createIncomeFeature({
       <div class="ad-field"><label for="income-deposit">Anzahlung (€), optional</label><input id="income-deposit" name="deposit" inputmode="decimal" maxlength="10"></div>
       <div class="ad-field full"><label for="income-source">PDF-Dateiname / Referenz, optional</label><input id="income-source" name="source" maxlength="400"></div>
       <div class="ad-field full"><label class="income-check"><input id="income-pdf-missing" name="pdfMissing" type="checkbox"> PDF fehlt (unterschriebene Einwilligung nicht abgelegt)</label></div>
+      <p class="ad-notice full" id="income-anonymized-note" hidden>Dieser Eintrag ist anonymisiert. Name und PDF-Dateiname lassen sich nicht wieder eintragen.</p>
     </div><p class="ad-section-copy">Die Änderung betrifft nur diese Übersicht. Ein bereits unterschriebenes PDF bleibt unverändert. Kein Gesamtpreis bedeutet „Preis offen“, nicht 0 €.</p>
     <div class="dialog-actions"><button type="button" class="secondary-button" data-income-cancel>Abbrechen</button><button type="submit" class="primary-button">Eintrag speichern</button></div></form>`;
   document.body.append(editor);
@@ -300,6 +305,9 @@ export function createIncomeFeature({
     input("date").value = record?.date || today();
     for (const key of ["artist", "customer", "source"]) input(key).value = record?.[key] || "";
     input("pdfMissing").checked = !!record?.pdfMissing;
+    const anonymized = !!record?.anonymizedAt;
+    for (const key of ["customer", "source"]) input(key).readOnly = anonymized;
+    editor.querySelector("#income-anonymized-note").hidden = !anonymized;
     for (const [key, field] of [
       ["total", "totalCents"],
       ["deposit", "depositCents"],
@@ -472,7 +480,9 @@ export function createIncomeFeature({
         all = store.list(),
         day = today();
       const pdfDue = dueForPdfDeletion(all, pdfYears, day),
-        anonDue = dueForAnonymization(all, incomeYears, day);
+        anonDue = dueForAnonymization(all, incomeYears, day),
+        waitingRows = waitingForPdfDeletion(all, incomeYears, day),
+        waiting = waitingRows.length;
       const deleted = all.filter((r) => r.pdfDeletedAt).length,
         anonymized = all.filter((r) => r.anonymizedAt).length;
       const field = (id, label, value, help) =>
@@ -501,7 +511,7 @@ export function createIncomeFeature({
         pdfYears === null
           ? '<p class="ad-notice">Keine Frist eingetragen. Es wird nichts zur Löschung angezeigt.</p>'
           : `<p class="ad-section-copy">Termine vor dem ${e(dateDe(yearsBefore(day, pdfYears)))}. Die App kann Dateien in der Dateien-App nicht sehen und nicht löschen: Bitte jedes PDF dort löschen (auch in Sicherungen auf dem Mac) und erst dann hier als gelöscht markieren.</p>
-      <div class="income-table-wrap"><table class="income-table"><caption>Fällige Einwilligungs-PDFs</caption><thead><tr><th>Termin</th><th>Name</th><th>PDF-Dateiname</th><th>Erledigt</th></tr></thead><tbody>${pdfRows || '<tr><td colspan="4">Keine PDFs fällig.</td></tr>'}</tbody></table></div>`
+      <div class="income-table-wrap"><table class="income-table" id="retention-pdf-list"><caption>Fällige Einwilligungs-PDFs</caption><thead><tr><th>Termin</th><th>Name</th><th>PDF-Dateiname</th><th>Erledigt</th></tr></thead><tbody>${pdfRows || '<tr><td colspan="4">Keine PDFs fällig.</td></tr>'}</tbody></table></div>`
       }
       </div></section>
       <section class="ad-panel"><div class="ad-panel-header"><h2>Einnahmenliste anonymisieren</h2><small>${anonymized} Einträge bereits anonymisiert</small></div><div class="ad-panel-body">
@@ -509,6 +519,18 @@ export function createIncomeFeature({
         incomeYears === null
           ? '<p class="ad-notice">Keine Frist eingetragen. Es wird nichts anonymisiert.</p>'
           : `<p class="ad-section-copy">${anonDue.length} Einträge mit Termin vor dem ${e(dateDe(yearsBefore(day, incomeYears)))}. Beim Anonymisieren werden Name und PDF-Dateiname durch „${ANONYMIZED}“ bzw. leer ersetzt; Datum, Artist und Beträge bleiben für Summen erhalten. Das lässt sich nicht rückgängig machen. Ältere JSON-Sicherungen enthalten die Namen weiterhin und müssen separat gelöscht werden.</p>
+      ${
+        waiting
+          ? `<p class="ad-notice">${waiting} weitere Einträge warten, bis ihr PDF als gelöscht markiert ist. Bis dahin bleiben Name und Dateiname erhalten, damit das PDF in der Dateien-App auffindbar ist.</p>
+      <div class="income-table-wrap"><table class="income-table"><caption>Warten auf PDF-Löschung${waiting > 50 ? " (erste 50)" : ""}</caption><thead><tr><th>Termin</th><th>Name</th><th>PDF-Dateiname</th><th>Erledigt</th></tr></thead><tbody>${waitingRows
+            .slice(0, 50)
+            .map(
+              (r) =>
+                `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.customer)}</td><td>${e(r.source)}</td><td><button class="ad-button" data-retention-deleted="${e(r.id)}" aria-label="PDF für ${e(r.customer)} als gelöscht markieren">PDF gelöscht</button></td></tr>`,
+            )
+            .join("")}</tbody></table></div>`
+          : ""
+      }
       ${anonRows ? `<div class="income-table-wrap"><table class="income-table"><caption>Vorschau${anonDue.length > 50 ? " (erste 50)" : ""}</caption><thead><tr><th>Termin</th><th>Artist</th><th>Name</th><th>Gesamtkosten</th></tr></thead><tbody>${anonRows}</tbody></table></div>` : ""}
       <div class="ad-actions-row"><button class="ad-button" data-income-action="backup">Vorher alle Einnahmen als JSON sichern</button><button class="ad-button danger" data-retention-action="anonymize"${anonDue.length ? "" : " disabled"}>${anonDue.length} Einträge anonymisieren</button></div>`
       }

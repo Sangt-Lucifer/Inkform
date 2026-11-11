@@ -1187,6 +1187,14 @@ function bookPendingConsent(pdfMissing) {
   resetCustomerForm();
   finishAdminLeave();
 }
+// Used by the service-worker registration: an app update may take over only while nothing is in
+// progress (empty customer form, no unconfirmed consent, no unsaved admin changes, no open dialog).
+window.inkformIdle = () =>
+  !dirty &&
+  !pendingConsent &&
+  !adminChanged() &&
+  !incomeFeature?.hasUnsavedChanges() &&
+  !document.querySelector("dialog[open]");
 $("pdf-next").addEventListener("click", () => bookPendingConsent(false));
 $("pdf-missing").addEventListener("click", () => bookPendingConsent(true));
 function runFilesTest() {
