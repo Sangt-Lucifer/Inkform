@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
 import { buildProfile, defaultOut, root } from "../scripts/build.mjs";
-import { exportStudio, listExports, nextVersion, readiness } from "../werkstatt/export.mjs";
+import { exportStudio, listExports, nextVersion, publish, readiness } from "../werkstatt/export.mjs";
 import { commitStudio, createStudio, pendingChanges, readEditable, saveDraft } from "../werkstatt/profile.mjs";
 import { gitInfo, listStudios } from "../werkstatt/status.mjs";
 import { startWerkstatt } from "../werkstatt/server.mjs";
@@ -445,5 +445,107 @@ test("a package folder moved away while its files are written is cleaned up wher
   } finally {
     await rm(parent, { recursive: true, force: true });
     await rename(moved, parent);
+  }
+});
+
+// ---------- Review of Phase 3, third round ----------
+
+const job = async (parent, extra = {}) => {
+  const st = await stat(parent);
+  return {
+    parent: await (await import("node:fs/promises")).realpath(parent),
+    parentIno: st.ino,
+    parentDev: st.dev,
+    staging: ".inkform-" + "a".repeat(32) + ".tmp",
+    zipTmp: ".inkform-" + "b".repeat(32) + ".zip.tmp",
+    final: "inkform-test-1.0.0-p1-2026-11-20",
+    zip: false,
+    started: Date.now() / 1000,
+    files: [["dist/index.html", Buffer.from("x").toString("base64")]],
+    ...extra,
+  };
+};
+
+test("publisher: never follows a link, neither in the folder path nor at the work name", async () => {
+  const realParent = path.join(base, "pub-echt");
+  const foreign = path.join(base, "pub-fremd");
+  await mkdir(realParent);
+  await mkdir(foreign);
+  await writeFile(path.join(foreign, "wichtig.txt"), "fremd");
+  // A link at the hidden work name: mkdir fails, nothing is written through it.
+  const j = await job(realParent);
+  await symlink(foreign, path.join(realParent, j.staging));
+  let r = await publish(j, async () => true);
+  assert.match(r.error, /File exists|EEXIST|Errno 17/);
+  assert.deepEqual(await readdir(foreign), ["wichtig.txt"]);
+  await rm(path.join(realParent, j.staging));
+  // A link anywhere in the folder path: opening without following fails.
+  const linked = path.join(base, "pub-link");
+  await symlink(realParent, linked);
+  r = await publish({ ...(await job(realParent)), parent: linked }, async () => true);
+  assert.ok(r.error, "a linked path is refused");
+  assert.deepEqual(await readdir(realParent), []);
+});
+
+test("publisher: only writes into a real export folder (no foreign entries such as a studio's files)", async () => {
+  const studioLike = path.join(base, "pub-studio");
+  await mkdir(studioLike);
+  await writeFile(path.join(studioLike, "profile.json"), "{}");
+  const r = await publish(await job(studioLike), async () => true);
+  assert.match(r.error, /fremde Einträge/);
+  assert.deepEqual(await readdir(studioLike), ["profile.json"]);
+});
+
+test("publisher: aborting after writing removes everything it created", async () => {
+  const parent = path.join(base, "pub-abbruch");
+  await mkdir(parent);
+  const r = await publish(await job(parent, { files: [["dist/icons/icon-192.png", "eA=="], ["index.html", "eA=="]] }), async () => false);
+  assert.match(r.error, /während des Exports geändert/);
+  assert.deepEqual(await readdir(parent), []);
+});
+
+test("a package without the licence files is not valid", async () => {
+  const pkg = (await listExports("atelier-nord", env)).filter((e) => e.valid).at(-1);
+  execFileSync("chmod", ["-R", "u+w", pkg.folder]);
+  const sums = await readFile(path.join(pkg.folder, "SHA256SUMS"), "utf8");
+  const licences = path.join(pkg.folder, "dist", "licenses");
+  const saved = path.join(base, "lizenzen-weg");
+  try {
+    await rename(licences, saved);
+    await writeFile(path.join(pkg.folder, "SHA256SUMS"), sums.split("\n").filter((l) => !l.includes("dist/licenses/")).join("\n"));
+    const entry = (await listExports("atelier-nord", env)).find((e) => e.name === pkg.name);
+    assert.equal(entry.valid, false);
+    assert.match(entry.reason, /Pflichtdateien/);
+  } finally {
+    await rename(saved, licences);
+    await writeFile(path.join(pkg.folder, "SHA256SUMS"), sums);
+  }
+});
+
+test("server: a relative state folder is fixed at start, the working directory does not matter later", async () => {
+  const previous = process.cwd();
+  const elsewhere = await mkdtemp(path.join(tmpdir(), "inkform-cwd-"));
+  process.chdir(base);
+  let server, token;
+  try {
+    ({ server, token } = await startWerkstatt({ port: 0, env, stateDir: "rel-state", certDir: "rel-cert", git: fakeGit }));
+  } finally {
+    process.chdir(previous);
+  }
+  try {
+    const port = server.address().port;
+    process.chdir(elsewhere);
+    const status = await new Promise((resolve, reject) =>
+      request({ host: "127.0.0.1", port, path: "/api/overview", headers: { host: `127.0.0.1:${port}`, "x-werkstatt-token": token } }, (res) => res.resume().on("end", () => resolve(res.statusCode)))
+        .on("error", reject)
+        .end(),
+    );
+    assert.equal(status, 200);
+    assert.equal(await stat(path.join(base, "rel-state")).then((s) => s.isDirectory(), () => false), true);
+    assert.deepEqual(await readdir(elsewhere), [], "nothing created in the current working directory");
+  } finally {
+    process.chdir(previous);
+    server.close();
+    await rm(elsewhere, { recursive: true, force: true });
   }
 });

@@ -46,6 +46,8 @@ export async function startWerkstatt({
   // Folders from the environment are fixed as absolute paths once: nothing depends on the
   // working directory (the export temporarily works inside its package folder).
   env = { ...env };
+  stateDir = path.resolve(stateDir);
+  certDir = path.resolve(certDir);
   for (const k of ["INKFORM_STUDIOS", "INKFORM_EXPORTE"])
     if (env[k]) env[k] = env[k].split(path.delimiter).filter(Boolean).map((p) => path.resolve(p)).join(path.delimiter);
   const token = randomBytes(24).toString("hex");

@@ -10,10 +10,11 @@
 // file is scanned for the markers and files of all other profiles. The package is written to a
 // temporary folder, made read-only and then renamed: a package is complete or does not exist.
 // Exports never contain test results, backups, certificates or customer data.
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmod, link, lstat, mkdir, readdir, readFile, realpath, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { buildProfile, defaultOut, discoverStudioProfiles, listBuiltinProfiles, root } from "../scripts/build.mjs";
 import { findFingerprints, fingerprints, scanText } from "../tests/lib/leaks.mjs";
@@ -41,7 +42,19 @@ const today = (now = new Date()) =>
 // build file there) and every checksum matches. Results are cached per file list (name, size,
 // change time, inode), so the overview stays fast and still notices any change.
 const COMMIT = /^[0-9a-f]{7,40}$/;
-const REQUIRED = ["index.html", "dist/index.html", "dist/sw.js", "dist/manifest.webmanifest", REPORT];
+// Every file a build always produces (build.mjs), plus the report.
+const REQUIRED = [
+  "index.html",
+  "dist/index.html",
+  "dist/sw.js",
+  "dist/manifest.webmanifest",
+  "dist/licenses/jsPDF.txt",
+  "dist/licenses/Tailwind.txt",
+  "dist/licenses/NotoSans.txt",
+  "dist/icons/icon-192.png",
+  "dist/icons/icon-512.png",
+  REPORT,
+];
 const verified = new Map();
 async function packageFiles(folder) {
   const out = [];
@@ -196,7 +209,7 @@ async function placeError(target, env) {
 }
 
 
-export async function exportStudio(entry, { latest, env = process.env, git = gitInfo, zip = false, now = new Date() } = {}) {
+export async function exportStudio(entry, { latest, env = process.env, git = gitInfo, zip = false, now = new Date(), hook = null } = {}) {
   if (!entry?.actionable) return { error: entry?.protectedReason ?? "Dieses Studio wird nicht exportiert." };
   const ready = await readiness(entry, { latest, git });
   if (!ready.ok) return { error: "Export noch nicht möglich.", reasons: ready.reasons };
@@ -265,104 +278,77 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
 
   await mkdir(parent, { recursive: true });
   const realParent = await realpath(parent);
-  // Publication: the final folder is created exclusively (mkdir fails if anything has the name,
-  // an empty folder included) and carries an "incomplete" marker until the very end. All writes
-  // happen relative to that folder itself (it becomes the working directory), so they always land
-  // in the folder created here, even if someone moves or swaps its path meanwhile. Place and
-  // identity are checked after every step; on any problem exactly the files and folders created
-  // here are removed again, wherever the folder is now.
-  const created = [];
-  let id = null;
-  const previousCwd = process.cwd();
-  const same = async (p, want) => stat(p).then((st) => st.ino === want.ino && st.dev === want.dev, () => false);
-  const here = async (inside = true) =>
-    !(await placeError(parent, env)) &&
-    (await realpath(parent).catch(() => null)) === realParent &&
-    (await realpath(target).catch(() => null)) === path.join(realParent, name) &&
-    (await same(target, id)) &&
-    (!inside || (await same(".", id)));
-  const ensure = async () => {
-    if (!(await here())) throw new Error("Der Exportordner hat sich während des Exports verändert.");
+  const placeNow = await placeError(realParent, env);
+  if (placeNow) return { error: placeNow };
+  const parentId = await stat(realParent);
+
+  // Writing happens in werkstatt/publish.py: Python can create folders and files relative to an
+  // open folder without following links, and rename exclusively (see there). Node hands over the
+  // exact bytes; between "written" and the final rename, the state and the bytes are checked once
+  // more (hook is only used by the tests to simulate interference at exactly that moment).
+  const job = {
+    parent: realParent,
+    parentIno: parentId.ino,
+    parentDev: parentId.dev,
+    staging: `.inkform-${randomBytes(16).toString("hex")}.tmp`,
+    zipTmp: `.inkform-${randomBytes(16).toString("hex")}.zip.tmp`,
+    final: name,
+    zip: zip === true,
+    started: Date.now() / 1000,
+    files: [...all].map(([n, c]) => [n, Buffer.from(c).toString("base64")]),
   };
-  try {
-    await mkdir(target);
-    id = await stat(target);
-    process.chdir(target);
-    await ensure();
-    await writeFile(MARKER, "Export läuft oder wurde abgebrochen. Dieses Paket nicht verwenden.\n", { flag: "wx" });
-    created.push(MARKER);
-    for (const [n, c] of all) {
-      const parts = n.split("/");
-      for (let i = 1; i < parts.length; i++) {
-        const sub = parts.slice(0, i).join("/");
-        if (created.includes(sub + "/")) continue;
-        await mkdir(sub);
-        created.push(sub + "/");
-      }
-      await writeFile(n, c, { flag: "wx" });
-      created.push(n);
-      await ensure();
-    }
-    for (const [n, c] of all) if (sha256(await readFile(n)) !== sha256(Buffer.from(c))) throw new Error(`${n}: Prüfsumme stimmt nicht.`);
-    if (!(await unchanged())) throw new Error("Der Stand hat sich während des Exports geändert.");
-    for (const c of created) if (c !== MARKER && !c.endsWith("/")) await chmod(c, 0o444);
-    await ensure();
-    await unlink(MARKER);
-    created.splice(created.indexOf(MARKER), 1);
-    for (const c of [...created].reverse()) if (c.endsWith("/")) await chmod(c, 0o555);
-    await chmod(".", 0o555);
-    await ensure();
-    const final = await verifyPackage(target);
-    if (!final.valid) throw new Error(`Paket nicht gültig: ${final.reason}`);
-  } catch (error) {
-    if (id && (await same(".", id))) await removeCreatedHere(name, created);
-    return { error: `Export fehlgeschlagen: ${error.message}` };
-  } finally {
-    process.chdir(previousCwd);
-  }
-  let zipFile = null;
-  if (zip) {
-    // Written under a temporary name, then hard-linked to the final name: link() fails if that
-    // name exists, so no existing file is ever replaced or deleted. The link is removed again if
-    // the folder moved meanwhile.
-    const tmpZip = path.join(parent, `.${name}.${randomBytes(4).toString("hex")}.zip.tmp`);
-    zipFile = `${target}.zip`;
-    try {
-      await run("ditto", ["-c", "-k", "--keepParent", target, tmpZip]);
-      await chmod(tmpZip, 0o444);
-      const zipId = await stat(tmpZip);
-      await link(tmpZip, zipFile);
-      if (!(await here(false))) {
-        if (await same(zipFile, zipId)) await unlink(zipFile).catch(() => {});
-        throw new Error("Der Exportordner hat sich verändert.");
-      }
-    } catch (error) {
-      return {
-        name,
-        folder: target,
-        version,
-        warning: error.code === "EEXIST" ? `Paket fertig. ${path.basename(zipFile)} gab es schon, kein neues ZIP angelegt.` : `Paket fertig, ZIP nicht angelegt: ${error.message}`,
-      };
-    } finally {
-      await unlink(tmpZip).catch(() => {});
-    }
-  }
-  return { name, folder: target, version, zip: zipFile, files: all.size };
+  const result = await publish(job, async () => {
+    if (hook) await hook();
+    return unchanged();
+  });
+  if (result.error) return { error: `Export fehlgeschlagen: ${result.error}` };
+  const final = await verifyPackage(target);
+  if (!final.valid) return { error: `Export fehlgeschlagen: Paket nicht gültig (${final.reason}).` };
+  return { name, folder: target, version, zip: result.zip ? path.join(parent, result.zip) : null, warning: result.warning ?? undefined, files: all.size };
 }
 
-// Removes only what this export created (files first, then its own folders), relative to the
-// export folder as working directory, so it works wherever that folder was moved. If anything
-// foreign is left, the folder stays, marked as incomplete, and is never taken for a valid package.
-async function removeCreatedHere(name, created) {
-  await chmod(".", 0o755).catch(() => {});
-  for (const c of created.filter((c) => c.endsWith("/"))) await chmod(c, 0o755).catch(() => {});
-  for (const c of [...created].reverse()) await (c.endsWith("/") ? rmdir(c) : unlink(c)).catch(() => {});
-  const leftover = await readdir(".").catch(() => ["?"]);
-  if (leftover.length) {
-    await writeFile(MARKER, "Export abgebrochen. Dieses Paket nicht verwenden.\n").catch(() => {});
-    return;
-  }
-  process.chdir("..");
-  await rmdir(name).catch(() => {});
+const PUBLISHER = fileURLToPath(new URL("./publish.py", import.meta.url));
+export function publish(job, beforeRename) {
+  return new Promise((resolve) => {
+    const child = spawn("/usr/bin/python3", ["-I", "-S", PUBLISHER], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { PATH: "/usr/bin:/bin", LANG: "en_US.UTF-8" },
+    });
+    let buffer = "",
+      stderr = "",
+      answered = false;
+    const done = (r) => {
+      if (answered === true) return;
+      if (answered === "abort" && !r.error?.startsWith("Der Stand")) return;
+      answered = true;
+      resolve(r);
+    };
+    child.stderr.on("data", (c) => (stderr += c));
+    child.on("error", (e) => done({ error: `Python nicht verfügbar (${e.message}).` }));
+    child.on("close", (code) => done({ error: `Schreiben abgebrochen (${code}). ${stderr.split("\n").filter(Boolean).at(-1) ?? ""}`.trim() }));
+    child.stdout.on("data", async (c) => {
+      buffer += c;
+      let nl;
+      while ((nl = buffer.indexOf("\n")) >= 0) {
+        const line = JSON.parse(buffer.slice(0, nl));
+        buffer = buffer.slice(nl + 1);
+        if (line.written) {
+          let ok = false;
+          try {
+            ok = await beforeRename();
+          } catch {}
+          if (!ok) {
+            // Python removes everything it wrote; the answer waits until that is finished.
+            child.once("close", () => done({ error: "Der Stand hat sich während des Exports geändert. Nichts exportiert." }));
+            answered = "abort";
+          }
+          child.stdin.end(ok ? "go\n" : "abbrechen\n");
+        } else if (line.error) done({ error: line.error });
+        else if (line.ok) done(line);
+      }
+    });
+    child.stdin.write(JSON.stringify(job) + "\n");
+  });
 }
+
 
