@@ -43,6 +43,11 @@ export async function startWerkstatt({
   certDir = defaultCertDir(),
   git,
 } = {}) {
+  // Folders from the environment are fixed as absolute paths once: nothing depends on the
+  // working directory (the export temporarily works inside its package folder).
+  env = { ...env };
+  for (const k of ["INKFORM_STUDIOS", "INKFORM_EXPORTE"])
+    if (env[k]) env[k] = env[k].split(path.delimiter).filter(Boolean).map((p) => path.resolve(p)).join(path.delimiter);
   const token = randomBytes(24).toString("hex");
   const runner = createRunner({ stateDir, env });
   let statusCache = null;

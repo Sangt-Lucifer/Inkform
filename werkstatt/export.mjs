@@ -12,7 +12,7 @@
 // Exports never contain test results, backups, certificates or customer data.
 import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmod, link, lstat, mkdir, readdir, readFile, realpath, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, readdir, readFile, realpath, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { buildProfile, defaultOut, discoverStudioProfiles, listBuiltinProfiles, root } from "../scripts/build.mjs";
@@ -22,6 +22,7 @@ import { buildState, gitInfo } from "./status.mjs";
 
 const run = promisify(execFile);
 const REPORT = "PRUEFBERICHT.txt";
+const MARKER = ".unvollstaendig";
 const SUMS = "SHA256SUMS";
 // The only files a package may consist of (what build.mjs produces).
 const PACKAGE_FILE = /^(index\.html|dist\/index\.html|dist\/sw\.js|dist\/manifest\.webmanifest|dist\/licenses\/[A-Za-z]+\.txt|dist\/icons\/icon-\d{2,4}\.png)$/;
@@ -35,11 +36,61 @@ const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 const today = (now = new Date()) =>
   `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-// Reads the existing packages of one studio. A package counts only with a readable report naming
-// its commits and a checksum list; anything else under an export name is reported as damaged.
-// With verify, the checksums of every file are checked as well.
+// A package is valid only if it is complete and unchanged: no "incomplete" marker, nothing but
+// regular files, SHA256SUMS lists exactly the files present (report included, every required
+// build file there) and every checksum matches. Results are cached per file list (name, size,
+// change time, inode), so the overview stays fast and still notices any change.
 const COMMIT = /^[0-9a-f]{7,40}$/;
-export async function listExports(id, env = process.env, { verify = false } = {}) {
+const REQUIRED = ["index.html", "dist/index.html", "dist/sw.js", "dist/manifest.webmanifest", REPORT];
+const verified = new Map();
+async function packageFiles(folder) {
+  const out = [];
+  const walk = async (dir) => {
+    for (const name of await readdir(dir)) {
+      const full = path.join(dir, name);
+      const st = await lstat(full);
+      if (st.isSymbolicLink()) throw new Error(`${path.relative(folder, full)} ist eine Verknüpfung`);
+      if (st.isDirectory()) await walk(full);
+      else if (st.isFile()) out.push({ rel: path.relative(folder, full).split(path.sep).join("/"), st });
+      else throw new Error(`${path.relative(folder, full)} ist keine normale Datei`);
+    }
+  };
+  await walk(folder);
+  return out.sort((a, b) => a.rel.localeCompare(b.rel));
+}
+export async function verifyPackage(folder) {
+  try {
+    const top = await lstat(folder);
+    if (top.isSymbolicLink() || !top.isDirectory()) return { valid: false, reason: "kein echter Ordner" };
+    const files = await packageFiles(folder);
+    const key = JSON.stringify(files.map((f) => [f.rel, f.st.size, f.st.mtimeMs, f.st.ctimeMs, f.st.ino]));
+    if (verified.get(folder)?.key === key) return verified.get(folder).result;
+    const result = await (async () => {
+      if (files.some((f) => f.rel === MARKER)) return { valid: false, reason: "unvollständig (Export abgebrochen)" };
+      const sums = await readFile(path.join(folder, SUMS), "utf8").catch(() => null);
+      if (sums === null) return { valid: false, reason: "SHA256SUMS fehlt" };
+      const listed = new Map();
+      for (const line of sums.split("\n").filter(Boolean)) {
+        const m = line.match(/^([0-9a-f]{64}) {2}(.+)$/);
+        if (!m || listed.has(m[2])) return { valid: false, reason: "SHA256SUMS ist beschädigt" };
+        listed.set(m[2], m[1]);
+      }
+      const present = files.map((f) => f.rel).filter((r) => r !== SUMS);
+      if (JSON.stringify([...listed.keys()].sort()) !== JSON.stringify([...present].sort())) return { valid: false, reason: "Dateien und SHA256SUMS passen nicht zusammen" };
+      if (REQUIRED.some((r) => !listed.has(r))) return { valid: false, reason: "Pflichtdateien fehlen" };
+      if (present.some((r) => r !== REPORT && !PACKAGE_FILE.test(r))) return { valid: false, reason: "fremde Dateien im Paket" };
+      for (const [rel, hash] of listed) if (sha256(await readFile(path.join(folder, rel))) !== hash) return { valid: false, reason: `${rel} wurde verändert` };
+      return { valid: true, reason: null };
+    })();
+    verified.set(folder, { key, result });
+    return result;
+  } catch (error) {
+    return { valid: false, reason: error.message };
+  }
+}
+
+// Reads the existing packages of one studio (always verified, see above).
+export async function listExports(id, env = process.env) {
   const dir = path.join(exportsRoot(env), id);
   const out = [];
   for (const name of await readdir(dir).catch(() => [])) {
@@ -47,13 +98,21 @@ export async function listExports(id, env = process.env, { verify = false } = {}
     if (!m || m[1] !== id) continue;
     const folder = path.join(dir, name);
     const report = await readFile(path.join(folder, REPORT), "utf8").catch(() => null);
-    const sums = await readFile(path.join(folder, SUMS), "utf8").catch(() => null);
     const field = (key) => report?.match(new RegExp(`^${key}:\\s*(\\S+)`, "m"))?.[1] ?? null;
     const core = field("Kern-Commit"),
       profile = field("Studio-Commit");
-    let valid = !!report && !!sums && COMMIT.test(core ?? "") && (profile === "keiner" || COMMIT.test(profile ?? "")) && field("Version") === m[2];
-    if (valid && verify) valid = await run_("shasum", ["-a", "256", "-c", "--quiet", SUMS], { cwd: folder }).then(() => true, () => false);
-    out.push({ name, version: m[2], date: m[3], core, profile: profile === "keiner" ? null : profile, folder, valid });
+    const check = await verifyPackage(folder);
+    const fieldsOk = COMMIT.test(core ?? "") && (profile === "keiner" || COMMIT.test(profile ?? "")) && field("Version") === m[2];
+    out.push({
+      name,
+      version: m[2],
+      date: m[3],
+      core,
+      profile: profile === "keiner" ? null : profile,
+      folder,
+      valid: check.valid && fieldsOk,
+      reason: check.reason ?? (fieldsOk ? null : "Prüfbericht unvollständig"),
+    });
   }
   return out.sort((a, b) => (a.date === b.date ? a.version.localeCompare(b.version, "en", { numeric: true }) : a.date.localeCompare(b.date)));
 }
@@ -136,15 +195,6 @@ async function placeError(target, env) {
   return null;
 }
 
-async function makeReadOnly(dir, top = true) {
-  for (const e of await readdir(dir, { withFileTypes: true })) {
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) await makeReadOnly(full, false);
-    else await chmod(full, 0o444);
-  }
-  // The top folder stays writable until it is renamed (macOS needs that for a folder rename).
-  if (!top) await chmod(dir, 0o555);
-}
 
 export async function exportStudio(entry, { latest, env = process.env, git = gitInfo, zip = false, now = new Date() } = {}) {
   if (!entry?.actionable) return { error: entry?.protectedReason ?? "Dieses Studio wird nicht exportiert." };
@@ -154,10 +204,10 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
   const parent = path.join(exportsRoot(env), entry.id);
   const place = await placeError(parent, env);
   if (place) return { error: place };
-  const existing = await listExports(entry.id, env, { verify: true });
+  const existing = await listExports(entry.id, env);
   const damaged = existing.filter((e) => !e.valid);
   if (damaged.length)
-    return { error: "Unter den bisherigen Exporten sind unvollständige oder veränderte Pakete. Bitte erst prüfen und wegräumen.", reasons: damaged.map((d) => d.folder) };
+    return { error: "Unter den bisherigen Exporten sind unvollständige oder veränderte Pakete. Bitte erst prüfen und wegräumen.", reasons: damaged.map((d) => `${d.folder}: ${d.reason}`) };
   const { version, already } = nextVersion(await coreVersion(), existing, ready.state);
   if (already) return { error: `Dieser Stand ist bereits exportiert: ${already}. Exporte werden nicht überschrieben.` };
   const name = `inkform-${entry.id}-${version}-${today(now)}`;
@@ -204,56 +254,94 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
 
   // Still the tested state? Commits and cleanliness are compared again right before writing and
   // once more right before the package gets its final name.
+  // ... and the bytes written must be what a fresh build of exactly that state produces.
   const unchanged = async () => {
     const again = await readiness(entry, { latest, git });
-    return again.ok && again.state.core === ready.state.core && again.state.profile === ready.state.profile;
+    if (!(again.ok && again.state.core === ready.state.core && again.state.profile === ready.state.profile)) return false;
+    const fresh = (await buildProfile(entry.dir)).files;
+    return fresh.size === files.size && [...fresh].every(([n, c]) => files.has(n) && Buffer.from(c).equals(Buffer.from(files.get(n))));
   };
   if (!(await unchanged())) return { error: "Der Stand hat sich während des Exports geändert. Nichts exportiert." };
 
   await mkdir(parent, { recursive: true });
   const realParent = await realpath(parent);
-  const work = path.join(parent, `.${name}.${randomBytes(4).toString("hex")}.tmp`);
-  // The place is checked again around every step: a link swapped in later never receives files.
-  const placeStill = async (p) => !(await placeError(parent, env)) && (await realpath(parent)) === realParent && (!p || (await realpath(p)) === path.join(realParent, path.basename(p)));
+  // Publication: the final folder is created exclusively (mkdir fails if anything has the name,
+  // an empty folder included) and carries an "incomplete" marker until the very end. All writes
+  // happen relative to that folder itself (it becomes the working directory), so they always land
+  // in the folder created here, even if someone moves or swaps its path meanwhile. Place and
+  // identity are checked after every step; on any problem exactly the files and folders created
+  // here are removed again, wherever the folder is now.
+  const created = [];
+  let id = null;
+  const previousCwd = process.cwd();
+  const same = async (p, want) => stat(p).then((st) => st.ino === want.ino && st.dev === want.dev, () => false);
+  const here = async (inside = true) =>
+    !(await placeError(parent, env)) &&
+    (await realpath(parent).catch(() => null)) === realParent &&
+    (await realpath(target).catch(() => null)) === path.join(realParent, name) &&
+    (await same(target, id)) &&
+    (!inside || (await same(".", id)));
+  const ensure = async () => {
+    if (!(await here())) throw new Error("Der Exportordner hat sich während des Exports verändert.");
+  };
   try {
-    await mkdir(work);
-    if (!(await placeStill(work))) throw new Error("Der Exportordner hat sich verändert.");
+    await mkdir(target);
+    id = await stat(target);
+    process.chdir(target);
+    await ensure();
+    await writeFile(MARKER, "Export läuft oder wurde abgebrochen. Dieses Paket nicht verwenden.\n", { flag: "wx" });
+    created.push(MARKER);
     for (const [n, c] of all) {
-      await mkdir(path.dirname(path.join(work, n)), { recursive: true });
-      await writeFile(path.join(work, n), c, { flag: "wx" });
+      const parts = n.split("/");
+      for (let i = 1; i < parts.length; i++) {
+        const sub = parts.slice(0, i).join("/");
+        if (created.includes(sub + "/")) continue;
+        await mkdir(sub);
+        created.push(sub + "/");
+      }
+      await writeFile(n, c, { flag: "wx" });
+      created.push(n);
+      await ensure();
     }
-    const check = await run_("shasum", ["-a", "256", "-c", SUMS], { cwd: work });
-    if (!/: OK/.test(check)) throw new Error("Prüfsummen stimmen nicht.");
-    await makeReadOnly(work);
-    if (!(await placeStill(work))) throw new Error("Der Exportordner hat sich verändert.");
+    for (const [n, c] of all) if (sha256(await readFile(n)) !== sha256(Buffer.from(c))) throw new Error(`${n}: Prüfsumme stimmt nicht.`);
     if (!(await unchanged())) throw new Error("Der Stand hat sich während des Exports geändert.");
-    // No empty folder ever carries the final name: the complete package is renamed in one step,
-    // and only if the name is still free.
-    if (await lstat(target).then(() => true, () => false)) throw new Error(`${name} ist inzwischen vorhanden.`);
-    await rename(work, target);
-    await chmod(target, 0o555);
-    if (!(await placeStill(target))) throw new Error("Der Exportordner hat sich verändert.");
+    for (const c of created) if (c !== MARKER && !c.endsWith("/")) await chmod(c, 0o444);
+    await ensure();
+    await unlink(MARKER);
+    created.splice(created.indexOf(MARKER), 1);
+    for (const c of [...created].reverse()) if (c.endsWith("/")) await chmod(c, 0o555);
+    await chmod(".", 0o555);
+    await ensure();
+    const final = await verifyPackage(target);
+    if (!final.valid) throw new Error(`Paket nicht gültig: ${final.reason}`);
   } catch (error) {
-    await chmodTree(work).catch(() => {});
-    await rm(work, { recursive: true, force: true }).catch(() => {});
+    if (id && (await same(".", id))) await removeCreatedHere(name, created);
     return { error: `Export fehlgeschlagen: ${error.message}` };
+  } finally {
+    process.chdir(previousCwd);
   }
   let zipFile = null;
   if (zip) {
     // Written under a temporary name, then hard-linked to the final name: link() fails if that
-    // name exists, so no existing file is ever replaced or deleted.
+    // name exists, so no existing file is ever replaced or deleted. The link is removed again if
+    // the folder moved meanwhile.
     const tmpZip = path.join(parent, `.${name}.${randomBytes(4).toString("hex")}.zip.tmp`);
     zipFile = `${target}.zip`;
     try {
       await run("ditto", ["-c", "-k", "--keepParent", target, tmpZip]);
       await chmod(tmpZip, 0o444);
+      const zipId = await stat(tmpZip);
       await link(tmpZip, zipFile);
+      if (!(await here(false))) {
+        if (await same(zipFile, zipId)) await unlink(zipFile).catch(() => {});
+        throw new Error("Der Exportordner hat sich verändert.");
+      }
     } catch (error) {
       return {
         name,
         folder: target,
         version,
-        warning: error.code === "EEXIST" ? `Paket fertig. ${path.basename(zipFile)} gab es schon, kein neues ZIP angelegt.` : `Paket fertig, ZIP fehlgeschlagen: ${error.message}`,
+        warning: error.code === "EEXIST" ? `Paket fertig. ${path.basename(zipFile)} gab es schon, kein neues ZIP angelegt.` : `Paket fertig, ZIP nicht angelegt: ${error.message}`,
       };
     } finally {
       await unlink(tmpZip).catch(() => {});
@@ -262,16 +350,19 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
   return { name, folder: target, version, zip: zipFile, files: all.size };
 }
 
-// Removes the final folder only if it is still the empty one created here.
-async function rmEmpty(dir) {
-  if ((await readdir(dir).catch(() => ["x"])).length === 0) await rm(dir, { recursive: true, force: true });
-}
-const run_ = async (cmd, args, opts) => (await run(cmd, args, { encoding: "utf8", ...opts })).stdout;
-async function chmodTree(dir) {
-  await chmod(dir, 0o755);
-  for (const e of await readdir(dir, { withFileTypes: true })) {
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) await chmodTree(full);
-    else await chmod(full, 0o644);
+// Removes only what this export created (files first, then its own folders), relative to the
+// export folder as working directory, so it works wherever that folder was moved. If anything
+// foreign is left, the folder stays, marked as incomplete, and is never taken for a valid package.
+async function removeCreatedHere(name, created) {
+  await chmod(".", 0o755).catch(() => {});
+  for (const c of created.filter((c) => c.endsWith("/"))) await chmod(c, 0o755).catch(() => {});
+  for (const c of [...created].reverse()) await (c.endsWith("/") ? rmdir(c) : unlink(c)).catch(() => {});
+  const leftover = await readdir(".").catch(() => ["?"]);
+  if (leftover.length) {
+    await writeFile(MARKER, "Export abgebrochen. Dieses Paket nicht verwenden.\n").catch(() => {});
+    return;
   }
+  process.chdir("..");
+  await rmdir(name).catch(() => {});
 }
+

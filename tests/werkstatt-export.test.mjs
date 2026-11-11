@@ -324,7 +324,7 @@ test("export: damaged or incomplete packages block further exports and are not s
   try {
     const r = await exportStudio(await entry(), { latest: await greenRuns(), env, git: fakeGit, now: NOW });
     assert.match(r.error, /unvollständige oder veränderte/);
-    assert.deepEqual(r.reasons, [fake]);
+    assert.ok(r.reasons[0].startsWith(`${fake}: `), r.reasons[0]);
     const listed = await listExports("atelier-nord", env);
     assert.equal(listed.find((e) => e.name.endsWith("p9-2026-11-22")).valid, false);
   } finally {
@@ -352,4 +352,98 @@ test("export: Blanko's unchanged state is not exported twice", async () => {
   assert.ok(first.folder, JSON.stringify(first));
   assert.match(await readFile(path.join(first.folder, "PRUEFBERICHT.txt"), "utf8"), /Studio-Commit: keiner/);
   assert.match((await exportStudio(blanko, { latest, env, git: fakeGit, now: NOW })).error, /bereits exportiert/);
+});
+
+// ---------- Review of Phase 3, second round ----------
+
+const lastValid = async () => (await listExports("atelier-nord", env)).filter((e) => e.valid).at(-1);
+
+test("a truncated checksum list or a changed file makes a package invalid (also in the overview)", async () => {
+  const pkg = await lastValid();
+  execFileSync("chmod", ["-R", "u+w", pkg.folder]);
+  const sums = await readFile(path.join(pkg.folder, "SHA256SUMS"), "utf8");
+  const index = await readFile(path.join(pkg.folder, "index.html"));
+  try {
+    await writeFile(path.join(pkg.folder, "SHA256SUMS"), sums.split("\n")[0] + "\n");
+    await rm(path.join(pkg.folder, "index.html"));
+    let entry = (await listExports("atelier-nord", env)).find((e) => e.name === pkg.name);
+    assert.equal(entry.valid, false);
+    await writeFile(path.join(pkg.folder, "SHA256SUMS"), sums);
+    await writeFile(path.join(pkg.folder, "index.html"), Buffer.concat([index, Buffer.from("<!-- x -->")]));
+    entry = (await listExports("atelier-nord", env)).find((e) => e.name === pkg.name);
+    assert.equal(entry.valid, false);
+    assert.match(entry.reason, /index\.html wurde verändert/);
+    assert.match((await exportStudio(await entry_(), { latest: await greenRuns(), env, git: fakeGit, now: NOW })).error, /unvollständige oder veränderte/);
+  } finally {
+    await writeFile(path.join(pkg.folder, "index.html"), index);
+    await writeFile(path.join(pkg.folder, "SHA256SUMS"), sums);
+  }
+  assert.equal((await listExports("atelier-nord", env)).find((e) => e.name === pkg.name).valid, true);
+});
+const entry_ = entry;
+
+test("an empty folder created with the final name just before publishing is never taken over", async () => {
+  await bump("Fassung Platzhalter");
+  const listed = await listExports("atelier-nord", env);
+  const next = Math.max(...listed.map((e) => Number(e.version.split("-p")[1]))) + 1;
+  const placeholder = path.join(exportsDir, "atelier-nord", `inkform-atelier-nord-1.2.0-p${next}-2026-11-20`);
+  let calls = 0;
+  const sneaky = async (d) => {
+    if (path.resolve(d) === path.resolve(root) && ++calls === 2) await mkdir(placeholder);
+    return fakeGit(d);
+  };
+  const r = await exportStudio(await entry(), { latest: await greenRuns(), env, git: sneaky, now: NOW });
+  assert.match(r.error, /EEXIST/);
+  assert.deepEqual(await readdir(placeholder), [], "the foreign folder is left as it was");
+  await rm(placeholder, { recursive: true });
+});
+
+test("bytes are bound to the tested state: a change and rebuild while exporting stops it (A → B → A)", async () => {
+  // Git always reports the tested state; meanwhile the build changes. The package must not be finished.
+  const studio = await gitInfo(dir);
+  let calls = 0;
+  const lying = async (d) => {
+    const resolved = path.resolve(d);
+    if (resolved === path.resolve(root) && ++calls === 3) {
+      const current = JSON.parse(await readFile(path.join(dir, "profile.json"), "utf8"));
+      await writeFile(path.join(dir, "profile.json"), JSON.stringify({ ...current, text: { ...current.text, studioLocation: "Heimlich B" } }, null, 2) + "\n");
+      await build();
+    }
+    if (resolved === path.resolve(root)) return fakeGit(d);
+    return { ...studio, clean: true, changes: 0 };
+  };
+  const before = await exportNames();
+  try {
+    const r = await exportStudio(await entry(), { latest: await greenRuns(), env, git: lying, now: NOW });
+    assert.match(r.error, /während des Exports geändert/);
+    assert.deepEqual(await exportNames(), before, "nothing published, nothing left");
+  } finally {
+    execFileSync("git", ["-C", dir, "checkout", "--", "profile.json"]);
+    await build();
+  }
+});
+
+test("a package folder moved away while its files are written is cleaned up where it went", async () => {
+  await bump("Fassung Umzug");
+  const parent = path.join(exportsDir, "atelier-nord");
+  const moved = `${parent}-verschoben`;
+  let calls = 0;
+  const moving = async (d) => {
+    if (path.resolve(d) === path.resolve(root) && ++calls === 3) {
+      await rename(parent, moved);
+      await mkdir(parent);
+    }
+    return fakeGit(d);
+  };
+  const before = await exportNames();
+  try {
+    const r = await exportStudio(await entry(), { latest: await greenRuns(), env, git: moving, now: NOW });
+    assert.match(r.error, /verändert/);
+    const left = (await readdir(moved)).sort();
+    assert.deepEqual(left, before, "the moved folder holds no new package");
+    assert.deepEqual(await readdir(parent), []);
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+    await rename(moved, parent);
+  }
 });

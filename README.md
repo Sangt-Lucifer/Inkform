@@ -94,7 +94,8 @@ Hat sich eine Profildatei geändert, seit der Editor sie geladen hat, wird nicht
 - Version: Kernversion aus `package.json` plus `-p<n>`; n zählt die verschiedenen exportierten Stände dieser Kernversion. Derselbe Stand wird nicht zweimal exportiert.
 - Exporte sind schreibgeschützt und werden nie überschrieben. Sie entstehen in einem temporären Ordner und werden erst vollständig umbenannt.
 - Ins Paket kommen nur die Dateien, aus denen ein Build besteht (`index.html`, `dist/index.html`, `sw.js`, Manifest, Lizenzen, `icons/icon-<größe>.png`), und nur, wenn sie Byte für Byte dem geprüften Build entsprechen. Eine fremde Datei, etwa in `icons/`, stoppt den Export. Kern- und Studio-Commit sowie der Exportordner werden bis zum Umbenennen mehrfach nachgeprüft.
-- Ein unvollständiges oder verändertes Paket (Prüfsummen stimmen nicht) sperrt weitere Exporte dieses Studios, bis es weggeräumt ist. Ein vorhandenes ZIP wird nie ersetzt.
+- Der Paketordner wird exklusiv angelegt und trägt bis zum letzten Schritt die Markierung `.unvollstaendig`; geschrieben wird relativ zu genau diesem Ordner, auch wenn sein Pfad zwischendurch verschoben würde. Bei jedem Fehler entfernt die Werkstatt nur, was sie selbst angelegt hat.
+- Gültig ist ein Paket nur, wenn `SHA256SUMS` genau die vorhandenen Dateien auflistet und jede Prüfsumme stimmt; das prüft auch die Übersicht. Ein unvollständiges oder verändertes Paket sperrt weitere Exporte dieses Studios, bis es weggeräumt ist. Ein vorhandenes ZIP wird nie ersetzt.
 
 **Zugriff:** Die Oberfläche lauscht nur auf `127.0.0.1`. Jede Anfrage muss den richtigen Host und ein Sitzungs-Token tragen; dazu kommt eine strenge CSP. So kann keine andere Webseite im Browser die Werkstatt auslesen oder Aktionen starten.
 
