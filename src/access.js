@@ -45,7 +45,9 @@ export function createPinLockout(storage, now = () => Date.now()) {
   function read() {
     const current = raw();
     if (!unsynced) memory = parse(current) ?? memory;
-    else if (current !== staleRaw) {
+    // Storage unchanged since our failed write: retry persisting our state (storage may work again).
+    else if (current === staleRaw) write(memory);
+    else {
       const saved = parse(current);
       staleRaw = current;
       if (saved) {

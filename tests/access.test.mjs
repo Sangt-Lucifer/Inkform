@@ -175,3 +175,39 @@ test("a reset that could not be stored is not undone by the old record", () => {
   assert.equal(lock.remainingMs(), 0, "no immediate lock from the stale four failures");
   assert.equal(JSON.parse(storage.getItem(ADMIN_LOCK_KEY)).failures, 1);
 });
+
+// ---------- Fourth review ----------
+test("state kept in memory is persisted once storage works again (lock, reset, clock correction)", () => {
+  // Lock reached while storage is unwritable, then storage recovers: a reload keeps the lock.
+  let clock = 1_000_000;
+  const now = () => clock;
+  const a = switchable({ failures: MAX_PIN_FAILURES - 1, blockedUntil: 0 });
+  const first = createPinLockout(a, now);
+  a.writable = false;
+  first.fail();
+  assert.equal(first.remainingMs(), PIN_LOCK_MS);
+  a.writable = true;
+  first.remainingMs();
+  assert.equal(createPinLockout(a, now).remainingMs(), PIN_LOCK_MS, "reload keeps the lock");
+
+  // Failed reset after a correct PIN, storage recovers: a reload has no failures left.
+  const b = switchable({ failures: 3, blockedUntil: 0 });
+  const second = createPinLockout(b, now);
+  b.writable = false;
+  second.reset();
+  b.writable = true;
+  second.remainingMs();
+  assert.deepEqual(JSON.parse(b.getItem(ADMIN_LOCK_KEY)), { failures: 0, blockedUntil: 0 });
+
+  // Failed clock correction, storage recovers: a reload 20 s later has 10 s left, not 30 s.
+  clock = 10_000_000;
+  const c = switchable({ failures: 0, blockedUntil: clock + PIN_LOCK_MS });
+  const third = createPinLockout(c, () => clock);
+  c.writable = false;
+  clock -= 3_600_000;
+  assert.equal(third.remainingMs(), PIN_LOCK_MS);
+  c.writable = true;
+  third.remainingMs();
+  clock += 20_000;
+  assert.equal(createPinLockout(c, () => clock).remainingMs(), 10_000);
+});
