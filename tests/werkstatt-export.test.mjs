@@ -450,21 +450,17 @@ test("a package folder moved away while its files are written is cleaned up wher
 
 // ---------- Review of Phase 3, third round ----------
 
-const job = async (parent, extra = {}) => {
-  const st = await stat(parent);
-  return {
-    parent: await (await import("node:fs/promises")).realpath(parent),
-    parentIno: st.ino,
-    parentDev: st.dev,
-    staging: ".inkform-" + "a".repeat(32) + ".tmp",
-    zipTmp: ".inkform-" + "b".repeat(32) + ".zip.tmp",
-    final: "inkform-test-1.0.0-p1-2026-11-20",
-    zip: false,
-    started: Date.now() / 1000,
-    files: [["dist/index.html", Buffer.from("x").toString("base64")]],
-    ...extra,
-  };
-};
+const job = async (parent, extra = {}) => ({
+  root: await (await import("node:fs/promises")).realpath(path.dirname(parent)),
+  id: path.basename(parent),
+  staging: ".inkform-" + "a".repeat(32) + ".tmp",
+  zipTmp: ".inkform-" + "b".repeat(32) + ".zip.tmp",
+  final: "inkform-test-1.0.0-p1-2026-11-20",
+  zip: false,
+  started: Date.now() / 1000,
+  files: [["dist/index.html", Buffer.from("x").toString("base64")]],
+  ...extra,
+});
 
 test("publisher: never follows a link, neither in the folder path nor at the work name", async () => {
   const realParent = path.join(base, "pub-echt");
@@ -482,7 +478,7 @@ test("publisher: never follows a link, neither in the folder path nor at the wor
   // A link anywhere in the folder path: opening without following fails.
   const linked = path.join(base, "pub-link");
   await symlink(realParent, linked);
-  r = await publish({ ...(await job(realParent)), parent: linked }, async () => true);
+  r = await publish({ ...(await job(realParent)), root: linked, id: "." }, async () => true);
   assert.ok(r.error, "a linked path is refused");
   assert.deepEqual(await readdir(realParent), []);
 });
@@ -548,4 +544,38 @@ test("server: a relative state folder is fixed at start, the working directory d
     server.close();
     await rm(elsewhere, { recursive: true, force: true });
   }
+});
+
+// ---------- Review of Phase 3, fourth round ----------
+
+test("publisher: staged bytes changed before the final rename are never published", async () => {
+  const parent = path.join(base, "pub-bytes");
+  await mkdir(parent);
+  const j = await job(parent, { files: [["dist/index.html", Buffer.from("geprüft").toString("base64")], ["SHA256SUMS", Buffer.from("x").toString("base64")]] });
+  const r = await publish(j, async () => {
+    const staged = path.join(parent, j.staging);
+    execFileSync("chmod", ["-R", "u+w", staged]);
+    await writeFile(path.join(staged, "dist", "index.html"), "untergeschoben");
+    return true;
+  });
+  assert.match(r.error, /verändert/);
+  assert.deepEqual(await readdir(parent), [], "nothing published, staging removed");
+});
+
+test("publisher: export root that looks like a studio or repo is refused", async () => {
+  const root = path.join(base, "pub-root-studio");
+  await mkdir(path.join(root, "x"), { recursive: true });
+  await writeFile(path.join(root, "profile.json"), "{}");
+  const r = await publish(await job(path.join(root, "x")), async () => true);
+  assert.match(r.error, /Studio oder Repo/);
+  assert.deepEqual((await readdir(root)).sort(), ["profile.json", "x"]);
+  assert.deepEqual(await readdir(path.join(root, "x")), []);
+});
+
+test("publisher: missing export folders are created by the publisher itself", async () => {
+  const root = path.join(base, "pub-neu", "tief");
+  const real = path.join(await (await import("node:fs/promises")).realpath(base), "pub-neu", "tief");
+  const r = await publish({ ...(await job(path.join(base, "x"))), root: real, id: "studio-x" }, async () => true);
+  assert.ok(r.ok, r.error);
+  assert.deepEqual(await readdir(path.join(root, "studio-x")), ["inkform-test-1.0.0-p1-2026-11-20"]);
 });

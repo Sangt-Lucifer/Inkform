@@ -276,20 +276,19 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
   };
   if (!(await unchanged())) return { error: "Der Stand hat sich während des Exports geändert. Nichts exportiert." };
 
-  await mkdir(parent, { recursive: true });
-  const realParent = await realpath(parent);
-  const placeNow = await placeError(realParent, env);
+  // Real location of the export root (it may not exist yet); Python creates and opens it part by
+  // part without following links, so it is exactly this place or nothing is written.
+  const rootReal = await realLocation(exportsRoot(env));
+  const placeNow = await placeError(path.join(rootReal, entry.id), env);
   if (placeNow) return { error: placeNow };
-  const parentId = await stat(realParent);
 
   // Writing happens in werkstatt/publish.py: Python can create folders and files relative to an
   // open folder without following links, and rename exclusively (see there). Node hands over the
   // exact bytes; between "written" and the final rename, the state and the bytes are checked once
   // more (hook is only used by the tests to simulate interference at exactly that moment).
   const job = {
-    parent: realParent,
-    parentIno: parentId.ino,
-    parentDev: parentId.dev,
+    root: rootReal,
+    id: entry.id,
     staging: `.inkform-${randomBytes(16).toString("hex")}.tmp`,
     zipTmp: `.inkform-${randomBytes(16).toString("hex")}.zip.tmp`,
     final: name,
@@ -302,8 +301,12 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
     return unchanged();
   });
   if (result.error) return { error: `Export fehlgeschlagen: ${result.error}` };
+  // Read back under its final name: valid and byte for byte what was handed over.
   const final = await verifyPackage(target);
   if (!final.valid) return { error: `Export fehlgeschlagen: Paket nicht gültig (${final.reason}).` };
+  for (const [n, c] of all)
+    if (!(await readFile(path.join(target, n)).catch(() => Buffer.alloc(0))).equals(Buffer.from(c)))
+      return { error: `Export fehlgeschlagen: ${n} weicht vom geprüften Stand ab.` };
   return { name, folder: target, version, zip: result.zip ? path.join(parent, result.zip) : null, warning: result.warning ?? undefined, files: all.size };
 }
 
@@ -324,13 +327,22 @@ export function publish(job, beforeRename) {
       resolve(r);
     };
     child.stderr.on("data", (c) => (stderr += c));
+    // Python may end early (e.g. missing Command Line Tools); a broken pipe must never take the
+    // server down.
+    child.stdin.on("error", () => {});
+    child.stdout.on("error", () => {});
     child.on("error", (e) => done({ error: `Python nicht verfügbar (${e.message}).` }));
     child.on("close", (code) => done({ error: `Schreiben abgebrochen (${code}). ${stderr.split("\n").filter(Boolean).at(-1) ?? ""}`.trim() }));
     child.stdout.on("data", async (c) => {
       buffer += c;
       let nl;
       while ((nl = buffer.indexOf("\n")) >= 0) {
-        const line = JSON.parse(buffer.slice(0, nl));
+        let line;
+        try {
+          line = JSON.parse(buffer.slice(0, nl));
+        } catch {
+          line = { error: "Unerwartete Antwort beim Schreiben." };
+        }
         buffer = buffer.slice(nl + 1);
         if (line.written) {
           let ok = false;
@@ -342,12 +354,12 @@ export function publish(job, beforeRename) {
             child.once("close", () => done({ error: "Der Stand hat sich während des Exports geändert. Nichts exportiert." }));
             answered = "abort";
           }
-          child.stdin.end(ok ? "go\n" : "abbrechen\n");
+          if (child.stdin.writable) child.stdin.end(ok ? "go\n" : "abbrechen\n");
         } else if (line.error) done({ error: line.error });
         else if (line.ok) done(line);
       }
     });
-    child.stdin.write(JSON.stringify(job) + "\n");
+    if (child.stdin.writable) child.stdin.write(JSON.stringify(job) + "\n");
   });
 }
 

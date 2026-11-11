@@ -36,16 +36,6 @@ def say(obj):
     sys.stdout.flush()
 
 
-def open_real(real):
-    # Walks the real path from / with O_NOFOLLOW: if any part is (now) a link, this fails.
-    fd = os.open("/", DIR)
-    for part in [p for p in real.split("/") if p]:
-        nxt = os.open(part, DIR, dir_fd=fd)
-        os.close(fd)
-        fd = nxt
-    return fd
-
-
 def rename_excl(src_fd, src, dst_fd, dst):
     if libc.renameatx_np(src_fd, src.encode(), dst_fd, dst.encode(), RENAME_EXCL) != 0:
         e = ctypes.get_errno()
@@ -62,17 +52,7 @@ def same_entry(dir_fd, name, ino):
 def main():
     job = json.loads(sys.stdin.readline())
     started = job["started"]
-    parent_fd = open_real(job["parent"])
-    st = os.fstat(parent_fd)
-    if (st.st_ino, st.st_dev) != (job["parentIno"], job["parentDev"]):
-        return say({"error": "Der Exportordner ist nicht mehr derselbe."})
-    foreign = [n for n in os.listdir(parent_fd) if not ALLOWED_IN_PARENT.match(n)]
-    if foreign:
-        return say({"error": "Der Exportordner enthält fremde Einträge (" + ", ".join(sorted(foreign)[:5]) + "). Dort wird nichts geschrieben."})
-
-    created_files = []  # (dir_fd, name)
-    created_dirs = []  # (parent_fd, name, fd, ino)
-    staging = job["staging"]
+    expected = {rel: hashlib.sha256(base64.b64decode(b64)).hexdigest() for rel, b64 in job["files"]}
 
     def fresh_dir(pfd, name):
         os.mkdir(name, 0o700, dir_fd=pfd)
@@ -83,29 +63,87 @@ def main():
         if os.listdir(fd) or s.st_uid != os.getuid() or getattr(s, "st_birthtime", started) < started - 0.5 or not same_entry(pfd, name, s.st_ino):
             os.close(fd)
             raise OSError(errno.EEXIST, "Ordner wurde ausgetauscht", name)
-        created_dirs.append((pfd, name, fd, s.st_ino))
+        return fd, s.st_ino
+
+    # Export root and studio folder: opened (or created) part by part without following links.
+    place = [p for p in job["root"].split("/") if p] + [job["id"]]
+
+    def walk(create):
+        fd = os.open("/", DIR)
+        for part in place:
+            try:
+                nxt = os.open(part, DIR, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                nxt, _ = fresh_dir(fd, part)
+            os.close(fd)
+            fd = nxt
         return fd
 
+    def still_there():
+        # The path still leads (without links) to the very folder opened at the start.
+        try:
+            again = walk(False)
+        except OSError:
+            return False
+        same = os.fstat(again).st_ino == os.fstat(parent_fd).st_ino
+        os.close(again)
+        return same
+
+    parent_fd = walk(True)
+    root_fd = os.open("..", DIR, dir_fd=parent_fd)
+    studio_like = {"profile.json", "manifest.webmanifest", ".git", "package.json"}
+    if studio_like & set(os.listdir(root_fd)):
+        return say({"error": "Der Exportordner sieht aus wie ein Studio oder Repo. Dort wird nichts geschrieben."})
+    foreign = [n for n in os.listdir(parent_fd) if not ALLOWED_IN_PARENT.match(n)]
+    if foreign:
+        return say({"error": "Der Exportordner enthält fremde Einträge (" + ", ".join(sorted(foreign)[:5]) + "). Dort wird nichts geschrieben."})
+
+    created_files = []  # (dir_fd, name, ino)
+    created_dirs = []  # (parent_fd, name, fd, ino)
+    staging = job["staging"]
+
+    def make_dir(pfd, name):
+        dfd, ino = fresh_dir(pfd, name)
+        created_dirs.append((pfd, name, dfd, ino))
+        return dfd
+
     def cleanup():
-        for pfd, name, fd, ino in created_dirs:
+        # Only entries that are still exactly the ones created here (same inode) are removed.
+        for pfd, name, dfd, ino in created_dirs:
             try:
-                os.fchmod(fd, 0o700)
+                os.fchmod(dfd, 0o700)
             except OSError:
                 pass
-        for dfd, name in reversed(created_files):
+        for dfd, name, ino in reversed(created_files):
             try:
-                os.unlink(name, dir_fd=dfd)
+                if same_entry(dfd, name, ino):
+                    os.unlink(name, dir_fd=dfd)
             except OSError:
                 pass
-        for pfd, name, fd, ino in reversed(created_dirs):
+        for pfd, name, dfd, ino in reversed(created_dirs):
             try:
                 if same_entry(pfd, name, ino):
                     os.rmdir(name, dir_fd=pfd)
             except OSError:
                 pass
 
+    def staged_matches(dirs):
+        # Exactly the expected files, nothing else, every byte as handed over (read without links).
+        seen = {}
+        for sub, dfd in dirs.items():
+            for name in os.listdir(dfd):
+                rel = (sub + "/" + name) if sub else name
+                if rel in dirs:
+                    continue
+                rfd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dfd)
+                with os.fdopen(rfd, "rb") as f:
+                    seen[rel] = hashlib.sha256(f.read()).hexdigest()
+        return seen == expected
+
     try:
-        pkg_fd = fresh_dir(parent_fd, staging)
+        pkg_fd = make_dir(parent_fd, staging)
         pkg_ino = created_dirs[-1][3]
         dirs = {"": pkg_fd}
         for rel, b64 in job["files"]:
@@ -115,22 +153,20 @@ def main():
             for part in parts[:-1]:
                 sub = (here + "/" + part) if here else part
                 if sub not in dirs:
-                    dirs[sub] = fresh_dir(dirs[here], part)
+                    dirs[sub] = make_dir(dirs[here], part)
                 here = sub
             dfd = dirs[here]
-            fd = os.open(parts[-1], NEW_FILE, 0o444, dir_fd=dfd)
-            created_files.append((dfd, parts[-1]))
-            with os.fdopen(fd, "wb") as f:
+            wfd = os.open(parts[-1], NEW_FILE, 0o444, dir_fd=dfd)
+            created_files.append((dfd, parts[-1], os.fstat(wfd).st_ino))
+            with os.fdopen(wfd, "wb") as f:
                 f.write(data)
                 f.flush()
                 os.fsync(f.fileno())
-            rfd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dfd)
-            with os.fdopen(rfd, "rb") as f:
-                if hashlib.sha256(f.read()).hexdigest() != hashlib.sha256(data).hexdigest():
-                    raise OSError(errno.EIO, "Prüfsumme stimmt nicht", rel)
-        for sub, fd in sorted(dirs.items(), key=lambda kv: -kv[0].count("/")):
+        if not staged_matches(dirs):
+            raise OSError(errno.EIO, "Geschriebene Dateien stimmen nicht")
+        for sub, dfd in sorted(dirs.items(), key=lambda kv: -kv[0].count("/")):
             if sub:
-                os.fchmod(fd, 0o555)
+                os.fchmod(dfd, 0o555)
     except Exception as e:
         cleanup()
         return say({"error": "Schreiben fehlgeschlagen: " + str(e)})
@@ -140,12 +176,9 @@ def main():
     try:
         if answer != "go":
             raise OSError(errno.ECANCELED, "abgebrochen: " + (answer or "keine Antwort"))
-        # Still the same place, and still our folder under the hidden name?
-        again = open_real(job["parent"])
-        same_place = os.fstat(again).st_ino == os.fstat(parent_fd).st_ino
-        os.close(again)
-        if not same_place or not same_entry(parent_fd, staging, pkg_ino):
-            raise OSError(errno.ESTALE, "Der Exportordner hat sich während des Exports verändert")
+        # Still our folder under the hidden name, with exactly the handed-over bytes?
+        if not still_there() or not same_entry(parent_fd, staging, pkg_ino) or not staged_matches(dirs):
+            raise OSError(errno.ESTALE, "Das Paket hat sich vor dem Umbenennen verändert")
         rename_excl(parent_fd, staging, parent_fd, job["final"])
     except Exception as e:
         cleanup()
@@ -153,30 +186,59 @@ def main():
             return say({"error": job["final"] + " gibt es inzwischen (EEXIST). Nichts überschrieben."})
         return say({"error": str(e)})
     os.fchmod(pkg_fd, 0o555)
+    # Checked once more under the final name. If anything differs now, the package is marked as
+    # unusable (it can then never count as a valid export).
+    if not still_there() or not same_entry(parent_fd, job["final"], pkg_ino) or not staged_matches(dirs):
+        try:
+            os.fchmod(pkg_fd, 0o755)
+            mfd = os.open(".unvollstaendig", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o444, dir_fd=pkg_fd)
+            os.write(mfd, b"Nach dem Schreiben veraendert. Dieses Paket nicht verwenden.\n")
+            os.close(mfd)
+            os.fchmod(pkg_fd, 0o555)
+        except OSError:
+            pass
+        return say({"error": "Das Paket wurde nach dem Schreiben verändert und ist als unbrauchbar markiert."})
 
     result = {"ok": True, "zip": None, "warning": None}
     if job.get("zip"):
-        # Built in memory from the very same bytes, written exclusively, renamed exclusively.
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-            for rel, b64 in job["files"]:
-                info = zipfile.ZipInfo(job["final"] + "/" + rel, date_time=time.localtime(started)[:6])
-                info.external_attr = 0o444 << 16
-                info.compress_type = zipfile.ZIP_DEFLATED
-                z.writestr(info, base64.b64decode(b64))
         tmp = job["zipTmp"]
-        zfd = os.open(tmp, NEW_FILE, 0o444, dir_fd=parent_fd)
-        with os.fdopen(zfd, "wb") as f:
-            f.write(buf.getvalue())
-            os.fsync(f.fileno())
-        zino = os.stat(tmp, dir_fd=parent_fd, follow_symlinks=False).st_ino
+        zino = None
         try:
+            # Built in memory from the very same bytes, written exclusively, checked by inode and
+            # content, renamed exclusively.
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                for rel, b64 in job["files"]:
+                    info = zipfile.ZipInfo(job["final"] + "/" + rel, date_time=time.localtime(started)[:6])
+                    info.external_attr = 0o444 << 16
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    z.writestr(info, base64.b64decode(b64))
+            content = buf.getvalue()
+            want = hashlib.sha256(content).hexdigest()
+            zfd = os.open(tmp, NEW_FILE, 0o444, dir_fd=parent_fd)
+            zino = os.fstat(zfd).st_ino
+            with os.fdopen(zfd, "wb") as f:
+                f.write(content)
+                os.fsync(f.fileno())
+            if not same_entry(parent_fd, tmp, zino):
+                raise OSError(errno.ESTALE, "ZIP wurde ausgetauscht")
             rename_excl(parent_fd, tmp, parent_fd, job["final"] + ".zip")
+            rfd = os.open(job["final"] + ".zip", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
+            with os.fdopen(rfd, "rb") as f:
+                ok = os.fstat(f.fileno()).st_ino == zino and hashlib.sha256(f.read()).hexdigest() == want
+            if not ok:
+                if same_entry(parent_fd, job["final"] + ".zip", zino):
+                    os.unlink(job["final"] + ".zip", dir_fd=parent_fd)
+                raise OSError(errno.ESTALE, "ZIP wurde nach dem Schreiben verändert")
             result["zip"] = job["final"] + ".zip"
-        except OSError as e:
-            if same_entry(parent_fd, tmp, zino):
-                os.unlink(tmp, dir_fd=parent_fd)
-            result["warning"] = (job["final"] + ".zip gab es schon, kein neues ZIP angelegt.") if e.errno == errno.EEXIST else ("ZIP nicht angelegt: " + str(e))
+        except Exception as e:
+            if zino is not None and same_entry(parent_fd, tmp, zino):
+                try:
+                    os.unlink(tmp, dir_fd=parent_fd)
+                except OSError:
+                    pass
+            exists = isinstance(e, OSError) and e.errno == errno.EEXIST
+            result["warning"] = (job["final"] + ".zip gab es schon, kein neues ZIP angelegt.") if exists else ("Paket fertig, ZIP nicht angelegt: " + str(e))
     say(result)
 
 
