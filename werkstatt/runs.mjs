@@ -2,7 +2,7 @@
 // processes (the existing tools, unchanged) and turns their output into a readable summary.
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { root } from "../scripts/build.mjs";
 import { gitInfo } from "./status.mjs";
@@ -75,14 +75,17 @@ export async function testFileArgs() {
     .map((f) => `tests/${f}`);
 }
 
-export function createRunner({ stateDir, env = process.env }) {
+// fs and listTests can be replaced in tests to simulate disk and permission errors.
+export function createRunner({ stateDir, env = process.env, fs = { mkdir, writeFile, rename }, listTests = testFileArgs }) {
   let current = null;
+  // Results of this session's runs, shown even if their record could not be saved.
+  const session = new Map();
   const runsDir = path.join(stateDir, "laeufe");
 
   // Errors before the process starts (e.g. reading the test list) reject and end the run as red.
   async function step(kind, ref, record) {
     const spec = STEPS[kind](ref);
-    const args = spec.glob ? ["--test", "--test-timeout=60000", ...(await testFileArgs())] : spec.args;
+    const args = spec.glob ? ["--test", "--test-timeout=60000", ...(await listTests())] : spec.args;
     return new Promise((resolve) => {
       record.log += `\n▶ ${KINDS[kind].label}\n`;
       const child = spawn(process.execPath, args, { cwd: root, env: { ...env, FORCE_COLOR: "0" } });
@@ -135,32 +138,52 @@ export function createRunner({ stateDir, env = process.env }) {
     };
     current = record;
     const ref = entry.kind === "blanko" ? entry.id : entry.dir;
+    const sequence = kind === "alles" ? ["build", "test", "browser"] : [kind];
     (async () => {
-      let ok = false;
+      let ok = false,
+        active = sequence[0];
       try {
         const [core, studio] = await Promise.all([gitInfo(root), entry.kind === "studio" ? gitInfo(entry.dir) : null]);
         record.core = { commit: core.commit ?? null, clean: core.clean ?? false };
         record.profile = studio ? { commit: studio.commit ?? null, clean: studio.clean ?? false } : null;
         ok = true;
-        for (const k of kind === "alles" ? ["build", "test", "browser"] : [kind]) {
+        for (const k of sequence) {
+          active = k;
           ok = await step(k, ref, record);
           if (!ok) break;
         }
       } catch (error) {
         ok = false;
         record.log += `\nFehler: ${error.message}\n`;
-      } finally {
-        // Always release the slot; a run that did not finish cleanly is never green.
-        record.ok = ok;
-        record.endedAt = new Date().toISOString();
-        try {
-          await mkdir(runsDir, { recursive: true, mode: 0o700 });
-          await writeFile(
-            path.join(runsDir, `${record.startedAt.replace(/[:.]/g, "-")}_${entry.key}_${kind}.json`),
-            JSON.stringify(record, null, 2),
-          );
-        } catch (_) {}
+        // The failed action gets a red result, so an older green one is no longer shown.
+        if (!record.steps.some((s) => s.kind === active))
+          record.steps.push({ kind: active, label: KINDS[active].label, code: null, ok: false, text: `Vorbereitung fehlgeschlagen: ${error.message}` });
       }
+      // Green only once the record is saved (written to a temporary file, then renamed, so a
+      // record is never half-written). The slot is released last, on every path.
+      const endedAt = new Date().toISOString();
+      try {
+        await fs.mkdir(runsDir, { recursive: true, mode: 0o700 });
+        const file = path.join(runsDir, `${record.startedAt.replace(/[:.]/g, "-")}_${entry.key}_${kind}.json`);
+        await fs.writeFile(`${file}.tmp`, JSON.stringify({ ...record, ok, endedAt }, null, 2));
+        await fs.rename(`${file}.tmp`, file);
+      } catch (error) {
+        ok = false;
+        record.saveError = `Protokoll nicht gespeichert: ${error.message}`;
+        record.log += `\n${record.saveError}\n`;
+        record.steps.push({ kind: "speichern", label: "Protokoll speichern", code: null, ok: false, text: record.saveError });
+      }
+      for (const st of record.steps)
+        if (KINDS[st.kind])
+          session.set(`${entry.key}:${st.kind}`, {
+            at: endedAt,
+            ok: st.ok && !record.saveError,
+            text: record.saveError ? `${st.text} (${record.saveError})` : st.text,
+            core: record.core,
+            profile: record.profile,
+          });
+      record.ok = ok;
+      record.endedAt = endedAt;
     })();
     return record;
   }
@@ -170,10 +193,18 @@ export function createRunner({ stateDir, env = process.env }) {
     const files = (await readdir(runsDir).catch(() => [])).filter((f) => f.endsWith(".json")).sort();
     const result = {};
     for (const file of files) {
-      const r = await readFile(path.join(runsDir, file), "utf8").then(JSON.parse, () => null);
-      if (!r) continue;
-      for (const s of r.steps) result[`${r.studio}:${s.kind}`] = { at: r.endedAt, ok: s.ok, text: s.text, core: r.core, profile: r.profile };
+      let r = null;
+      try {
+        r = JSON.parse(await readFile(path.join(runsDir, file), "utf8"));
+      } catch (_) {
+        continue; // a damaged record is skipped, it never blocks the overview
+      }
+      if (!Array.isArray(r?.steps)) continue;
+      for (const s of r.steps)
+        if (KINDS[s.kind]) result[`${r.studio}:${s.kind}`] = { at: r.endedAt, ok: s.ok === true, text: String(s.text ?? ""), core: r.core, profile: r.profile };
     }
+    // This session's results win, including runs whose record could not be saved.
+    for (const [key, value] of session) result[key] = value;
     return result;
   }
 

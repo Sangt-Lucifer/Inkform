@@ -222,3 +222,70 @@ test("showing a protected studio with its own Git repo writes nothing, not even 
     server.close();
   }
 });
+
+// ---------- Re-review: failures are never shown as green ----------
+import { createRunner } from "../werkstatt/runs.mjs";
+const finished = async (runner) => {
+  for (let i = 0; i < 300 && !runner.current()?.endedAt; i++) await new Promise((r) => setTimeout(r, 50));
+  return runner.current();
+};
+const blankoEntry = async () => (await listStudios({ env, stateDir })).find((s) => s.key === "blanko");
+
+test("a run whose record cannot be saved is red, also in the overview", async () => {
+  const runner = createRunner({
+    stateDir: path.join(base, "state-full"),
+    env,
+    fs: {
+      mkdir: async () => {},
+      writeFile: async () => {
+        throw Object.assign(Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+      },
+      rename: async () => {},
+    },
+  });
+  await runner.start(await blankoEntry(), "build");
+  const run = await finished(runner);
+  assert.equal(run.ok, false);
+  assert.match(run.saveError, /ENOSPC/);
+  assert.equal(run.steps.at(-1).ok, false);
+  const latest = await runner.latest();
+  assert.equal(latest["blanko:build"].ok, false, "overview must not show green");
+  assert.match(latest["blanko:build"].text, /nicht gespeichert/);
+});
+
+test("a failure before the check starts replaces an older green result", async () => {
+  const state = path.join(base, "state-prep");
+  const runsDir = path.join(state, "laeufe");
+  const { mkdir: mk } = await import("node:fs/promises");
+  await mk(runsDir, { recursive: true });
+  await writeFile(
+    path.join(runsDir, "2026-01-01T00-00-00-000Z_blanko_test.json"),
+    JSON.stringify({ studio: "blanko", endedAt: "2026-01-01T00:00:00.000Z", steps: [{ kind: "test", ok: true, text: "alt grün" }] }),
+  );
+  const runner = createRunner({
+    stateDir: state,
+    env,
+    listTests: async () => {
+      throw Object.assign(Error("EACCES: permission denied, scandir 'tests'"), { code: "EACCES" });
+    },
+  });
+  assert.equal((await runner.latest())["blanko:test"].ok, true, "old green result exists");
+  await runner.start(await blankoEntry(), "test");
+  const run = await finished(runner);
+  assert.equal(run.ok, false);
+  assert.deepEqual(run.steps.map((s) => [s.kind, s.ok]), [["test", false]]);
+  const latest = await runner.latest();
+  assert.equal(latest["blanko:test"].ok, false);
+  assert.match(latest["blanko:test"].text, /Vorbereitung fehlgeschlagen/);
+});
+
+test("a damaged run record is skipped and never blocks the overview", async () => {
+  const state = path.join(base, "state-damaged");
+  const { mkdir: mk } = await import("node:fs/promises");
+  await mk(path.join(state, "laeufe"), { recursive: true });
+  await writeFile(path.join(state, "laeufe", "2026-01-01_blanko_build.json"), '{"studio":"blanko","steps":[{"kind":"bu');
+  await writeFile(path.join(state, "laeufe", "2026-01-02_blanko_build.json"), JSON.stringify({ studio: "blanko", endedAt: "x", steps: [{ kind: "build", ok: true, text: "ok" }] }));
+  const runner = createRunner({ stateDir: state, env });
+  const latest = await runner.latest();
+  assert.equal(latest["blanko:build"].ok, true);
+});
