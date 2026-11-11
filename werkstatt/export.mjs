@@ -12,10 +12,10 @@
 // Exports never contain test results, backups, certificates or customer data.
 import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmod, lstat, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, readdir, readFile, realpath, rename, rm, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { buildProfile, discoverStudioProfiles, listBuiltinProfiles, root } from "../scripts/build.mjs";
+import { buildProfile, defaultOut, discoverStudioProfiles, listBuiltinProfiles, root } from "../scripts/build.mjs";
 import { findFingerprints, fingerprints, scanText } from "../tests/lib/leaks.mjs";
 import { matchInWorker, realLocation } from "./profile.mjs";
 import { buildState, gitInfo } from "./status.mjs";
@@ -23,6 +23,8 @@ import { buildState, gitInfo } from "./status.mjs";
 const run = promisify(execFile);
 const REPORT = "PRUEFBERICHT.txt";
 const SUMS = "SHA256SUMS";
+// The only files a package may consist of (what build.mjs produces).
+const PACKAGE_FILE = /^(index\.html|dist\/index\.html|dist\/sw\.js|dist\/manifest\.webmanifest|dist\/licenses\/[A-Za-z]+\.txt|dist\/icons\/icon-\d{2,4}\.png)$/;
 const NAME = /^inkform-([a-z0-9-]+)-(\d+\.\d+\.\d+-p\d+)-(\d{4}-\d{2}-\d{2})$/;
 
 export function exportsRoot(env = process.env) {
@@ -33,16 +35,25 @@ const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 const today = (now = new Date()) =>
   `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-// Reads the existing packages of one studio (name and the commits named in their report).
-export async function listExports(id, env = process.env) {
+// Reads the existing packages of one studio. A package counts only with a readable report naming
+// its commits and a checksum list; anything else under an export name is reported as damaged.
+// With verify, the checksums of every file are checked as well.
+const COMMIT = /^[0-9a-f]{7,40}$/;
+export async function listExports(id, env = process.env, { verify = false } = {}) {
   const dir = path.join(exportsRoot(env), id);
   const out = [];
   for (const name of await readdir(dir).catch(() => [])) {
     const m = name.match(NAME);
     if (!m || m[1] !== id) continue;
-    const report = await readFile(path.join(dir, name, REPORT), "utf8").catch(() => "");
-    const field = (key) => report.match(new RegExp(`^${key}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
-    out.push({ name, version: m[2], date: m[3], core: field("Kern-Commit"), profile: field("Studio-Commit"), folder: path.join(dir, name) });
+    const folder = path.join(dir, name);
+    const report = await readFile(path.join(folder, REPORT), "utf8").catch(() => null);
+    const sums = await readFile(path.join(folder, SUMS), "utf8").catch(() => null);
+    const field = (key) => report?.match(new RegExp(`^${key}:\\s*(\\S+)`, "m"))?.[1] ?? null;
+    const core = field("Kern-Commit"),
+      profile = field("Studio-Commit");
+    let valid = !!report && !!sums && COMMIT.test(core ?? "") && (profile === "keiner" || COMMIT.test(profile ?? "")) && field("Version") === m[2];
+    if (valid && verify) valid = await run_("shasum", ["-a", "256", "-c", "--quiet", SUMS], { cwd: folder }).then(() => true, () => false);
+    out.push({ name, version: m[2], date: m[3], core, profile: profile === "keiner" ? null : profile, folder, valid });
   }
   return out.sort((a, b) => (a.date === b.date ? a.version.localeCompare(b.version, "en", { numeric: true }) : a.date.localeCompare(b.date)));
 }
@@ -110,7 +121,7 @@ export async function leakScan(entry, files, env) {
     });
     for (const [name, contents] of files) for (const f of findFingerprints(contents, o.prints)) hits.push(`${name}: Datei ${f} von „${o.id}“`);
   }
-  return { hits, profiles: others.map((o) => o.id) };
+  return { hits, count: others.length };
 }
 
 // Where exports may go: outside the core and outside every studio folder.
@@ -143,15 +154,27 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
   const parent = path.join(exportsRoot(env), entry.id);
   const place = await placeError(parent, env);
   if (place) return { error: place };
-  const { version, already } = nextVersion(await coreVersion(), await listExports(entry.id, env), ready.state);
+  const existing = await listExports(entry.id, env, { verify: true });
+  const damaged = existing.filter((e) => !e.valid);
+  if (damaged.length)
+    return { error: "Unter den bisherigen Exporten sind unvollständige oder veränderte Pakete. Bitte erst prüfen und wegräumen.", reasons: damaged.map((d) => d.folder) };
+  const { version, already } = nextVersion(await coreVersion(), existing, ready.state);
   if (already) return { error: `Dieser Stand ist bereits exportiert: ${already}. Exporte werden nicht überschrieben.` };
   const name = `inkform-${entry.id}-${version}-${today(now)}`;
   const target = path.join(parent, name);
   if (await lstat(target).then(() => true, () => false)) return { error: `${name} gibt es schon. Exporte werden nicht überschrieben.` };
 
-  // The package is built from the file list of buildProfile, never by copying a folder; the build
-  // on disk was just confirmed to be identical.
+  // The package is built from the file list of buildProfile, never by copying a folder. Only the
+  // files a build is made of are allowed (anything else, e.g. a stray file in icons/, stops the
+  // export), and every file must be byte for byte the tested build on disk.
   const { files } = await buildProfile(entry.dir);
+  const unexpected = [...files.keys()].filter((n) => !PACKAGE_FILE.test(n));
+  if (unexpected.length) return { error: "Unerwartete Dateien im Build. Nicht exportiert.", reasons: unexpected };
+  const out = defaultOut(entry.dir);
+  for (const [n, c] of files) {
+    const onDisk = await readFile(path.join(out, n)).catch(() => null);
+    if (!onDisk || !onDisk.equals(Buffer.from(c))) return { error: `Build hat sich seit der Prüfung geändert (${n}). Bitte neu bauen und prüfen.` };
+  }
   const scan = await leakScan(entry, files, env);
   if (scan.hits.length) return { error: "Leak-Prüfung: Das Paket enthält Daten anderer Profile. Nicht exportiert.", reasons: scan.hits.slice(0, 30) };
 
@@ -164,11 +187,11 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
     `Version: ${version}`,
     `Datum: ${now.toISOString()}`,
     `Kern-Commit: ${ready.state.core}`,
-    `Studio-Commit: ${ready.state.profile ?? "– (Blanko liegt im Kern)"}`,
+    `Studio-Commit: ${ready.state.profile ?? "keiner (Blanko liegt im Kern)"}`,
     `Tests: ${lastRun("test").text} (${lastRun("test").at})`,
     `Browser-Prüfungen: ${lastRun("browser").text} (${lastRun("browser").at})`,
     `Build: aktuell (identisch mit build.mjs)`,
-    `Leak-Prüfung: keine Funde; geprüft gegen ${scan.profiles.length ? scan.profiles.join(", ") : "keine anderen Profile"}`,
+    `Leak-Prüfung: keine Funde; geprüft gegen ${scan.count} andere${scan.count === 1 ? "s Profil" : " Profile"}`,
     "",
     "Inhalt: index.html (Einzeldatei) und dist/ (für die Installation auf dem iPad).",
     "Prüfen: shasum -a 256 -c SHA256SUMS",
@@ -179,10 +202,22 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
   const sums = [...all].map(([n, c]) => `${sha256(Buffer.from(c))}  ${n}`).sort((a, b) => a.slice(66).localeCompare(b.slice(66))).join("\n") + "\n";
   all.set(SUMS, sums);
 
+  // Still the tested state? Commits and cleanliness are compared again right before writing and
+  // once more right before the package gets its final name.
+  const unchanged = async () => {
+    const again = await readiness(entry, { latest, git });
+    return again.ok && again.state.core === ready.state.core && again.state.profile === ready.state.profile;
+  };
+  if (!(await unchanged())) return { error: "Der Stand hat sich während des Exports geändert. Nichts exportiert." };
+
   await mkdir(parent, { recursive: true });
+  const realParent = await realpath(parent);
   const work = path.join(parent, `.${name}.${randomBytes(4).toString("hex")}.tmp`);
-  let createdTarget = false;
+  // The place is checked again around every step: a link swapped in later never receives files.
+  const placeStill = async (p) => !(await placeError(parent, env)) && (await realpath(parent)) === realParent && (!p || (await realpath(p)) === path.join(realParent, path.basename(p)));
   try {
+    await mkdir(work);
+    if (!(await placeStill(work))) throw new Error("Der Exportordner hat sich verändert.");
     for (const [n, c] of all) {
       await mkdir(path.dirname(path.join(work, n)), { recursive: true });
       await writeFile(path.join(work, n), c, { flag: "wx" });
@@ -190,27 +225,38 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
     const check = await run_("shasum", ["-a", "256", "-c", SUMS], { cwd: work });
     if (!/: OK/.test(check)) throw new Error("Prüfsummen stimmen nicht.");
     await makeReadOnly(work);
-    // Exclusive: the final folder is created first (fails if it exists), then replaced by the
-    // complete package in one rename.
-    await mkdir(target);
-    createdTarget = true;
+    if (!(await placeStill(work))) throw new Error("Der Exportordner hat sich verändert.");
+    if (!(await unchanged())) throw new Error("Der Stand hat sich während des Exports geändert.");
+    // No empty folder ever carries the final name: the complete package is renamed in one step,
+    // and only if the name is still free.
+    if (await lstat(target).then(() => true, () => false)) throw new Error(`${name} ist inzwischen vorhanden.`);
     await rename(work, target);
     await chmod(target, 0o555);
+    if (!(await placeStill(target))) throw new Error("Der Exportordner hat sich verändert.");
   } catch (error) {
-    if (createdTarget) await rmEmpty(target).catch(() => {});
     await chmodTree(work).catch(() => {});
     await rm(work, { recursive: true, force: true }).catch(() => {});
     return { error: `Export fehlgeschlagen: ${error.message}` };
   }
   let zipFile = null;
   if (zip) {
+    // Written under a temporary name, then hard-linked to the final name: link() fails if that
+    // name exists, so no existing file is ever replaced or deleted.
+    const tmpZip = path.join(parent, `.${name}.${randomBytes(4).toString("hex")}.zip.tmp`);
     zipFile = `${target}.zip`;
     try {
-      await run("ditto", ["-c", "-k", "--keepParent", target, zipFile]);
-      await chmod(zipFile, 0o444);
+      await run("ditto", ["-c", "-k", "--keepParent", target, tmpZip]);
+      await chmod(tmpZip, 0o444);
+      await link(tmpZip, zipFile);
     } catch (error) {
-      await rm(zipFile, { force: true }).catch(() => {});
-      return { name, folder: target, version, warning: `Paket fertig, ZIP fehlgeschlagen: ${error.message}` };
+      return {
+        name,
+        folder: target,
+        version,
+        warning: error.code === "EEXIST" ? `Paket fertig. ${path.basename(zipFile)} gab es schon, kein neues ZIP angelegt.` : `Paket fertig, ZIP fehlgeschlagen: ${error.message}`,
+      };
+    } finally {
+      await unlink(tmpZip).catch(() => {});
     }
   }
   return { name, folder: target, version, zip: zipFile, files: all.size };

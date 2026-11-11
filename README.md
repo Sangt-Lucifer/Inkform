@@ -93,6 +93,8 @@ Hat sich eine Profildatei geändert, seit der Editor sie geladen hat, wird nicht
 - Ablage: `../Inkform-Exporte/<studio>/inkform-<studio>-<version>-<JJJJ-MM-TT>/` (Ordner per `INKFORM_EXPORTE` änderbar, nie im Kern oder in einem Studio). Auf Wunsch zusätzlich als ZIP (`ditto`).
 - Version: Kernversion aus `package.json` plus `-p<n>`; n zählt die verschiedenen exportierten Stände dieser Kernversion. Derselbe Stand wird nicht zweimal exportiert.
 - Exporte sind schreibgeschützt und werden nie überschrieben. Sie entstehen in einem temporären Ordner und werden erst vollständig umbenannt.
+- Ins Paket kommen nur die Dateien, aus denen ein Build besteht (`index.html`, `dist/index.html`, `sw.js`, Manifest, Lizenzen, `icons/icon-<größe>.png`), und nur, wenn sie Byte für Byte dem geprüften Build entsprechen. Eine fremde Datei, etwa in `icons/`, stoppt den Export. Kern- und Studio-Commit sowie der Exportordner werden bis zum Umbenennen mehrfach nachgeprüft.
+- Ein unvollständiges oder verändertes Paket (Prüfsummen stimmen nicht) sperrt weitere Exporte dieses Studios, bis es weggeräumt ist. Ein vorhandenes ZIP wird nie ersetzt.
 
 **Zugriff:** Die Oberfläche lauscht nur auf `127.0.0.1`. Jede Anfrage muss den richtigen Host und ein Sitzungs-Token tragen; dazu kommt eine strenge CSP. So kann keine andere Webseite im Browser die Werkstatt auslesen oder Aktionen starten.
 

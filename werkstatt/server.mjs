@@ -89,7 +89,7 @@ export async function startWerkstatt({
     const latest = await runner.latest();
     const current = runner.current();
     const exportsById = {};
-    for (const e of entries) exportsById[e.id] = (await listExports(e.id, env)).at(-1) ?? null;
+    for (const e of entries) exportsById[e.id] = (await listExports(e.id, env)).filter((x) => x.valid).at(-1) ?? null;
     return {
       studios: entries.map((e) => ({
         key: e.key,

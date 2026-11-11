@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { execFileSync } from "node:child_process";
 import { request } from "node:http";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
@@ -25,7 +25,7 @@ test.after(async () => {
   await rm(base, { recursive: true, force: true });
 });
 const NOW = new Date("2026-11-20T10:00:00Z");
-const fakeGit = async (dir) => (path.resolve(dir) === path.resolve(root) ? { repo: true, commit: "kern111", clean: true, changes: 0, remotes: [] } : gitInfo(dir));
+const fakeGit = async (dir) => (path.resolve(dir) === path.resolve(root) ? { repo: true, commit: "c0ffee1", clean: true, changes: 0, remotes: [] } : gitInfo(dir));
 
 function png(size, shade) {
   const crc = (buf) => {
@@ -101,7 +101,7 @@ async function build() {
   }
 }
 const entry = async () => (await listStudios({ env, stateDir })).find((s) => s.key === "s-atelier-nord");
-async function greenRuns(core = "kern111") {
+async function greenRuns(core = "c0ffee1") {
   const studio = await gitInfo(dir);
   const r = (text) => ({ ok: true, text, at: NOW.toISOString(), core: { commit: core, clean: true }, profile: { commit: studio.commit, clean: true } });
   return { "s-atelier-nord:test": r("132 von 132 Tests bestanden."), "s-atelier-nord:browser": r("7 von 7 Browser-Prüfungen bestanden.") };
@@ -148,9 +148,10 @@ test("export: complete, checked, read-only package from exactly the build files"
   for (const [name, contents] of (await buildProfile(dir)).files) assert.ok(Buffer.from(contents).equals(await readFile(path.join(result.folder, name))), name);
   assert.match(execFileSync("shasum", ["-a", "256", "-c", "SHA256SUMS"], { cwd: result.folder, encoding: "utf8" }), /index\.html: OK/);
   const report = await readFile(path.join(result.folder, "PRUEFBERICHT.txt"), "utf8");
-  assert.match(report, /Kern-Commit: kern111/);
+  assert.match(report, /Kern-Commit: c0ffee1/);
   assert.match(report, new RegExp(`Studio-Commit: ${(await gitInfo(dir)).commit}`));
-  assert.match(report, /Leak-Prüfung: keine Funde; geprüft gegen beispiel/);
+  assert.match(report, /Leak-Prüfung: keine Funde; geprüft gegen 1 anderes Profil/);
+  assert.doesNotMatch(report, /beispiel/, "no ids of other profiles in the report");
   assert.equal((await stat(path.join(result.folder, "index.html"))).mode & 0o222, 0, "read-only");
   assert.equal((await stat(result.folder)).mode & 0o222, 0, "folder read-only");
   assert.ok((await stat(result.zip)).size > 1000);
@@ -250,4 +251,105 @@ test("server: protected studios cannot be exported; Blanko readiness is shown", 
     server.close();
     await rm(protectedDir, { recursive: true, force: true });
   }
+});
+
+// ---------- Review of Phase 3 ----------
+
+async function bump(text) {
+  const current = JSON.parse(await readFile(path.join(dir, "profile.json"), "utf8"));
+  await writeFile(path.join(dir, "profile.json"), JSON.stringify({ ...current, description: text }, null, 2) + "\n");
+  await commitAll(text);
+  await build();
+}
+const exportNames = async () => (await readdir(path.join(exportsDir, "atelier-nord"))).sort();
+
+test("export: a stray file in icons/ (even if git ignores it) stops the export", async () => {
+  await bump("Fassung Icons");
+  await writeFile(path.join(dir, "icons", "Inkform_Einnahmen_2026.csv"), "Datum;Betrag\n");
+  await build();
+  try {
+    const before = await exportNames();
+    const r = await exportStudio(await entry(), { latest: await greenRuns(), env, git: fakeGit, now: NOW });
+    assert.match(r.error, /Unerwartete Dateien/);
+    assert.deepEqual(r.reasons, ["dist/icons/Inkform_Einnahmen_2026.csv"]);
+    assert.deepEqual(await exportNames(), before);
+  } finally {
+    await rm(path.join(dir, "icons", "Inkform_Einnahmen_2026.csv"));
+    await build();
+  }
+});
+
+test("export: a commit during the export stops it; no folder with the final name remains", async () => {
+  await bump("Fassung Wechsel");
+  const before = await exportNames();
+  let calls = 0;
+  const changing = async (d) => {
+    const info = await fakeGit(d);
+    if (path.resolve(d) === path.resolve(root) && ++calls > 1) return { ...info, commit: "c0ffee2" };
+    return info;
+  };
+  const r = await exportStudio(await entry(), { latest: await greenRuns(), env, git: changing, now: NOW });
+  assert.match(r.error, /während des Exports geändert/);
+  assert.deepEqual(await exportNames(), before);
+});
+
+test("export: the export folder swapped for a link into a studio during the export receives nothing", async () => {
+  const parent = path.join(exportsDir, "atelier-nord");
+  const trap = path.join(dir, "Falle");
+  const before = await exportNames();
+  let calls = 0;
+  const swapping = async (d) => {
+    if (path.resolve(d) === path.resolve(root) && ++calls === 2) {
+      await rename(parent, `${parent}-weg`);
+      await mkdir(trap);
+      await symlink(trap, parent);
+    }
+    return fakeGit(d);
+  };
+  try {
+    const r = await exportStudio(await entry(), { latest: await greenRuns(), env, git: swapping, now: NOW });
+    assert.match(r.error, /Exportordner/);
+    assert.deepEqual(await readdir(trap), [], "nothing left in the studio folder");
+  } finally {
+    await rm(parent);
+    await rm(trap, { recursive: true, force: true });
+    await rename(`${parent}-weg`, parent);
+  }
+  assert.deepEqual(await exportNames(), before);
+});
+
+test("export: damaged or incomplete packages block further exports and are not shown as latest", async () => {
+  const fake = path.join(exportsDir, "atelier-nord", "inkform-atelier-nord-1.2.0-p9-2026-11-22");
+  await mkdir(fake);
+  try {
+    const r = await exportStudio(await entry(), { latest: await greenRuns(), env, git: fakeGit, now: NOW });
+    assert.match(r.error, /unvollständige oder veränderte/);
+    assert.deepEqual(r.reasons, [fake]);
+    const listed = await listExports("atelier-nord", env);
+    assert.equal(listed.find((e) => e.name.endsWith("p9-2026-11-22")).valid, false);
+  } finally {
+    await rm(fake, { recursive: true });
+  }
+});
+
+test("export: an existing ZIP is never replaced or deleted", async () => {
+  const listed = await listExports("atelier-nord", env);
+  const next = Math.max(...listed.map((e) => Number(e.version.split("-p")[1]))) + 1;
+  const zip = path.join(exportsDir, "atelier-nord", `inkform-atelier-nord-1.2.0-p${next}-2026-11-20.zip`);
+  await writeFile(zip, "schon da");
+  const r = await exportStudio(await entry(), { latest: await greenRuns(), env, git: fakeGit, now: NOW, zip: true });
+  assert.ok(r.folder, r.error);
+  assert.match(r.warning, /gab es schon/);
+  assert.equal(await readFile(zip, "utf8"), "schon da");
+  assert.deepEqual((await exportNames()).filter((n) => n.startsWith(".")), []);
+});
+
+test("export: Blanko's unchanged state is not exported twice", async () => {
+  const blanko = (await listStudios({ env, stateDir })).find((s) => s.key === "blanko");
+  const r = (text) => ({ ok: true, text, at: NOW.toISOString(), core: { commit: "c0ffee1", clean: true }, profile: null });
+  const latest = { "blanko:test": r("ok"), "blanko:browser": r("ok") };
+  const first = await exportStudio(blanko, { latest, env, git: fakeGit, now: NOW });
+  assert.ok(first.folder, JSON.stringify(first));
+  assert.match(await readFile(path.join(first.folder, "PRUEFBERICHT.txt"), "utf8"), /Studio-Commit: keiner/);
+  assert.match((await exportStudio(blanko, { latest, env, git: fakeGit, now: NOW })).error, /bereits exportiert/);
 });
