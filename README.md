@@ -64,7 +64,7 @@ Durchsucht werden Text, dekodierte Base64-Blöcke, PNG-Textfelder und der Text v
 
 Die **Browser-Prüfungen** starten Google Chrome headless mit leerem Wegwerf-Profil, die Vorschau nur auf `127.0.0.1`, und verwenden ausschließlich erfundene Testdaten. Ihre Ausgaben landen im `test-results/` des jeweiligen Profils (Kern oder Studio-Ordner). Details stehen in `tests/browser/README.md`.
 
-## Werkstatt (lokal, Phase 1)
+## Werkstatt (lokal, Phase 1 und 2)
 
 ```sh
 npm run werkstatt          # http://127.0.0.1:8090, nur auf diesem Mac
@@ -75,6 +75,19 @@ npm run werkstatt          # http://127.0.0.1:8090, nur auf diesem Mac
 **Knöpfe:** Bauen (`build.mjs`), Unit- und Leak-Tests über Kreuz (`npm test`) und Browser-Prüfungen (`tests/browser/run.mjs`). Das Ergebnis wird verständlich zusammengefasst, das ausführliche Protokoll ist aufklappbar. Es läuft immer nur eine Prüfung gleichzeitig.
 
 **Schutz:** Studios sind standardmäßig **nur Anzeige**. Aktionen gibt es für Blanko und für Studios, deren Ordner in `~/Library/Application Support/Inkform/werkstatt/freigegeben.json` steht (`{"studios": ["/pfad/zum/studio"]}`). Bestehende Installationen werden so nie aus Versehen neu gebaut.
+
+**Neues Studio:** Knopf „Neues Studio“, Kennung (`a-z0-9-`) und Name eingeben. Die Werkstatt kopiert die Beispiel-Fassung nach `../Inkform-Studios/<kennung>/` (ohne deren README und Prüfbericht), setzt die Kennung, legt `.gitignore` an und führt `git init` aus, ohne Remote und ohne Commit. Das neue Studio wird automatisch freigegeben. Einen vorhandenen Ordner fasst sie nie an.
+
+**Profil-Editor** (nur freigegebene Studios, nicht Blanko): Name, Kennzeichen mit Live-Probe, alle Texte, Anleitung (Kopfzeile, Datum, Autor, `Anleitung.md`), Logo und Manifest. Gespeichert wird erst, wenn die Prüfung keinen Fehler mehr findet:
+- dieselben Zeichenregeln und dieselben Textfelder wie `build.mjs`; der Entwurf wird zur Probe in einem temporären Ordner gebaut;
+- keine Texte oder Kennzeichen des Musterstudios und keine Kennzeichen anderer Studios (die nur gelesen werden);
+- jedes Kennzeichen darf weder in der neutralen Beispiel-Fassung noch in einem anderen Studio vorkommen, und mindestens eines muss im eigenen Build stehen;
+- Logo nur als quadratisches PNG (512 bis 4096 Pixel, höchstens 2 MB); die Icons in 192 und 512 Pixeln erzeugt `sips`;
+- im Manifest sind nur Name, Kurzname, Beschreibung und die beiden Farben änderbar. `id`, `start_url`, `scope` und `display` bleiben fest.
+
+Hat sich eine Profildatei geändert, seit der Editor sie geladen hat, wird nicht gespeichert. Noch übernommenes Logo oder Anleitungs-PDF der Beispiel-Fassung zeigt der Editor als Warnung an; der Leak-Test bleibt dann rot.
+
+**Commit:** „Änderungen committen …“ zeigt die geänderten Dateien. Committet wird genau diese Liste, lokal, als `Sven <sven@inkform.invalid>`. Build-Ordner, Zertifikate, Schlüssel und Kundendaten-Exporte werden verweigert, auch wenn `.gitignore` sie nicht abfangen würde.
 
 **Zugriff:** Die Oberfläche lauscht nur auf `127.0.0.1`. Jede Anfrage muss den richtigen Host und ein Sitzungs-Token tragen; dazu kommt eine strenge CSP. So kann keine andere Webseite im Browser die Werkstatt auslesen oder Aktionen starten.
 

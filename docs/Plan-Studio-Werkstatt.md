@@ -1,6 +1,6 @@
 # Plan: Studio-Werkstatt
 
-Stand: 11.11.2026 · nur Plan, noch nichts gebaut · jede Phase erst nach deinem Okay
+Stand: 11.11.2026 · Phase 1 und 2 umgesetzt · jede weitere Phase erst nach deinem Okay
 
 Die Werkstatt ist eine lokale Oberfläche auf dem Mac. Mit ihr bereitest du die iPad-App für jedes Studio einzeln vor, prüfst sie, exportierst sie und installierst sie vor Ort.
 
@@ -103,6 +103,8 @@ Hinweis ohne Änderung: Schritt A5 in der Umzugsanleitung im Repo dieses Studios
 **Tests der Werkstatt:** Unit-Tests für das Einlesen der Studios und für das Auswerten der Testausgaben. Dazu ein Browser-Test der Oberfläche, der ein Wegwerf-Studio in einem Testordner anlegt, nie in `Inkform-Studios/`.
 
 ## Phase 2 – Neues Studio und Profil-Editor
+
+**Umgesetzt** (`werkstatt/profile.mjs`). Abweichungen vom Plan: Blanko wird im Editor nicht bearbeitet, weil es zum Kern gehört. Ein neues Studio wird automatisch freigegeben. README und Prüfbericht der Beispiel-Fassung werden nicht mitkopiert, weil sie das Musterstudio nennen. Kennzeichen dürfen außerdem nicht in der neutralen Beispiel-Fassung vorkommen, sonst wären sie zu allgemein.
 
 **Neues Studio:**
 - Kennung eingeben, nur `a-z0-9-`.

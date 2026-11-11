@@ -89,6 +89,17 @@ function card(s, busy) {
         ),
       )
     : el("p", { class: "lock-text" }, s.protectedReason);
+  const edit =
+    s.kind === "studio" && s.actionable
+      ? el(
+          "div",
+          { class: "actions" },
+          el("button", { type: "button", disabled: busy, "data-edit": s.key }, "Profil bearbeiten"),
+          s.git?.repo
+            ? el("button", { type: "button", disabled: busy || (s.git.clean && s.git.commit), "data-commit": s.key, "data-name": s.name || s.id, "data-first": s.git.commit ? "" : "1" }, s.git.commit ? "Änderungen committen …" : "Ersten Commit anlegen …")
+            : null,
+        )
+      : null;
   return el(
     "article",
     { class: "card", "data-key": s.key },
@@ -96,6 +107,7 @@ function card(s, busy) {
     list,
     ...warn,
     actions,
+    edit,
   );
 }
 
@@ -183,4 +195,257 @@ $("studios").addEventListener("click", async (event) => {
   }
 });
 $("refresh").addEventListener("click", () => load(true));
+
+// ---------- profile editor ----------
+let editing = null; // { key, version, textKeys, logo, dirty }
+const form = $("editor-form");
+const field = (name) => form.elements.namedItem(name);
+const toBase64 = (buffer) => {
+  const bytes = new Uint8Array(buffer);
+  let text = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(text);
+};
+const blobUrl = (base64) => (base64 ? URL.createObjectURL(new Blob([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], { type: "image/png" })) : "");
+
+function markerRow(marker = "") {
+  const isRegex = typeof marker === "object" && marker !== null;
+  const kind = el("select", { "aria-label": "Art" }, el("option", { value: "text" }, "Text"), el("option", { value: "regex" }, "Regex"));
+  kind.value = isRegex ? "regex" : "text";
+  const value = el("input", { value: isRegex ? marker.regex : marker, "aria-label": "Kennzeichen", maxLength: 200 });
+  const flags = el("input", { value: isRegex ? (marker.flags ?? "i") : "", "aria-label": "Schalter", placeholder: "i", maxLength: 4, hidden: !isRegex });
+  kind.addEventListener("change", () => (flags.hidden = kind.value !== "regex"));
+  const remove = el("button", { type: "button", "aria-label": "Kennzeichen entfernen" }, "Entfernen");
+  const row = el("div", { class: "marker" }, kind, value, flags, remove, el("p", { class: "probe muted" }));
+  remove.addEventListener("click", () => {
+    row.remove();
+    editing.dirty = true;
+  });
+  return row;
+}
+
+function fill(data) {
+  const d = data.draft;
+  field("name").value = d.name;
+  field("description").value = d.description;
+  field("guide.header").value = d.guide.header;
+  field("guide.date").value = d.guide.date;
+  field("guide.author").value = d.guide.author;
+  field("guideMd").value = d.guideMd;
+  for (const k of ["name", "short_name", "description", "theme_color", "background_color"]) field(`manifest.${k}`).value = d.manifest[k];
+  syncColors();
+  $("markers").replaceChildren(...d.markers.map(markerRow));
+  $("texts").replaceChildren(
+    ...data.textKeys.map((k) =>
+      el(
+        "label",
+        {},
+        el("span", { class: "key" }, k),
+        el("textarea", { name: `text.${k}`, rows: (d.text[k] ?? "").length > 140 ? 4 : 1, value: d.text[k] ?? "" }),
+      ),
+    ),
+  );
+  $("icon-192").src = blobUrl(data.icons[192]);
+  $("icon-512").src = blobUrl(data.icons[512]);
+  $("logo-preview").hidden = true;
+  $("logo-file").value = "";
+  $("logo-caption").textContent = "neues Logo";
+}
+
+function collect() {
+  const value = (n) => field(n).value;
+  return {
+    name: value("name"),
+    description: value("description"),
+    markers: [...$("markers").querySelectorAll(".marker")]
+      .map((row) => {
+        const [kind, text, flags] = row.querySelectorAll("select, input");
+        return kind.value === "regex" ? { regex: text.value, flags: flags.value || "i" } : text.value;
+      })
+      .filter((m) => (typeof m === "string" ? m !== "" : m.regex !== "")),
+    guide: { header: value("guide.header"), date: value("guide.date"), author: value("guide.author") },
+    text: Object.fromEntries(editing.textKeys.map((k) => [k, value(`text.${k}`)])),
+    guideMd: value("guideMd"),
+    manifest: Object.fromEntries(["name", "short_name", "description", "theme_color", "background_color"].map((k) => [k, value(`manifest.${k}`)])),
+  };
+}
+
+function showResult({ errors = [], warnings = [], probe = [] }, okText) {
+  form.querySelectorAll("[aria-invalid]").forEach((n) => n.removeAttribute("aria-invalid"));
+  for (const e of errors) {
+    const m = e.match(/^(Text|Manifest|Anleitung) ([\w.]+)/);
+    const alias = { Kopfzeile: "header", Datum: "date", Autor: "author", Name: "name", Kurzname: "short_name", Beschreibung: "description" };
+    const key = m && (alias[m[2]] ?? m[2]);
+    const name = m ? (m[1] === "Text" ? `text.${key}` : m[1] === "Manifest" ? `manifest.${key}` : key === "Anleitung.md" ? "guideMd" : `guide.${key}`) : e.startsWith("Anleitung.md") ? "guideMd" : e.startsWith("Name:") ? "name" : e.startsWith("Beschreibung:") ? "description" : null;
+    if (name && field(name)) field(name).setAttribute("aria-invalid", "true");
+  }
+  const rows = [...$("markers").querySelectorAll(".marker")];
+  probe.forEach((p, i) => {
+    const line = rows[i]?.querySelector(".probe");
+    if (!line) return;
+    const parts = [p.inBuild.length ? `im Build gefunden: ${p.inBuild.join(", ")}` : "nicht im Build gefunden"];
+    if (p.inSample) parts.push("auch in der Beispiel-Fassung (zu allgemein)");
+    if (p.inOthers.length) parts.push(`auch im Studio ${p.inOthers.join(", ")}`);
+    line.textContent = parts.join(" · ");
+    line.className = `probe ${p.inBuild.length && !p.inSample && !p.inOthers.length ? "muted" : "bad-text"}`;
+  });
+  $("editor-result").replaceChildren(
+    errors.length
+      ? el("div", { class: "error" }, `${errors.length} Fehler – nichts gespeichert:`, el("ul", { class: "result-list" }, ...errors.map((e) => el("li", {}, e))))
+      : el("p", { class: "badge ok" }, okText),
+    ...(warnings.length ? [el("div", { class: "note warn-box" }, el("ul", { class: "result-list" }, ...warnings.map((w) => el("li", {}, w))))] : []),
+  );
+}
+
+async function openEditor(key) {
+  showError("");
+  try {
+    const data = await api(`/api/studio?key=${encodeURIComponent(key)}`);
+    editing = { key, version: data.version, textKeys: data.textKeys, logo: null, dirty: false };
+    $("editor-title").textContent = `Profil bearbeiten · ${data.draft.name || data.id}`;
+    $("editor-folder").textContent = data.folder;
+    $("editor-result").replaceChildren();
+    fill(data);
+    $("editor").hidden = false;
+    $("editor").scrollIntoView({ block: "start" });
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+async function submitDraft(save) {
+  const buttons = [$("editor-check"), $("editor-save")];
+  buttons.forEach((b) => (b.disabled = true));
+  $("editor-result").replaceChildren(el("p", { class: "badge busy" }, save ? "Speichert und prüft …" : "Prüft …"));
+  try {
+    const response = await fetch(save ? "/api/studio/save" : "/api/studio/check", {
+      method: "POST",
+      headers: { "X-Werkstatt-Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ studio: editing.key, draft: collect(), logo: editing.logo, version: editing.version }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok && !data.errors) throw new Error(data.error || `Fehler ${response.status}`);
+    showResult(data, save ? "Gespeichert und geprüft. Jetzt neu bauen und prüfen." : "Keine Fehler. Kann gespeichert werden.");
+    if (save && response.ok) {
+      editing.version = data.version;
+      editing.dirty = false;
+      if (editing.logo) {
+        const fresh = await api(`/api/studio?key=${encodeURIComponent(editing.key)}`);
+        $("icon-192").src = blobUrl(fresh.icons[192]);
+        $("icon-512").src = blobUrl(fresh.icons[512]);
+        editing.logo = null;
+      }
+      load(true);
+    }
+  } catch (error) {
+    $("editor-result").replaceChildren(el("p", { class: "error" }, error.message));
+  } finally {
+    buttons.forEach((b) => (b.disabled = false));
+  }
+}
+
+function syncColors() {
+  form.querySelectorAll("input[type=color]").forEach((picker) => {
+    const text = field(picker.dataset.for);
+    if (/^#[0-9a-fA-F]{6}$/.test(text.value)) picker.value = text.value.toLowerCase();
+  });
+}
+form.addEventListener("input", (event) => {
+  if (!editing) return;
+  editing.dirty = true;
+  if (event.target.type === "color") field(event.target.dataset.for).value = event.target.value;
+  else if (event.target.name?.endsWith("_color")) syncColors();
+});
+form.addEventListener("submit", (event) => event.preventDefault());
+$("marker-add").addEventListener("click", () => {
+  $("markers").append(markerRow(""));
+  editing.dirty = true;
+});
+$("logo-file").addEventListener("change", async () => {
+  const file = $("logo-file").files[0];
+  if (!file) return;
+  editing.logo = toBase64(await file.arrayBuffer());
+  editing.dirty = true;
+  $("logo-preview").src = URL.createObjectURL(file);
+  $("logo-preview").hidden = false;
+  $("logo-caption").textContent = "neues Logo (wird beim Speichern übernommen)";
+});
+$("editor-check").addEventListener("click", () => submitDraft(false));
+$("editor-save").addEventListener("click", () => submitDraft(true));
+$("editor-close").addEventListener("click", () => {
+  if (editing?.dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+  editing = null;
+  $("editor").hidden = true;
+});
+
+// ---------- new studio ----------
+$("new-studio").addEventListener("click", () => {
+  $("new-form").reset();
+  $("new-error").hidden = true;
+  $("new-dialog").showModal();
+});
+$("new-cancel").addEventListener("click", () => $("new-dialog").close());
+$("new-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const data = new FormData($("new-form"));
+  try {
+    const { key } = await api("/api/studio/new", { method: "POST", body: JSON.stringify({ id: data.get("id"), name: data.get("name") }) });
+    $("new-dialog").close();
+    await load(true);
+    openEditor(key);
+  } catch (error) {
+    $("new-error").textContent = error.message;
+    $("new-error").hidden = false;
+  }
+});
+
+// ---------- commit ----------
+let committing = null;
+$("commit-cancel").addEventListener("click", () => $("commit-dialog").close());
+$("commit-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const { commit } = await api("/api/studio/commit", {
+      method: "POST",
+      body: JSON.stringify({ studio: committing.key, message: new FormData($("commit-form")).get("message"), files: committing.files }),
+    });
+    $("commit-dialog").close();
+    await load(true);
+    $("run").hidden = true;
+    showError("");
+    $("cert").insertAdjacentElement("afterend", el("p", { class: "note", id: "commit-done" }, `Committet: ${commit}`));
+    setTimeout(() => document.getElementById("commit-done")?.remove(), 8000);
+  } catch (error) {
+    $("commit-error").textContent = error.message;
+    $("commit-error").hidden = false;
+  }
+});
+
+$("studios").addEventListener("click", async (event) => {
+  const edit = event.target.closest("button[data-edit]");
+  if (edit) {
+    if (editing?.dirty && editing.key !== edit.dataset.edit && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+    return openEditor(edit.dataset.edit);
+  }
+  const button = event.target.closest("button[data-commit]");
+  if (!button) return;
+  showError("");
+  try {
+    const { files, forbidden } = await api(`/api/studio/changes?key=${encodeURIComponent(button.dataset.commit)}`);
+    committing = { key: button.dataset.commit, files: files.map((f) => f.path) };
+    $("commit-studio").textContent = `${button.dataset.name}: ${files.length} Dateien`;
+    $("commit-files").replaceChildren(...files.map((f) => el("li", { class: forbidden.includes(f.path) ? "bad-text" : "" }, el("code", {}, `${f.state} ${f.path}`))));
+    $("commit-form").reset();
+    $("commit-form").elements.namedItem("message").value = button.dataset.first ? "Erstes Profil" : "Profil aktualisiert";
+    $("commit-error").textContent = forbidden.length ? `Diese Dateien gehören nicht ins Repo: ${forbidden.join(", ")}` : "";
+    $("commit-error").hidden = !forbidden.length;
+    $("commit-ok").disabled = !files.length || forbidden.length > 0;
+    $("commit-dialog").showModal();
+  } catch (error) {
+    showError(error.message);
+  }
+});
+window.addEventListener("beforeunload", (event) => {
+  if (editing?.dirty) event.preventDefault();
+});
 load(true);

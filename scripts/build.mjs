@@ -23,7 +23,7 @@ export const root = fileURLToPath(new URL("../", import.meta.url));
 const TOKEN = /%%(\w+)%%/g;
 // Values are inserted verbatim into JS string literals, template literals and HTML.
 // Characters that could break out of those contexts are rejected.
-const UNSAFE = /["`\\<>\r\n]|\$\{/;
+export const UNSAFE = /["`\\<>\r\n]|\$\{/;
 const TEMPLATED = [
   "src/index.html",
   "src/styles.css",

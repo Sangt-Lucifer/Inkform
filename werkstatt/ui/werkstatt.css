@@ -218,3 +218,141 @@ pre {
   border-radius: 8px;
   white-space: pre-wrap;
 }
+.top-actions {
+  display: flex;
+  gap: 8px;
+}
+.editor {
+  margin-top: 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.editor-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  padding-bottom: 8px;
+  z-index: 1;
+}
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 14px 0 0;
+  padding: 10px 14px 14px;
+}
+legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+label {
+  display: block;
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+input,
+textarea,
+select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+label > input:not([type="color"]):not([type="checkbox"]),
+label > textarea {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+}
+input[type="color"] {
+  width: 44px;
+  height: 32px;
+  padding: 2px;
+  margin-top: 4px;
+}
+label > input[name$="_color"] {
+  display: inline-block;
+  width: 9em;
+}
+textarea.mono,
+.key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.key {
+  font-size: 13px;
+}
+[aria-invalid="true"] {
+  border-color: var(--bad);
+  outline: 1px solid var(--bad);
+}
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0 12px;
+}
+.marker {
+  display: grid;
+  grid-template-columns: 8em 1fr 5em auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.marker .probe {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  margin: 0;
+}
+.previews {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+  margin-top: 10px;
+}
+.previews figure {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.previews img {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+}
+.previews img.big {
+  width: 128px;
+  height: 128px;
+  border-radius: 26px;
+}
+.result-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+.files {
+  max-height: 240px;
+  overflow: auto;
+  font-size: 13px;
+  padding-left: 20px;
+}
+dialog {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  max-width: 560px;
+  width: calc(100% - 32px);
+}
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}

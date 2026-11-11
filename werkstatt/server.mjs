@@ -12,6 +12,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkDraft, commitStudio, createStudio, editable, pendingChanges, readEditable, saveDraft } from "./profile.mjs";
 import { createRunner } from "./runs.mjs";
 import {
   blankoMarkers,
@@ -28,7 +29,7 @@ const UI = fileURLToPath(new URL("./ui/", import.meta.url));
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
 const SECURITY = {
   "Content-Security-Policy":
-    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "Cache-Control": "no-store",
@@ -43,6 +44,29 @@ export async function startWerkstatt({
   const token = randomBytes(24).toString("hex");
   const runner = createRunner({ stateDir, env });
   let statusCache = null;
+  // Editing a profile, creating a studio and committing never overlap with each other or with a
+  // run (a build reading half-saved files would test something that was never saved).
+  let editing = false;
+  const busy = () => editing || !!(runner.current() && !runner.current().endedAt);
+  async function exclusive(res, work) {
+    if (busy()) return send(res, 409, { error: "Gerade läuft schon etwas. Bitte warten, bis es fertig ist." });
+    editing = true;
+    try {
+      return await work();
+    } finally {
+      editing = false;
+      statusCache = null;
+    }
+  }
+  async function editableEntry(res, key) {
+    const entry = (await studios()).find((e) => e.key === key);
+    const reason = await editable(entry, stateDir);
+    if (reason) {
+      send(res, entry ? 403 : 404, { error: reason });
+      return null;
+    }
+    return entry;
+  }
 
   async function studios() {
     return listStudios({ env, stateDir });
@@ -90,11 +114,11 @@ export async function startWerkstatt({
       b = Buffer.from(token);
     return a.length === b.length && timingSafeEqual(a, b);
   };
-  async function body(req) {
+  async function body(req, limit = 10_000) {
     let text = "";
     for await (const chunk of req) {
       text += chunk;
-      if (text.length > 10_000) throw Object.assign(Error("Anfrage zu groß."), { status: 413 });
+      if (text.length > limit) throw Object.assign(Error("Anfrage zu groß."), { status: 413 });
     }
     return text ? JSON.parse(text) : {};
   }
@@ -115,6 +139,7 @@ export async function startWerkstatt({
           const { studio, kind } = await body(req);
           const entry = (await studios()).find((e) => e.key === studio);
           if (!entry) return send(res, 404, { error: "Studio nicht gefunden." });
+          if (editing) return send(res, 409, { error: "Gerade wird ein Profil gespeichert. Bitte kurz warten." });
           const record = await runner.start(entry, kind);
           statusCache = null;
           return send(res, 202, { id: record.id });
@@ -132,6 +157,47 @@ export async function startWerkstatt({
             steps: current.steps,
             log: current.log.slice(from),
             offset: current.log.length,
+          });
+        }
+        if (req.method === "GET" && url.pathname === "/api/studio") {
+          const entry = await editableEntry(res, url.searchParams.get("key"));
+          if (!entry) return;
+          return send(res, 200, { key: entry.key, id: entry.id, folder: entry.dir, ...(await readEditable(entry.dir)) });
+        }
+        if (req.method === "POST" && (url.pathname === "/api/studio/check" || url.pathname === "/api/studio/save")) {
+          const { studio, draft, logo, version } = await body(req, 4_000_000);
+          const entry = await editableEntry(res, studio);
+          if (!entry) return;
+          const args = { dir: entry.dir, id: entry.id, draft, logoBase64: logo || null, env };
+          if (url.pathname.endsWith("/check")) {
+            const { errors, probe, warnings } = await checkDraft(args);
+            return send(res, 200, { errors, probe, warnings });
+          }
+          return exclusive(res, async () => {
+            const result = await saveDraft({ ...args, expectedVersion: version });
+            return send(res, result.conflict ? 409 : result.errors.length ? 422 : 200, result);
+          });
+        }
+        if (req.method === "POST" && url.pathname === "/api/studio/new") {
+          const { id, name } = await body(req);
+          return exclusive(res, async () => {
+            const result = await createStudio({ id, name, env, stateDir });
+            return send(res, result.error ? 400 : 201, result.error ? { error: result.error } : { key: result.key, folder: result.dir });
+          });
+        }
+        if (req.method === "GET" && url.pathname === "/api/studio/changes") {
+          const entry = await editableEntry(res, url.searchParams.get("key"));
+          if (!entry) return;
+          const result = await pendingChanges(entry.dir);
+          return send(res, result.error ? 400 : 200, result);
+        }
+        if (req.method === "POST" && url.pathname === "/api/studio/commit") {
+          const { studio, message, files } = await body(req, 200_000);
+          const entry = await editableEntry(res, studio);
+          if (!entry) return;
+          return exclusive(res, async () => {
+            const result = await commitStudio({ dir: entry.dir, message, files });
+            return send(res, result.conflict ? 409 : result.error ? 400 : 200, result);
           });
         }
         return send(res, 404, { error: "Unbekannt." });
