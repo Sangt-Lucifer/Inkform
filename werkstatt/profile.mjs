@@ -6,6 +6,7 @@
 import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { Worker } from "node:worker_threads";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -54,7 +55,7 @@ async function writeAtomic(file, contents) {
 // Fingerprint of the editable files: a save is refused when they changed since the editor loaded them.
 async function version(dir) {
   const hash = createHash("sha256");
-  for (const name of Object.values(FILES)) hash.update(name).update(await readFile(path.join(dir, name)).catch(() => Buffer.alloc(0)));
+  for (const name of [...Object.values(FILES), path.join("icons", "icon-192.png"), path.join("icons", "icon-512.png")]) hash.update(name).update(await readFile(path.join(dir, name)).catch(() => Buffer.alloc(0)));
   return hash.digest("hex").slice(0, 16);
 }
 
@@ -114,6 +115,8 @@ function markerErrors(markers) {
       if (typeof flags !== "string" || !/^[imsu]*$/.test(flags)) return errors.push(`${where}: erlaubte Schalter nur i, m, s, u.`);
       if (Object.keys(m).some((k) => !["regex", "flags"].includes(k))) errors.push(`${where}: nur "regex" und "flags".`);
       if (m.regex.length > 200) return errors.push(`${where}: Regex zu lang.`);
+      const shape = regexShapeError(m.regex);
+      if (shape) return errors.push(`${where}: ${shape}`);
       try {
         const rx = new RegExp(m.regex, flags);
         if (rx.test("")) errors.push(`${where}: Regex passt auf leeren Text und würde alles finden.`);
@@ -198,8 +201,7 @@ async function otherStudios(dir, env) {
 }
 
 // Copies what build.mjs reads into a temporary folder, with the draft applied.
-async function trialFolder(dir, id, draft, logo) {
-  const base = await mkdtemp(path.join(tmpdir(), "inkform-entwurf-"));
+async function trialFolder(base, dir, id, draft, logo) {
   const trial = path.join(base, id);
   await mkdir(path.join(trial, "Dokumente"), { recursive: true });
   const current = await readJson(path.join(dir, FILES.profile));
@@ -210,13 +212,13 @@ async function trialFolder(dir, id, draft, logo) {
   await copyFile(path.join(dir, "Anleitung-iPad-und-Admin.pdf"), path.join(trial, "Anleitung-iPad-und-Admin.pdf"));
   if (logo) {
     await mkdir(path.join(trial, "icons"));
-    await writeFile(path.join(trial, current.logo ?? FILES.logo), logo.logo);
+    await writeFile(path.join(trial, FILES.logo), logo.logo);
     for (const [size, bytes] of Object.entries(logo.icons)) await writeFile(path.join(trial, "icons", `icon-${size}.png`), bytes);
   } else {
     await cp(path.join(dir, "icons"), path.join(trial, "icons"), { recursive: true });
-    await copyFile(path.join(dir, current.logo ?? FILES.logo), path.join(trial, current.logo ?? FILES.logo));
+    await copyFile(path.join(dir, FILES.logo), path.join(trial, FILES.logo));
   }
-  return { base, trial };
+  return trial;
 }
 
 function profileJson(current, draft) {
@@ -261,6 +263,86 @@ export async function prepareLogo(base64) {
   }
 }
 
+// Everything the editor writes must be a real folder or file inside the studio folder: no symbolic
+// link may redirect a write into another studio (or anywhere else). Missing files are fine.
+const WRITE_TARGETS = [
+  FILES.profile,
+  FILES.manifest,
+  FILES.guide,
+  FILES.logo,
+  path.join("icons", "icon-192.png"),
+  path.join("icons", "icon-512.png"),
+];
+export async function treeErrors(dir) {
+  const kind = (p) => lstat(p).then((s) => (s.isSymbolicLink() ? "link" : s.isDirectory() ? "dir" : s.isFile() ? "file" : "other"), () => "none");
+  if ((await kind(dir)) !== "dir") return ["Der Studio-Ordner ist kein echter Ordner (Verknüpfung?). Es wird nichts gespeichert."];
+  const errors = [];
+  for (const sub of ["Dokumente", "icons"]) {
+    const k = await kind(path.join(dir, sub));
+    if (k !== "dir" && k !== "none") errors.push(`${sub}/ ist kein echter Ordner (Verknüpfung?). Es wird nichts gespeichert.`);
+  }
+  for (const rel of WRITE_TARGETS) {
+    const k = await kind(path.join(dir, rel));
+    if (k !== "file" && k !== "none") errors.push(`${rel} ist keine normale Datei (Verknüpfung oder Ordner). Es wird nichts gespeichert.`);
+  }
+  return errors;
+}
+
+// Regex markers run in the leak test over whole builds. Constructs that can backtrack for ages are
+// refused outright; every marker is then probed in a worker that is stopped after a few seconds,
+// so a slow expression is reported instead of blocking the Werkstatt.
+function regexShapeError(source) {
+  if (/\\[1-9]|\\k</.test(source)) return "keine Rückverweise (\\1, \\k<…>).";
+  if (/\)[*+?{]/.test(source)) return "keine wiederholten Gruppen wie (…)+ oder (…)*.";
+  if ((source.match(/(?<!\\)[*+]|\{\d+,\}/g) ?? []).length > 2) return "höchstens zwei offene Wiederholungen (*, +, {n,}).";
+  if ([...source.matchAll(/\{(\d+)(?:,(\d*))?\}/g)].some((m) => Number(m[1]) > 50 || Number(m[2] || 0) > 50))
+    return "Wiederholungen höchstens {0,50}.";
+  if ((source.match(/(?<!\\)[*+?]|\{\d+(?:,\d*)?\}/g) ?? []).length > 4) return "höchstens vier Wiederholungen insgesamt.";
+  return null;
+}
+const SLOW_INPUTS = ["a".repeat(30_000) + "!", " ".repeat(30_000) + "!", "aA0-. ".repeat(6_000) + "\u0000", "äöü".repeat(10_000) + "!"];
+const PROBE_WORKER = `
+const { parentPort, workerData } = require("node:worker_threads");
+const { markers, slow, build, sample, others } = workerData;
+const low = (t) => t.normalize("NFC").toLocaleLowerCase("de");
+markers.forEach((m, index) => {
+  const test = m.regex === undefined
+    ? ((needle) => (t) => t.includes(needle))(low(m.text))
+    : ((rx) => (t) => rx.test(t))(new RegExp(m.regex, m.flags));
+  for (const t of slow) test(low(t));
+  parentPort.postMessage({
+    index,
+    inBuild: build.filter(([, t]) => test(t)).map(([name]) => name),
+    inSample: test(sample),
+    inOthers: others.filter(([, t]) => test(t)).map(([id]) => id),
+  });
+});
+parentPort.postMessage({ done: true });`;
+
+// Per marker (by position, so equal sources with different flags never mix): where it is found,
+// or null when the worker had to be stopped. Texts are passed already normalised and lower-cased,
+// exactly like findMarkers does.
+export function probeMarkers(markers, { build = [], sample = "", others = [] } = {}, ms = 4000) {
+  const low = (t) => t.normalize("NFC").toLocaleLowerCase("de");
+  const list = markers.map((m) => (typeof m === "string" ? { text: m } : { regex: m.regex, flags: m.flags ?? "i" }));
+  const results = new Array(list.length).fill(null);
+  if (!list.length) return Promise.resolve(results);
+  return new Promise((resolve) => {
+    const worker = new Worker(PROBE_WORKER, {
+      eval: true,
+      workerData: { markers: list, slow: SLOW_INPUTS, build: build.map(([n, t]) => [n, low(t)]), sample: low(sample), others: others.map(([i, t]) => [i, low(t)]) },
+    });
+    const finish = () => {
+      clearTimeout(timer);
+      worker.terminate();
+      resolve(results);
+    };
+    const timer = setTimeout(finish, ms);
+    worker.on("message", (m) => (m.done ? finish() : (results[m.index] = m)));
+    worker.on("error", finish);
+  });
+}
+
 // Full check of a draft. Returns errors (empty = may be saved) and, per marker, where it is found.
 export async function checkDraft({ dir, id, draft, logoBase64, env }) {
   const sample = await sampleProfile();
@@ -273,7 +355,10 @@ export async function checkDraft({ dir, id, draft, logoBase64, env }) {
     if (logo.errors.length) logo = null;
   }
   const probe = [];
-  const warnings = await sampleFileWarnings(dir, logo);
+  errors.push(...(await treeErrors(dir)));
+  const current = await readJson(path.join(dir, FILES.profile)).catch(() => ({}));
+  if (current.logo !== FILES.logo) errors.push(`profile.json: "logo" muss "${FILES.logo}" sein.`);
+  const warnings = errors.length ? [] : await sampleFileWarnings(dir, logo);
   if (errors.length) return { errors, probe, logo, warnings };
 
   // Sample-studio texts and other studios' markers must not appear anywhere in the draft.
@@ -292,25 +377,32 @@ export async function checkDraft({ dir, id, draft, logoBase64, env }) {
   const fromSample = findMarkers(ownStrings, sampleMarkers);
   if (fromSample.length) errors.push(`Kennzeichen: Musterstudio-Kennzeichen übernommen (${fromSample.join(", ")}).`);
 
-  // Build the draft for real (catches missing or unused texts) and probe each marker.
-  const { base, trial } = await trialFolder(dir, id, draft, logo);
+  // Build the draft for real (catches missing or unused texts) and probe each marker. The
+  // temporary folder is removed on every path, also when copying into it fails.
+  const base = await mkdtemp(path.join(tmpdir(), "inkform-entwurf-"));
   try {
-    let files;
+    let files, trial;
     try {
+      trial = await trialFolder(base, dir, id, draft, logo);
       ({ files } = await buildProfile(trial));
     } catch (error) {
-      errors.push(`Bauen: ${error.message.replace(trial, "<entwurf>")}`);
+      errors.push(`Probe-Build: ${error.message.replaceAll(base, "<entwurf>")}`);
       return { errors, probe, logo, warnings };
     }
-    const scanned = [...files].map(([name, contents]) => [name, scanText(contents)]);
-    const neutral = await sampleText();
+    const results = await probeMarkers(draft.markers, {
+      build: [...files].map(([name, contents]) => [name, scanText(contents)]),
+      sample: await sampleText(),
+      others: others.map((o) => [o.id, o.text]),
+    });
     own.forEach((m, i) => {
-      const inBuild = scanned.filter(([, text]) => findMarkers(text, [m]).length).map(([name]) => name);
-      const inSample = findMarkers(neutral, [m]).length > 0;
-      const inOthers = others.filter((o) => findMarkers(o.text, [m]).length).map((o) => o.id);
-      probe.push({ marker: m.label, inBuild, inSample, inOthers });
-      if (inSample) errors.push(`Kennzeichen ${i + 1} (${m.label}): zu allgemein, kommt auch in der neutralen Beispiel-Fassung vor.`);
-      if (inOthers.length) errors.push(`Kennzeichen ${i + 1} (${m.label}): kommt auch im Studio ${inOthers.map((o) => `„${o}“`).join(", ")} vor.`);
+      const r = results[i];
+      if (!r) {
+        probe.push({ marker: m.label, inBuild: [], inSample: false, inOthers: [], slow: true });
+        return errors.push(`Kennzeichen ${i + 1} (${m.label}): zu langsam, bitte einfacher formulieren.`);
+      }
+      probe.push({ marker: m.label, inBuild: r.inBuild, inSample: r.inSample, inOthers: r.inOthers });
+      if (r.inSample) errors.push(`Kennzeichen ${i + 1} (${m.label}): zu allgemein, kommt auch in der neutralen Beispiel-Fassung vor.`);
+      if (r.inOthers.length) errors.push(`Kennzeichen ${i + 1} (${m.label}): kommt auch im Studio ${r.inOthers.map((o) => `„${o}“`).join(", ")} vor.`);
     });
     if (!probe.some((p) => p.inBuild.length))
       errors.push("Kennzeichen: keines kommt in deinem Build vor. Der Leak-Test braucht mindestens eines, das sicher drinsteht (z. B. der Studioname).");
@@ -334,22 +426,49 @@ async function sampleFileWarnings(dir, logo) {
   return out;
 }
 
-export async function saveDraft({ dir, id, draft, logoBase64, expectedVersion, env }) {
+export async function saveDraft({ dir, id, draft, logoBase64, expectedVersion, env, stateDir }) {
   if ((await version(dir)) !== expectedVersion)
     return { conflict: true, errors: ["Die Profildateien wurden inzwischen geändert. Bitte den Editor neu laden."] };
   const { errors, probe, logo, warnings } = await checkDraft({ dir, id, draft, logoBase64, env });
   if (errors.length) return { errors, probe, warnings };
+  // The check takes a while: look again right before writing, for changes and for links.
+  if ((await version(dir)) !== expectedVersion)
+    return { conflict: true, errors: ["Die Profildateien wurden während der Prüfung geändert. Bitte den Editor neu laden."] };
+  const tree = [...(await treeErrors(dir)), ...(stateDir ? [await studioGuard(dir, { env, stateDir })].filter(Boolean) : [])];
+  if (tree.length) return { errors: tree, probe, warnings };
   const current = await readJson(path.join(dir, FILES.profile));
   const manifest = await readJson(path.join(dir, FILES.manifest));
-  if (logo) {
-    await mkdir(path.join(dir, "icons"), { recursive: true });
-    for (const [size, bytes] of Object.entries(logo.icons)) await writeAtomic(path.join(dir, "icons", `icon-${size}.png`), bytes);
-    await writeAtomic(path.join(dir, current.logo ?? FILES.logo), logo.logo);
+  const writes = [
+    [FILES.manifest, manifestJson(manifest, draft)],
+    [FILES.guide, draft.guideMd],
+    ...(logo ? [...Object.entries(logo.icons).map(([size, bytes]) => [path.join("icons", `icon-${size}.png`), bytes]), [FILES.logo, logo.logo]] : []),
+    [FILES.profile, profileJson(current, draft)],
+  ];
+  // All or nothing: the previous contents are kept in memory and put back if any write fails.
+  // A file that exists but cannot be read is never overwritten: it could not be put back.
+  let previous;
+  try {
+    previous = await Promise.all(writes.map(([rel]) => readFile(path.join(dir, rel)).catch((e) => (e.code === "ENOENT" ? null : Promise.reject(e)))));
+  } catch (error) {
+    return { errors: [`Nicht gespeichert: eine Profildatei ist nicht lesbar (${error.message}).`], probe, warnings };
   }
-  await mkdir(path.join(dir, "Dokumente"), { recursive: true });
-  await writeAtomic(path.join(dir, FILES.manifest), manifestJson(manifest, draft));
-  await writeAtomic(path.join(dir, FILES.guide), draft.guideMd);
-  await writeAtomic(path.join(dir, FILES.profile), profileJson(current, draft));
+  const done = [];
+  try {
+    for (const sub of ["Dokumente", "icons"]) await mkdir(path.join(dir, sub)).catch((e) => (e.code === "EEXIST" ? null : Promise.reject(e)));
+    for (const [i, [rel, contents]] of writes.entries()) {
+      await writeAtomic(path.join(dir, rel), contents);
+      done.push(i);
+    }
+  } catch (error) {
+    const notRestored = [];
+    for (const i of done.reverse()) {
+      const file = path.join(dir, writes[i][0]);
+      await (previous[i] === null ? rm(file, { force: true }) : writeAtomic(file, previous[i])).catch(() => notRestored.push(writes[i][0]));
+    }
+    if (notRestored.length)
+      return { errors: [`Speichern fehlgeschlagen (${error.message}). ACHTUNG: nicht wiederhergestellt: ${notRestored.join(", ")}. Bitte im Git-Stand prüfen.`], probe, warnings };
+    return { errors: [`Speichern fehlgeschlagen, nichts geändert: ${error.message}`], probe, warnings };
+  }
   return { errors: [], probe, warnings, version: await version(dir) };
 }
 
@@ -405,17 +524,20 @@ Einwilligungen/
 secrets/
 `;
 
+// Git variables of the calling shell (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE …) could point git at
+// another repository; they are dropped for every call made here.
+const cleanEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
 const gitEnv = () => ({
-  ...process.env,
+  ...cleanEnv(),
   GIT_AUTHOR_NAME: AUTHOR.name,
   GIT_AUTHOR_EMAIL: AUTHOR.email,
   GIT_COMMITTER_NAME: AUTHOR.name,
   GIT_COMMITTER_EMAIL: AUTHOR.email,
 });
-const git = (dir, args) =>
+const git = (dir, args, extraEnv = {}) =>
   run("git", ["-C", dir, "-c", `user.name=${AUTHOR.name}`, "-c", `user.email=${AUTHOR.email}`, "-c", "commit.gpgsign=false", ...args], {
     encoding: "utf8",
-    env: gitEnv(),
+    env: { ...gitEnv(), ...extraEnv },
   });
 
 async function addRelease(stateDir, dir) {
@@ -442,26 +564,30 @@ export async function createStudio({ id, name, env, stateDir }) {
     if (p?.id === id) return { error: `Ein Studio mit der Kennung ${id} gibt es schon.` };
   }
   await mkdir(parent, { recursive: true });
-  // Built next to the target under a temporary name and renamed at the end: no half-made studio.
-  const work = path.join(parent, `.${id}.anlegen-${randomBytes(4).toString("hex")}`);
+  // Created exclusively: mkdir fails if the folder appeared in the meantime, so an existing folder
+  // is never used or replaced. profile.json comes last, so a half-made folder is no studio; on
+  // failure only the folder created here is removed.
   try {
-    await mkdir(path.join(work, "Dokumente"), { recursive: true });
-    const sample = await sampleProfile();
-    const profile = { ...sample, id, name: name.trim(), description: "", markers: [name.trim()] };
-    await writeFile(path.join(work, FILES.profile), JSON.stringify(profile, null, 2) + "\n");
+    await mkdir(target);
+  } catch (error) {
+    return { error: error.code === "EEXIST" ? `Den Ordner ${id} gibt es schon. Er wird nicht angefasst.` : `Anlegen fehlgeschlagen: ${error.message}` };
+  }
+  try {
+    await mkdir(path.join(target, "Dokumente"));
     for (const f of ["manifest.webmanifest", "logo.png", "Anleitung-iPad-und-Admin.pdf", FILES.guide, path.join("Dokumente", "Rechtstexte-Pruefung.md")])
-      await copyFile(path.join(SAMPLE, f), path.join(work, f));
-    await cp(path.join(SAMPLE, "icons"), path.join(work, "icons"), { recursive: true });
+      await copyFile(path.join(SAMPLE, f), path.join(target, f));
+    await cp(path.join(SAMPLE, "icons"), path.join(target, "icons"), { recursive: true });
     await writeFile(
-      path.join(work, "README.md"),
+      path.join(target, "README.md"),
       `# ${name.trim()}\n\nStudio-Profil für Inkform (Kennung \`${id}\`). Bearbeitet wird es in der Werkstatt des Kerns (\`npm run werkstatt\`).\n\nKeine Kundendaten in diesen Ordner legen. Kein Remote: Git ist nur die lokale Versionsverwaltung.\n`,
     );
-    await writeFile(path.join(work, ".gitignore"), GITIGNORE);
-    await git(work, ["init", "-q", "-b", "main"]);
-    if (await lstat(target).then(() => true, () => false)) throw new Error(`Den Ordner ${id} gibt es inzwischen.`);
-    await rename(work, target);
+    await writeFile(path.join(target, ".gitignore"), GITIGNORE);
+    await git(target, ["init", "-q", "-b", "main"]);
+    const sample = await sampleProfile();
+    const profile = { ...sample, id, name: name.trim(), description: "", markers: [name.trim()] };
+    await writeFile(path.join(target, FILES.profile), JSON.stringify(profile, null, 2) + "\n", { flag: "wx" });
   } catch (error) {
-    await rm(work, { recursive: true, force: true }).catch(() => {});
+    await rm(target, { recursive: true, force: true }).catch(() => {});
     return { error: `Anlegen fehlgeschlagen: ${error.message}` };
   }
   await addRelease(stateDir, target);
@@ -470,13 +596,26 @@ export async function createStudio({ id, name, env, stateDir }) {
 
 // ---------- commit ----------
 
-// Paths that never belong into a studio repo, even if .gitignore were missing or changed.
-const FORBIDDEN = /(^|\/)(build|test-results|Exporte|Sicherungen|Backups|Kundendaten|Einwilligungen)\/|\.(key|pem|crt|p12|csv|xlsx?|numbers|zip|jpe?g|heic|heif|mov|mp4)$|(^|\/)(Tattoo_Einwilligung_|Inkform_Einnahmen_|INKFORM_)|(^|\/)\.env/i;
+// Paths that never belong into a studio repo, even if .gitignore were missing or changed: the same
+// rules as the generated .gitignore. Only profile.json and the guide PDF are allowed exceptions.
+const FORBIDDEN_DIRS = /(^|\/)(build|dist|test-results|node_modules|Exporte|Sicherungen|Backups|Kundendaten|Einwilligungen|secrets)\//i;
+const FORBIDDEN_FILES = /\.(key|pem|crt|p12|pfx|csv|xlsx?|numbers|zip|json|pdf|jpe?g|heic|heif|mov|mp4|log)$|(^|\/)(Tattoo_Einwilligung_|Inkform_Einnahmen_|INKFORM_)|(^|\/)\.env|(^|\/)(\.DS_Store|Thumbs\.db)$/i;
+export const forbiddenPath = (p) => !["profile.json", "Anleitung-iPad-und-Admin.pdf"].includes(p) && (FORBIDDEN_DIRS.test(p) || FORBIDDEN_FILES.test(p));
 
+// The studio must be its own repository: .git a real folder inside it (no link, no gitfile pointing
+// elsewhere), and git must report exactly that folder as its git and common dir.
 async function ownRepo(dir) {
   try {
-    const top = (await run("git", ["--no-optional-locks", "-C", dir, "rev-parse", "--show-toplevel"], { encoding: "utf8" })).stdout.trim();
-    return (await realpath(top)) === (await realpath(dir));
+    const dotGit = await lstat(path.join(dir, ".git"));
+    if (dotGit.isSymbolicLink() || !dotGit.isDirectory()) return false;
+    const { stdout } = await run(
+      "git",
+      ["--no-optional-locks", "-C", dir, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir"],
+      { encoding: "utf8", env: cleanEnv() },
+    );
+    const [top, gitDir, common] = stdout.trim().split("\n");
+    const [realDir, realGit] = [await realpath(dir), await realpath(path.join(dir, ".git"))];
+    return (await realpath(top)) === realDir && (await realpath(gitDir)) === realGit && (await realpath(common)) === realGit;
   } catch {
     return false;
   }
@@ -486,16 +625,28 @@ export async function pendingChanges(dir) {
   if (!(await ownRepo(dir))) return { error: "Der Studio-Ordner ist kein eigenes Git-Repo." };
   const { stdout } = await run("git", ["--no-optional-locks", "-C", dir, "status", "--porcelain=v1", "-z", "-uall"], {
     encoding: "utf8",
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: { ...cleanEnv(), GIT_OPTIONAL_LOCKS: "0" },
   });
-  const files = stdout.split("\0").filter(Boolean).map((line) => ({ state: line.slice(0, 2).trim(), path: line.slice(3) }));
-  return { files, forbidden: files.filter((f) => FORBIDDEN.test(f.path)).map((f) => f.path) };
+  // -z format: "XY path", for renames and copies followed by the original path as its own entry.
+  const tokens = stdout.split("\0");
+  const files = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (!tokens[i]) continue;
+    const state = tokens[i].slice(0, 2);
+    files.push({ state: state.trim(), path: tokens[i].slice(3) });
+    if (/[RC]/.test(state)) files.push({ state: "D", path: tokens[++i] });
+  }
+  return { files, forbidden: files.filter((f) => forbiddenPath(f.path)).map((f) => f.path) };
 }
 
 // Commits exactly the changes the user confirmed (the list shown in the dialog), as Sven.
-export async function commitStudio({ dir, message, files }) {
+export async function commitStudio({ dir, message, files, env, stateDir }) {
   if (typeof message !== "string" || !message.trim() || message.length > 200 || CONTROL.test(message))
     return { error: "Beschreibung: 1 bis 200 Zeichen, eine Zeile." };
+  if (stateDir) {
+    const denied = await studioGuard(dir, { env, stateDir });
+    if (denied) return { error: denied };
+  }
   const now = await pendingChanges(dir);
   if (now.error) return now;
   if (!now.files.length) return { error: "Nichts zu committen." };
@@ -503,21 +654,64 @@ export async function commitStudio({ dir, message, files }) {
   const seen = JSON.stringify([...(Array.isArray(files) ? files : [])].map(String).sort());
   if (seen !== JSON.stringify(now.files.map((f) => f.path).sort()))
     return { conflict: true, error: "Die Änderungen haben sich seit der Anzeige geändert. Bitte neu öffnen." };
+  // Staged in a separate, temporary index with exactly the confirmed paths: files created after the
+  // confirmation and anything staged elsewhere stay out. The staged list is compared again before
+  // the commit; afterwards the real index is brought up to date for these paths only.
+  const work = await mkdtemp(path.join(tmpdir(), "inkform-commit-"));
+  const indexEnv = { GIT_INDEX_FILE: path.join(work, "index"), GIT_LITERAL_PATHSPECS: "1" };
+  const confirmed = now.files.map((f) => f.path);
   try {
-    await git(dir, ["add", "-A"]);
-    await git(dir, ["commit", "-q", "-m", message.trim()]);
-    const { stdout } = await run("git", ["--no-optional-locks", "-C", dir, "log", "-1", "--format=%h"], { encoding: "utf8" });
-    return { commit: stdout.trim() };
+    const head = await run("git", ["-C", dir, "rev-parse", "--verify", "-q", "HEAD"], { encoding: "utf8", env: cleanEnv() }).then(() => true, () => false);
+    if (head) await git(dir, ["read-tree", "HEAD"], indexEnv);
+    await git(dir, ["add", "-A", "--", ...confirmed], indexEnv);
+    const staged = (
+      await git(dir, head ? ["diff", "--cached", "--name-only", "-z", "--no-renames", "HEAD"] : ["ls-files", "-z"], indexEnv)
+    ).stdout.split("\0").filter(Boolean);
+    if (JSON.stringify([...staged].sort()) !== JSON.stringify([...new Set(confirmed)].sort()))
+      return { conflict: true, error: "Die Änderungen haben sich beim Committen geändert. Nichts committet, bitte neu öffnen." };
+    const bad = staged.filter(forbiddenPath);
+    if (bad.length) return { error: `Nicht committet: Diese Dateien gehören nicht ins Repo: ${bad.join(", ")}.` };
+    await git(dir, ["commit", "-q", "--no-verify", "-m", message.trim()], indexEnv);
+    const reset = await git(dir, ["reset", "-q", "--", ...confirmed], { GIT_LITERAL_PATHSPECS: "1" }).then(() => null, (e) => e);
+    const { stdout } = await run("git", ["--no-optional-locks", "-C", dir, "log", "-1", "--format=%h"], { encoding: "utf8", env: cleanEnv() });
+    return reset
+      ? { commit: stdout.trim(), warning: `Committet, aber der Git-Index wurde nicht nachgezogen (${reset.message.split("\n")[0]}). git status zeigt die Dateien deshalb noch als geändert; „git reset“ im Studio-Ordner behebt das.` }
+      : { commit: stdout.trim() };
   } catch (error) {
     return { error: `Commit fehlgeschlagen: ${error.message}` };
+  } finally {
+    await rm(work, { recursive: true, force: true });
   }
 }
 
 // Only released studios (not Blanko, not display-only ones) may be edited or committed.
-export async function editable(entry, stateDir) {
+export async function editable(entry, stateDir, env = process.env) {
   if (!entry) return "Studio nicht gefunden.";
   if (entry.kind === "blanko") return "Blanko ist die Beispiel-Fassung im Kern und wird in der Werkstatt nicht bearbeitet.";
-  if (!entry.actionable || !(await releasedStudios(stateDir)).has(path.resolve(entry.dir)))
-    return "Nur Anzeige: Dieses Studio ist nicht freigegeben und wird nicht verändert.";
+  if (!entry.actionable) return "Nur Anzeige: Dieses Studio ist nicht freigegeben und wird nicht verändert.";
+  return studioGuard(entry.dir, { env, stateDir });
+}
+
+// Checked again right before every write. The studio folder must be released by exactly this path,
+// must not be a link, must sit directly in a studios folder, and its real location must not be the
+// core or any studio that is not released (a link further up could otherwise lead there).
+export async function studioGuard(dir, { env = process.env, stateDir }) {
+  const denied = "Nur Anzeige: Dieses Studio ist nicht freigegeben und wird nicht verändert.";
+  const released = await releasedStudios(stateDir);
+  if (!released.has(path.resolve(dir))) return denied;
+  const isDir = await lstat(dir).then((s) => !s.isSymbolicLink() && s.isDirectory(), () => false);
+  if (!isDir) return "Der Studio-Ordner ist eine Verknüpfung oder fehlt. Es wird nichts verändert.";
+  const roots = (env.INKFORM_STUDIOS ? env.INKFORM_STUDIOS.split(path.delimiter).filter(Boolean) : [studiosRoot(env)]).map((r) => path.resolve(r));
+  if (!roots.includes(path.dirname(path.resolve(dir)))) return "Der Studio-Ordner liegt nicht direkt im Studios-Ordner. Es wird nichts verändert.";
+  const real = await realpath(dir).catch(() => null);
+  if (!real) return denied;
+  const realRoot = await realpath(path.dirname(path.resolve(dir))).catch(() => null);
+  if (real !== path.join(realRoot ?? "", path.basename(dir))) return "Der Studio-Ordner ist eine Verknüpfung. Es wird nichts verändert.";
+  const core = await realpath(root);
+  if (real === core || real.startsWith(core + path.sep)) return "Ordner im Kern werden nicht verändert.";
+  for (const other of await discoverStudioProfiles(env)) {
+    if (released.has(path.resolve(other))) continue;
+    if ((await realpath(other).catch(() => null)) === real) return "Dieser Ordner ist in Wirklichkeit ein geschütztes Studio. Es wird nichts verändert.";
+  }
   return null;
 }

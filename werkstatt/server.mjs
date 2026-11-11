@@ -60,7 +60,7 @@ export async function startWerkstatt({
   }
   async function editableEntry(res, key) {
     const entry = (await studios()).find((e) => e.key === key);
-    const reason = await editable(entry, stateDir);
+    const reason = await editable(entry, stateDir, env);
     if (reason) {
       send(res, entry ? 403 : 404, { error: reason });
       return null;
@@ -174,7 +174,7 @@ export async function startWerkstatt({
             return send(res, 200, { errors, probe, warnings });
           }
           return exclusive(res, async () => {
-            const result = await saveDraft({ ...args, expectedVersion: version });
+            const result = await saveDraft({ ...args, expectedVersion: version, stateDir });
             return send(res, result.conflict ? 409 : result.errors.length ? 422 : 200, result);
           });
         }
@@ -196,7 +196,7 @@ export async function startWerkstatt({
           const entry = await editableEntry(res, studio);
           if (!entry) return;
           return exclusive(res, async () => {
-            const result = await commitStudio({ dir: entry.dir, message, files });
+            const result = await commitStudio({ dir: entry.dir, message, files, env, stateDir });
             return send(res, result.conflict ? 409 : result.error ? 400 : 200, result);
           });
         }

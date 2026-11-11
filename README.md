@@ -85,9 +85,9 @@ npm run werkstatt          # http://127.0.0.1:8090, nur auf diesem Mac
 - Logo nur als quadratisches PNG (512 bis 4096 Pixel, höchstens 2 MB); die Icons in 192 und 512 Pixeln erzeugt `sips`;
 - im Manifest sind nur Name, Kurzname, Beschreibung und die beiden Farben änderbar. `id`, `start_url`, `scope` und `display` bleiben fest.
 
-Hat sich eine Profildatei geändert, seit der Editor sie geladen hat, wird nicht gespeichert. Noch übernommenes Logo oder Anleitungs-PDF der Beispiel-Fassung zeigt der Editor als Warnung an; der Leak-Test bleibt dann rot.
+Hat sich eine Profildatei geändert, seit der Editor sie geladen hat, wird nicht gespeichert; geprüft wird vor und direkt nach der Probe. Gespeichert wird ganz oder gar nicht: Scheitert eine Datei, kommen die alten zurück. Verknüpfungen (Symlinks) im Studio-Ordner werden nicht beschrieben. Regex-Kennzeichen ohne wiederholte Gruppen und Rückverweise, Wiederholungen höchstens {0,50}; die Probe läuft in einem eigenen Thread mit Zeitlimit, zu langsame werden abgelehnt. Bearbeitet wird nur ein Studio, das genau unter diesem Pfad freigegeben ist und in Wirklichkeit kein geschütztes Studio ist; committet nur in sein eigenes `.git`. Noch übernommenes Logo oder Anleitungs-PDF der Beispiel-Fassung zeigt der Editor als Warnung an; der Leak-Test bleibt dann rot.
 
-**Commit:** „Änderungen committen …“ zeigt die geänderten Dateien. Committet wird genau diese Liste, lokal, als `Sven <sven@inkform.invalid>`. Build-Ordner, Zertifikate, Schlüssel und Kundendaten-Exporte werden verweigert, auch wenn `.gitignore` sie nicht abfangen würde.
+**Commit:** „Änderungen committen …“ zeigt die geänderten Dateien. Committet wird genau diese Liste (über einen eigenen temporären Index, später entstandene Dateien bleiben draußen), lokal, als `Sven <sven@inkform.invalid>`. Build-Ordner, Zertifikate, Schlüssel und Kundendaten-Exporte werden verweigert, auch wenn `.gitignore` sie nicht abfangen würde.
 
 **Zugriff:** Die Oberfläche lauscht nur auf `127.0.0.1`. Jede Anfrage muss den richtigen Host und ein Sitzungs-Token tragen; dazu kommt eine strenge CSP. So kann keine andere Webseite im Browser die Werkstatt auslesen oder Aktionen starten.
 

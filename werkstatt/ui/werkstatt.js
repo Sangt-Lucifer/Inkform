@@ -405,7 +405,7 @@ $("commit-cancel").addEventListener("click", () => $("commit-dialog").close());
 $("commit-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    const { commit } = await api("/api/studio/commit", {
+    const { commit, warning } = await api("/api/studio/commit", {
       method: "POST",
       body: JSON.stringify({ studio: committing.key, message: new FormData($("commit-form")).get("message"), files: committing.files }),
     });
@@ -413,7 +413,7 @@ $("commit-form").addEventListener("submit", async (event) => {
     await load(true);
     $("run").hidden = true;
     showError("");
-    $("cert").insertAdjacentElement("afterend", el("p", { class: "note", id: "commit-done" }, `Committet: ${commit}`));
+    $("cert").insertAdjacentElement("afterend", el("p", { class: `note${warning ? " warn-box" : ""}`, id: "commit-done" }, `Committet: ${commit}${warning ? ` · ${warning}` : ""}`));
     setTimeout(() => document.getElementById("commit-done")?.remove(), 8000);
   } catch (error) {
     $("commit-error").textContent = error.message;
