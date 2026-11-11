@@ -140,3 +140,38 @@ test("a window whose write failed does not ignore or overwrite another window's 
   first.fail();
   assert.equal(second.remainingMs(), PIN_LOCK_MS, "lock not overwritten");
 });
+
+// ---------- Third review ----------
+const switchable = (initial) => {
+  const map = new Map(initial ? [[ADMIN_LOCK_KEY, JSON.stringify(initial)]] : []);
+  const s = { writable: true, getItem: (k) => map.get(k) ?? null };
+  s.setItem = (k, v) => {
+    if (!s.writable) throw Error("QuotaExceededError");
+    map.set(k, v);
+  };
+  return s;
+};
+
+test("clock rollback with unwritable storage: the stale deadline does not come back", () => {
+  let clock = 10_000_000;
+  const storage = switchable({ failures: 0, blockedUntil: clock + PIN_LOCK_MS });
+  storage.writable = false;
+  const lock = createPinLockout(storage, () => clock);
+  clock -= 3_600_000;
+  assert.equal(lock.remainingMs(), PIN_LOCK_MS);
+  clock += 35_000;
+  assert.equal(lock.remainingMs(), 0);
+  clock += 35_000;
+  assert.equal(lock.remainingMs(), 0);
+});
+
+test("a reset that could not be stored is not undone by the old record", () => {
+  const storage = switchable({ failures: MAX_PIN_FAILURES - 1, blockedUntil: 0 });
+  const lock = createPinLockout(storage, () => 1000);
+  storage.writable = false;
+  lock.reset(); // correct PIN, but storage full
+  storage.writable = true;
+  lock.fail(); // one wrong PIN afterwards
+  assert.equal(lock.remainingMs(), 0, "no immediate lock from the stale four failures");
+  assert.equal(JSON.parse(storage.getItem(ADMIN_LOCK_KEY)).failures, 1);
+});

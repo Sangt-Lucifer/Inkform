@@ -53,7 +53,10 @@ export async function connect() {
       }
       await new Promise((r) => setTimeout(r, 125));
     }
-    throw Error("Nicht erreicht: " + expression + (last ? " / " + last.message : ""));
+    const state = await ev(
+      `JSON.stringify({toast:document.getElementById('toast')?.hidden?null:document.getElementById('toast')?.textContent,errors:[...document.querySelectorAll('[aria-invalid="true"]')].map(e=>e.id||e.name),summary:document.getElementById('error-summary')?.hidden?null:document.getElementById('error-summary')?.textContent.slice(0,300),completion:!document.getElementById('completion-screen')?.hidden,pending:typeof pendingConsent!=='undefined'&&!!pendingConsent})`,
+    ).catch((e) => e.message);
+    throw Error("Nicht erreicht: " + expression + (last ? " / " + last.message : "") + "\nZustand: " + state);
   };
   const check = (name, value) => {
     if (!value) console.log("Diagnose", JSON.stringify(errors));
@@ -104,7 +107,7 @@ for(const q of MEDICAL)document.querySelector('input[name="'+q.id+'"][value="no"
 for(const item of LEGAL){const el=document.getElementById(item.id);if(!el.checked)el.click();}
 if(!document.getElementById('sober').checked)document.getElementById('sober').click();
 document.querySelector('input[name="photo"][value="no"]').click();
-ink.strokes=[[{x:.1,y:.3,pressure:.5},{x:.4,y:.7,pressure:.5},{x:.8,y:.2,pressure:.5}]];ink.signedAt=Date.now();};
+resizeCanvas();if(ink.width<50)throw Error('Unterschriftsfeld noch nicht vermessen');ink.strokes=[[{x:.1,y:.3,pressure:.5},{x:.4,y:.7,pressure:.5},{x:.8,y:.2,pressure:.5}]];ink.signedAt=Date.now();};
 window.incomeRecords=()=>JSON.parse(localStorage.getItem(INCOME_KEY)||'{"records":[]}').records;
 window.blobBase64=async(blob)=>{const b=new Uint8Array(await blob.arrayBuffer());let s='';for(let i=0;i<b.length;i+=32768)s+=String.fromCharCode(...b.subarray(i,i+32768));return btoa(s)};
 `;

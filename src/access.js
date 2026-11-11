@@ -4,13 +4,23 @@ export const ADMIN_LOCK_KEY = "inkform.admin.lock.v1";
 export const MAX_PIN_FAILURES = 5;
 export const PIN_LOCK_MS = 30000;
 export function createPinLockout(storage, now = () => Date.now()) {
-  // memory is authoritative while the last write could not be persisted (e.g. storage full);
-  // otherwise the stored record wins, so a reload or a second window sees the same counter.
+  // Normally the stored record wins, so a reload or a second window sees the same counter.
+  // If a write fails (e.g. storage full), memory becomes authoritative; the stored record seen at
+  // that moment is remembered as stale. Only a newer record (written by another window) is merged
+  // in, and then without dropping a lock or failures from either side.
   let memory = { failures: 0, blockedUntil: 0 },
-    unsynced = false;
-  function stored() {
+    unsynced = false,
+    staleRaw = null;
+  const raw = () => {
     try {
-      const value = JSON.parse(storage.getItem(ADMIN_LOCK_KEY) || "null");
+      return storage.getItem(ADMIN_LOCK_KEY);
+    } catch (_) {
+      return null;
+    }
+  };
+  function parse(text) {
+    try {
+      const value = JSON.parse(text || "null");
       if (
         value &&
         Number.isInteger(value.failures) &&
@@ -26,28 +36,32 @@ export function createPinLockout(storage, now = () => Date.now()) {
     try {
       storage.setItem(ADMIN_LOCK_KEY, JSON.stringify(value));
       unsynced = false;
+      staleRaw = null;
     } catch (_) {
       unsynced = true;
+      staleRaw = raw();
     }
   }
   function read() {
-    const saved = stored();
-    if (!unsynced) memory = saved ?? memory;
-    else if (saved) {
-      // Our last write failed: merge with what is stored (another window may have locked), never
-      // dropping a lock or failures from either side, and try to persist the merged state.
-      const merged = {
-        failures: Math.max(memory.failures, saved.failures),
-        blockedUntil: Math.max(memory.blockedUntil, saved.blockedUntil),
-      };
-      if (merged.failures !== saved.failures || merged.blockedUntil !== saved.blockedUntil) write(merged);
-      else {
-        memory = merged;
-        unsynced = false;
+    const current = raw();
+    if (!unsynced) memory = parse(current) ?? memory;
+    else if (current !== staleRaw) {
+      const saved = parse(current);
+      staleRaw = current;
+      if (saved) {
+        const merged = {
+          failures: Math.max(memory.failures, saved.failures),
+          blockedUntil: Math.max(memory.blockedUntil, saved.blockedUntil),
+        };
+        if (merged.failures === saved.failures && merged.blockedUntil === saved.blockedUntil) {
+          memory = saved;
+          unsynced = false;
+          staleRaw = null;
+        } else write(merged);
       }
     }
     // A clock set back must not extend the lockout beyond one period. The corrected deadline is
-    // stored, so it is not renewed on every check.
+    // stored (or kept in memory if storing fails), so it is not renewed on every check.
     if (memory.blockedUntil > now() + PIN_LOCK_MS)
       write({ failures: memory.failures, blockedUntil: now() + PIN_LOCK_MS });
     return memory;
