@@ -64,6 +64,21 @@ Durchsucht werden Text, dekodierte Base64-Blöcke, PNG-Textfelder und der Text v
 
 Die **Browser-Prüfungen** starten Google Chrome headless mit leerem Wegwerf-Profil, die Vorschau nur auf `127.0.0.1`, und verwenden ausschließlich erfundene Testdaten. Ihre Ausgaben landen im `test-results/` des jeweiligen Profils (Kern oder Studio-Ordner). Details stehen in `tests/browser/README.md`.
 
+## Aufs iPad bringen, ohne Cloud
+
+Die Web-App braucht für den Offline-Betrieb einmalig HTTPS. Statt eines Hosters liefert der Mac sie im eigenen WLAN aus, nur solange der Befehl läuft:
+
+```sh
+node scripts/lokales-zertifikat.mjs                               # einmalig: lokales Zertifikat
+node scripts/serve.mjs --profile ../Inkform-Studios/<studio> --lan   # https://<mac>.local:8443/
+```
+
+- **Zertifikat:** Das Stammzertifikat ist per Namensbeschränkung nur für den Bonjour-Namen dieses Macs gültig. Es kommt einmal aufs iPad: AirDrop, Profil installieren, dann unter Allgemein → Info → Zertifikatsvertrauenseinstellungen vertrauen.
+- **Schlüssel:** Sie liegen unter `~/Library/Application Support/Inkform/zertifikat/`, außerhalb aller Repos und nur für den eigenen Benutzer lesbar.
+- **Server:** Er liefert nur den statischen App-Ordner aus; Kundendaten laufen nie über ihn.
+- **Adresse:** Rechnername und Port nicht ändern. Das iPad speichert die App-Daten pro Adresse.
+- **Studio-Anleitung:** Die Schritt-für-Schritt-Anleitung, auch für den Umzug von einer alten Adresse per JSON, gehört ins jeweilige Studio-Repo.
+
 ## Anleitung als PDF
 
 Sie wird aus `<profil>/Dokumente/Anleitung.md` erzeugt (ReportLab und Arial nötig). Danach muss neu gebaut werden:
