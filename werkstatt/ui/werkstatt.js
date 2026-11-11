@@ -72,7 +72,12 @@ function card(s, busy) {
     ),
     runLine("Tests", s.runs?.test),
     runLine("Browser", s.runs?.browser),
-    el("li", {}, el("span", { class: "label" }, "Export"), el("span", { class: "muted" }, "folgt in Phase 3")),
+    el(
+      "li",
+      {},
+      el("span", { class: "label" }, "Export"),
+      s.lastExport ? el("code", {}, s.lastExport.name) : el("span", { class: "muted" }, "noch keiner"),
+    ),
   );
   const warn = (s.warnings ?? []).map((w) => el("p", { class: "warn-text" }, w));
   const actions = s.actionable
@@ -87,6 +92,7 @@ function card(s, busy) {
         ].map(([kind, label, cls]) =>
           el("button", { type: "button", class: cls, disabled: busy, "data-studio": s.key, "data-kind": kind }, label),
         ),
+        el("button", { type: "button", disabled: busy, "data-export": s.key, "data-name": s.name || s.id }, "Exportieren …"),
       )
     : el("p", { class: "lock-text" }, s.protectedReason);
   const edit =
@@ -445,6 +451,59 @@ $("studios").addEventListener("click", async (event) => {
     showError(error.message);
   }
 });
+// ---------- export ----------
+let exporting = null;
+$("export-cancel").addEventListener("click", () => $("export-dialog").close());
+$("export-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("export-ok").disabled = true;
+  $("export-result").replaceChildren(el("p", { class: "badge busy" }, "Exportiert und prüft …"));
+  try {
+    const response = await fetch("/api/export", {
+      method: "POST",
+      headers: { "X-Werkstatt-Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ studio: exporting, zip: $("export-zip").checked }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      $("export-result").replaceChildren(
+        el("div", { class: "error" }, data.error || `Fehler ${response.status}`, ...(data.reasons?.length ? [el("ul", { class: "result-list" }, ...data.reasons.map((r) => el("li", {}, r)))] : [])),
+      );
+      return;
+    }
+    $("export-result").replaceChildren(
+      el("p", { class: "badge ok" }, "Exportiert"),
+      el("p", {}, el("code", {}, data.folder)),
+      ...(data.zip ? [el("p", {}, el("code", {}, data.zip))] : []),
+      ...(data.warning ? [el("p", { class: "warn-text" }, data.warning)] : []),
+    );
+    load(true);
+  } catch (error) {
+    $("export-result").replaceChildren(el("p", { class: "error" }, error.message));
+  }
+});
+$("studios").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-export]");
+  if (!button) return;
+  showError("");
+  try {
+    const ready = await api(`/api/export?key=${encodeURIComponent(button.dataset.export)}`);
+    exporting = button.dataset.export;
+    $("export-studio").textContent = button.dataset.name;
+    $("export-reasons").replaceChildren(
+      ready.ok
+        ? el("p", { class: "badge ok" }, "Alle Voraussetzungen erfüllt")
+        : el("div", { class: "note warn-box" }, "Noch nicht möglich:", el("ul", { class: "result-list" }, ...ready.reasons.map((r) => el("li", {}, r)))),
+    );
+    $("export-result").replaceChildren();
+    $("export-ok").disabled = !ready.ok;
+    $("export-zip").checked = false;
+    $("export-dialog").showModal();
+  } catch (error) {
+    showError(error.message);
+  }
+});
+
 window.addEventListener("beforeunload", (event) => {
   if (editing?.dirty) event.preventDefault();
 });

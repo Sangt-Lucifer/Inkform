@@ -64,7 +64,7 @@ Durchsucht werden Text, dekodierte Base64-Blöcke, PNG-Textfelder und der Text v
 
 Die **Browser-Prüfungen** starten Google Chrome headless mit leerem Wegwerf-Profil, die Vorschau nur auf `127.0.0.1`, und verwenden ausschließlich erfundene Testdaten. Ihre Ausgaben landen im `test-results/` des jeweiligen Profils (Kern oder Studio-Ordner). Details stehen in `tests/browser/README.md`.
 
-## Werkstatt (lokal, Phase 1 und 2)
+## Werkstatt (lokal, Phase 1 bis 3)
 
 ```sh
 npm run werkstatt          # http://127.0.0.1:8090, nur auf diesem Mac
@@ -88,6 +88,11 @@ npm run werkstatt          # http://127.0.0.1:8090, nur auf diesem Mac
 Hat sich eine Profildatei geändert, seit der Editor sie geladen hat, wird nicht gespeichert; geprüft wird vor und direkt nach der Probe. Gespeichert wird ganz oder gar nicht: Scheitert eine Datei, kommen die alten zurück. Verknüpfungen (Symlinks) im Studio-Ordner werden nicht beschrieben. Regex-Kennzeichen ohne wiederholte Gruppen und Rückverweise, Wiederholungen höchstens {0,50}; die Probe läuft in einem eigenen Thread mit Zeitlimit, zu langsame werden abgelehnt. Bearbeitet wird nur ein Studio, das genau unter diesem Pfad freigegeben ist und in Wirklichkeit kein geschütztes Studio ist; committet nur in sein eigenes `.git`. Noch übernommenes Logo oder Anleitungs-PDF der Beispiel-Fassung zeigt der Editor als Warnung an; der Leak-Test bleibt dann rot.
 
 **Commit:** „Änderungen committen …“ zeigt die geänderten Dateien. Committet wird genau diese Liste (über einen eigenen temporären Index, später entstandene Dateien bleiben draußen), lokal, als `Sven <sven@inkform.invalid>`. Build-Ordner, Zertifikate, Schlüssel und Kundendaten-Exporte werden verweigert, auch wenn `.gitignore` sie nicht abfangen würde.
+
+**Export** („Exportieren …“, für Blanko und freigegebene Studios): nur wenn Kern und Studio sauber committet sind, Tests und Browser-Prüfungen für genau diese Commits grün sind und der Build aktuell ist; sonst nennt der Dialog, was fehlt. Das Paket entsteht aus der Dateiliste von `buildProfile()` (`index.html` und `dist/`), dazu `PRUEFBERICHT.txt` (Commits, Testergebnisse, Leak-Prüfung) und `SHA256SUMS` (`shasum -a 256 -c SHA256SUMS`). Vorher prüft die Werkstatt jede Datei auf Kennzeichen, Logos, Icons und Anleitungen aller anderen Profile; ein Fund stoppt den Export.
+- Ablage: `../Inkform-Exporte/<studio>/inkform-<studio>-<version>-<JJJJ-MM-TT>/` (Ordner per `INKFORM_EXPORTE` änderbar, nie im Kern oder in einem Studio). Auf Wunsch zusätzlich als ZIP (`ditto`).
+- Version: Kernversion aus `package.json` plus `-p<n>`; n zählt die verschiedenen exportierten Stände dieser Kernversion. Derselbe Stand wird nicht zweimal exportiert.
+- Exporte sind schreibgeschützt und werden nie überschrieben. Sie entstehen in einem temporären Ordner und werden erst vollständig umbenannt.
 
 **Zugriff:** Die Oberfläche lauscht nur auf `127.0.0.1`. Jede Anfrage muss den richtigen Host und ein Sitzungs-Token tragen; dazu kommt eine strenge CSP. So kann keine andere Webseite im Browser die Werkstatt auslesen oder Aktionen starten.
 

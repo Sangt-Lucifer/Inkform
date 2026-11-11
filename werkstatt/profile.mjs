@@ -493,6 +493,18 @@ export async function saveDraft({ dir, id, draft, logoBase64, expectedVersion, e
 
 // ---------- new studio ----------
 
+// Real location of a path that may not exist yet: the nearest existing folder with links resolved,
+// plus the missing rest.
+export async function realLocation(p) {
+  const rest = [];
+  for (let cur = path.resolve(p); ; cur = path.dirname(cur)) {
+    const real = await realpath(cur).catch(() => null);
+    if (real) return path.join(real, ...rest.reverse());
+    if (path.dirname(cur) === cur) return path.resolve(p);
+    rest.push(path.basename(cur));
+  }
+}
+
 const GITIGNORE = `# Erzeugte App und Prüfausgaben dieses Studios
 /build/
 /test-results/
@@ -586,16 +598,7 @@ export async function createStudio({ id, name, env, stateDir }) {
   }
   // The studios folder may be a link, but never into the core or into an existing studio. Checked
   // on the real location of the nearest existing folder, before anything is created.
-  const realExisting = async (p) => {
-    const rest = [];
-    for (let cur = p; ; cur = path.dirname(cur)) {
-      const real = await realpath(cur).catch(() => null);
-      if (real) return path.join(real, ...rest.reverse());
-      if (path.dirname(cur) === cur) return p;
-      rest.push(path.basename(cur));
-    }
-  };
-  let realParent = await realExisting(parent);
+  let realParent = await realLocation(parent);
   const core = await realpath(root);
   const inside = (p, q) => p === q || p.startsWith(q + path.sep);
   const misplaced = async () => {

@@ -112,6 +112,20 @@
         </div>
       </form>
     </dialog>
+    <dialog id="export-dialog">
+      <form method="dialog" id="export-form">
+        <h2>Exportieren</h2>
+        <p class="muted" id="export-studio"></p>
+        <p class="muted">Erzeugt ein unveränderliches Paket aus genau dem geprüften Stand, mit Prüfbericht und Prüfsummen, unter ../Inkform-Exporte/. Vorher läuft die Leak-Prüfung gegen alle anderen Profile.</p>
+        <div id="export-reasons"></div>
+        <label class="check"><input type="checkbox" id="export-zip" /> zusätzlich als ZIP</label>
+        <div id="export-result" aria-live="polite"></div>
+        <div class="actions">
+          <button type="submit" value="ok" class="primary" id="export-ok">Exportieren</button>
+          <button type="button" id="export-cancel">Schließen</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="commit-dialog">
       <form method="dialog" id="commit-form">
         <h2>Änderungen committen</h2>

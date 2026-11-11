@@ -16,7 +16,7 @@ const profile = JSON.parse(await readFile(path.join(studioDir, "profile.json"), 
 await writeFile(path.join(studioDir, "profile.json"), JSON.stringify({ ...profile, id: "testatelier", name: "Testatelier" }));
 const { server, url } = await startWerkstatt({
   port: 0,
-  env: { ...process.env, INKFORM_STUDIOS: path.join(base, "studios") },
+  env: { ...process.env, INKFORM_STUDIOS: path.join(base, "studios"), INKFORM_EXPORTE: path.join(base, "exporte") },
   stateDir: path.join(base, "state"),
   certDir: path.join(base, "keine-zertifikate"),
 });
@@ -71,6 +71,16 @@ try {
   check("Erster Commit als Sven mit neutraler Adresse", log === "Sven <sven@inkform.invalid> Erstes Profil");
   check("Geschütztes Studio blieb unverändert", (await snapshot(studioDir)) === protectedBefore);
   await screenshot("werkstatt-editor");
+
+  // Phase 3: the export dialog names what is still missing and does not export.
+  check("Geschütztes Studio: kein Export-Knopf", await ev(`!document.querySelector('.card[data-key="s-testatelier"] [data-export]')`));
+  await ev(`document.querySelector('.card[data-key="s-atelier-nord"] [data-export]').click()`);
+  await until(`document.getElementById('export-dialog').open && document.getElementById('export-reasons').textContent.length > 0`);
+  check(
+    "Export-Dialog nennt fehlende Voraussetzungen und sperrt den Knopf",
+    await ev(`document.getElementById('export-reasons').textContent.includes('noch nicht gelaufen') && document.getElementById('export-ok').disabled`),
+  );
+  await ev(`document.getElementById('export-cancel').click()`);
   if (errors.length) console.log("Fehler:", JSON.stringify(errors).slice(0, 1500));
   check("Keine JavaScript- oder CSP-Fehler", errors.length === 0);
 } finally {

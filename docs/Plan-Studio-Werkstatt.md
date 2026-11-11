@@ -1,6 +1,6 @@
 # Plan: Studio-Werkstatt
 
-Stand: 11.11.2026 · Phase 1 und 2 umgesetzt · jede weitere Phase erst nach deinem Okay
+Stand: 11.11.2026 · Phase 1 bis 3 umgesetzt · Phase 4 erst nach deinem Okay
 
 Die Werkstatt ist eine lokale Oberfläche auf dem Mac. Mit ihr bereitest du die iPad-App für jedes Studio einzeln vor, prüfst sie, exportierst sie und installierst sie vor Ort.
 
@@ -128,6 +128,8 @@ Hinweis ohne Änderung: Schritt A5 in der Umzugsanleitung im Repo dieses Studios
 **Anleitungs-PDF:** Das Erzeugen braucht ReportLab, das noch nicht installiert ist. Das bleibt deine Entscheidung. Bis dahin zeigt die Werkstatt „PDF veraltet“ an.
 
 ## Phase 3 – Export
+
+**Umgesetzt** (`werkstatt/export.mjs`). Ergänzungen: Die Leak-Prüfung vergleicht auch Logos, Icons und Anleitungs-PDFs. Regex-Kennzeichen laufen mit Zeitlimit. `-p<n>` zählt die verschiedenen exportierten Stände (Kern- und Studio-Commit) je Kernversion, damit auch eine Kernänderung ohne neue Versionsnummer einen neuen Namen bekommt. Exporte sind schreibgeschützt.
 
 **Voraussetzungen**, sonst ist der Knopf gesperrt und die Werkstatt sagt, warum:
 - beide Repos sauber,

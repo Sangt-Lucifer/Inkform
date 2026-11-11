@@ -356,3 +356,10 @@ dialog {
 dialog::backdrop {
   background: rgb(0 0 0 / 0.4);
 }
+label.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--ink);
+  margin: 12px 0;
+}

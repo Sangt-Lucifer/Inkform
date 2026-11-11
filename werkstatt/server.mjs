@@ -13,6 +13,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkDraft, commitStudio, createStudio, editable, pendingChanges, readEditable, saveDraft } from "./profile.mjs";
+import { exportStudio, listExports, readiness } from "./export.mjs";
 import { createRunner } from "./runs.mjs";
 import {
   blankoMarkers,
@@ -40,6 +41,7 @@ export async function startWerkstatt({
   env = process.env,
   stateDir = defaultStateDir(),
   certDir = defaultCertDir(),
+  git,
 } = {}) {
   const token = randomBytes(24).toString("hex");
   const runner = createRunner({ stateDir, env });
@@ -86,6 +88,8 @@ export async function startWerkstatt({
     }
     const latest = await runner.latest();
     const current = runner.current();
+    const exportsById = {};
+    for (const e of entries) exportsById[e.id] = (await listExports(e.id, env)).at(-1) ?? null;
     return {
       studios: entries.map((e) => ({
         key: e.key,
@@ -96,6 +100,7 @@ export async function startWerkstatt({
         actionable: e.actionable,
         protectedReason: e.protectedReason ?? null,
         ...(statusCache[e.key] ?? {}),
+        lastExport: exportsById[e.id] ?? null,
         runs: Object.fromEntries(
           ["build", "test", "browser"].map((k) => [k, latest[`${e.key}:${k}`] ?? null]),
         ),
@@ -198,6 +203,23 @@ export async function startWerkstatt({
           return exclusive(res, async () => {
             const result = await commitStudio({ dir: entry.dir, message, files, env, stateDir });
             return send(res, result.conflict ? 409 : result.error ? 400 : 200, result);
+          });
+        }
+        if (req.method === "GET" && url.pathname === "/api/export") {
+          const entry = (await studios()).find((e) => e.key === url.searchParams.get("key"));
+          if (!entry) return send(res, 404, { error: "Studio nicht gefunden." });
+          if (!entry.actionable) return send(res, 403, { error: entry.protectedReason });
+          const ready = await readiness(entry, { latest: await runner.latest(), ...(git ? { git } : {}) });
+          return send(res, 200, ready);
+        }
+        if (req.method === "POST" && url.pathname === "/api/export") {
+          const { studio, zip } = await body(req);
+          const entry = (await studios()).find((e) => e.key === studio);
+          if (!entry) return send(res, 404, { error: "Studio nicht gefunden." });
+          if (!entry.actionable) return send(res, 403, { error: entry.protectedReason });
+          return exclusive(res, async () => {
+            const result = await exportStudio(entry, { latest: await runner.latest(), env, zip: zip === true, ...(git ? { git } : {}) });
+            return send(res, result.error ? 409 : 201, result);
           });
         }
         return send(res, 404, { error: "Unbekannt." });
