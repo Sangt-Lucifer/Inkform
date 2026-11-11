@@ -5,7 +5,7 @@
 // while an error is open. No customer data is read or written here.
 import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { Worker } from "node:worker_threads";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -195,7 +195,7 @@ async function otherStudios(dir, env) {
     try {
       markers = compileMarkers(p.markers);
     } catch {}
-    others.push({ id: p.id, markers, text: JSON.stringify(p.text ?? {}) + "\n" + (p.name ?? "") });
+    others.push({ id: p.id, markers, raw: p.markers.filter((m) => typeof m === "string" || (m && typeof m.regex === "string")), text: JSON.stringify(p.text ?? {}) + "\n" + (p.name ?? "") });
   }
   return others;
 }
@@ -301,46 +301,59 @@ function regexShapeError(source) {
   return null;
 }
 const SLOW_INPUTS = ["a".repeat(30_000) + "!", " ".repeat(30_000) + "!", "aA0-. ".repeat(6_000) + "\u0000", "äöü".repeat(10_000) + "!"];
-const PROBE_WORKER = `
+const MATCH_WORKER = `
 const { parentPort, workerData } = require("node:worker_threads");
-const { markers, slow, build, sample, others } = workerData;
+const { markers, slow, texts } = workerData;
 const low = (t) => t.normalize("NFC").toLocaleLowerCase("de");
 markers.forEach((m, index) => {
-  const test = m.regex === undefined
-    ? ((needle) => (t) => t.includes(needle))(low(m.text))
-    : ((rx) => (t) => rx.test(t))(new RegExp(m.regex, m.flags));
+  let test;
+  try {
+    test = m.regex === undefined
+      ? ((needle) => (t) => t.includes(needle))(low(m.text))
+      : ((rx) => (t) => rx.test(t))(new RegExp(m.regex, m.flags));
+  } catch {
+    return parentPort.postMessage({ index, hits: [] });
+  }
   for (const t of slow) test(low(t));
-  parentPort.postMessage({
-    index,
-    inBuild: build.filter(([, t]) => test(t)).map(([name]) => name),
-    inSample: test(sample),
-    inOthers: others.filter(([, t]) => test(t)).map(([id]) => id),
-  });
+  parentPort.postMessage({ index, hits: texts.flatMap((t, i) => (test(t) ? [i] : [])) });
 });
 parentPort.postMessage({ done: true });`;
 
-// Per marker (by position, so equal sources with different flags never mix): where it is found,
-// or null when the worker had to be stopped. Texts are passed already normalised and lower-cased,
-// exactly like findMarkers does.
-export function probeMarkers(markers, { build = [], sample = "", others = [] } = {}, ms = 4000) {
-  const low = (t) => t.normalize("NFC").toLocaleLowerCase("de");
-  const list = markers.map((m) => (typeof m === "string" ? { text: m } : { regex: m.regex, flags: m.flags ?? "i" }));
+// Runs markers (own or other studios') over texts in a worker that is stopped after ms. Returns,
+// per marker by position, the indexes of the texts it is found in, or null when it had to be
+// stopped. Texts are normalised and lower-cased exactly like findMarkers does. Nothing user- or
+// studio-defined ever runs a regex on the main thread.
+export function matchInWorker(markers, texts, ms = 4000) {
+  const low = (t) => String(t).normalize("NFC").toLocaleLowerCase("de");
+  const list = markers.map((m) => (typeof m === "string" ? { text: m } : { regex: String(m?.regex ?? ""), flags: m?.flags ?? "i" }));
   const results = new Array(list.length).fill(null);
   if (!list.length) return Promise.resolve(results);
   return new Promise((resolve) => {
-    const worker = new Worker(PROBE_WORKER, {
-      eval: true,
-      workerData: { markers: list, slow: SLOW_INPUTS, build: build.map(([n, t]) => [n, low(t)]), sample: low(sample), others: others.map(([i, t]) => [i, low(t)]) },
-    });
+    const worker = new Worker(MATCH_WORKER, { eval: true, workerData: { markers: list, slow: SLOW_INPUTS, texts: texts.map(low) } });
     const finish = () => {
       clearTimeout(timer);
       worker.terminate();
       resolve(results);
     };
     const timer = setTimeout(finish, ms);
-    worker.on("message", (m) => (m.done ? finish() : (results[m.index] = m)));
+    worker.on("message", (m) => (m.done ? finish() : (results[m.index] = m.hits)));
     worker.on("error", finish);
   });
+}
+
+export async function probeMarkers(markers, { build = [], sample = "", others = [] } = {}, ms = 4000) {
+  const texts = [...build.map(([, t]) => t), sample, ...others.map(([, t]) => t)];
+  const hits = await matchInWorker(markers, texts, ms);
+  const b = build.length;
+  return hits.map((h) =>
+    h === null
+      ? null
+      : {
+          inBuild: h.filter((i) => i < b).map((i) => build[i][0]),
+          inSample: h.includes(b),
+          inOthers: h.filter((i) => i > b).map((i) => others[i - b - 1][0]),
+        },
+  );
 }
 
 // Full check of a draft. Returns errors (empty = may be saved) and, per marker, where it is found.
@@ -367,11 +380,17 @@ export async function checkDraft({ dir, id, draft, logoBase64, env }) {
   for (const [label, value] of fields(draft)) {
     const hits = findMarkers(value, sampleMarkers);
     if (hits.length) errors.push(`${label}: enthält noch Text des Musterstudios (${hits.join(", ")}).`);
-    for (const o of others) {
-      const foreign = findMarkers(value, o.markers);
-      if (foreign.length) errors.push(`${label}: enthält Kennzeichen des Studios „${o.id}“ (${foreign.join(", ")}).`);
-    }
   }
+  // Other studios' markers may be regexes: they run in the timed worker too.
+  const fieldList = fields(draft);
+  const foreign = others.flatMap((o) => o.raw.map((m) => ({ owner: o.id, marker: m })));
+  const foreignHits = await matchInWorker(foreign.map((f) => f.marker), fieldList.map(([, v]) => v));
+  foreignHits.forEach((h, i) => {
+    const { owner, marker } = foreign[i];
+    const label = typeof marker === "string" ? marker : `/${marker?.regex}/`;
+    if (h === null) errors.push(`Kennzeichen ${label} des Studios „${owner}“ ist zu langsam für die Prüfung. Bitte dort vereinfachen.`);
+    else for (const t of h) errors.push(`${fieldList[t][0]}: enthält Kennzeichen des Studios „${owner}“ (${label}).`);
+  });
   const own = compileMarkers(draft.markers);
   const ownStrings = draft.markers.map((m) => (typeof m === "string" ? m : m.regex)).join("\n");
   const fromSample = findMarkers(ownStrings, sampleMarkers);
@@ -534,8 +553,10 @@ const gitEnv = () => ({
   GIT_COMMITTER_NAME: AUTHOR.name,
   GIT_COMMITTER_EMAIL: AUTHOR.email,
 });
+// No hooks and no fsmonitor program: nothing configured in a studio repo runs during these calls.
+const SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
 const git = (dir, args, extraEnv = {}) =>
-  run("git", ["-C", dir, "-c", `user.name=${AUTHOR.name}`, "-c", `user.email=${AUTHOR.email}`, "-c", "commit.gpgsign=false", ...args], {
+  run("git", [...SAFE_GIT, "-C", dir, "-c", `user.name=${AUTHOR.name}`, "-c", `user.email=${AUTHOR.email}`, "-c", "commit.gpgsign=false", ...args], {
     encoding: "utf8",
     env: { ...gitEnv(), ...extraEnv },
   });
@@ -563,7 +584,36 @@ export async function createStudio({ id, name, env, stateDir }) {
     const p = await readJson(path.join(d, FILES.profile)).catch(() => null);
     if (p?.id === id) return { error: `Ein Studio mit der Kennung ${id} gibt es schon.` };
   }
+  // The studios folder may be a link, but never into the core or into an existing studio. Checked
+  // on the real location of the nearest existing folder, before anything is created.
+  const realExisting = async (p) => {
+    const rest = [];
+    for (let cur = p; ; cur = path.dirname(cur)) {
+      const real = await realpath(cur).catch(() => null);
+      if (real) return path.join(real, ...rest.reverse());
+      if (path.dirname(cur) === cur) return p;
+      rest.push(path.basename(cur));
+    }
+  };
+  let realParent = await realExisting(parent);
+  const core = await realpath(root);
+  const inside = (p, q) => p === q || p.startsWith(q + path.sep);
+  const misplaced = async () => {
+    if (inside(realParent, core)) return "Der Studios-Ordner liegt in Wirklichkeit im Kern. Dort wird kein Studio angelegt.";
+    for (const d of await discoverStudioProfiles(env)) {
+      const real = await realpath(d).catch(() => null);
+      if (real && inside(realParent, real)) return "Der Studios-Ordner liegt in Wirklichkeit in einem bestehenden Studio. Es wird nichts angelegt.";
+    }
+    return null;
+  };
+  if (await misplaced()) return { error: await misplaced() };
   await mkdir(parent, { recursive: true });
+  realParent = await realpath(parent);
+  if (inside(realParent, core)) return { error: "Der Studios-Ordner liegt in Wirklichkeit im Kern. Dort wird kein Studio angelegt." };
+  for (const d of await discoverStudioProfiles(env)) {
+    const real = await realpath(d).catch(() => null);
+    if (real && inside(realParent, real)) return { error: "Der Studios-Ordner liegt in Wirklichkeit in einem bestehenden Studio. Es wird nichts angelegt." };
+  }
   // Created exclusively: mkdir fails if the folder appeared in the meantime, so an existing folder
   // is never used or replaced. profile.json comes last, so a half-made folder is no studio; on
   // failure only the folder created here is removed.
@@ -573,6 +623,7 @@ export async function createStudio({ id, name, env, stateDir }) {
     return { error: error.code === "EEXIST" ? `Den Ordner ${id} gibt es schon. Er wird nicht angefasst.` : `Anlegen fehlgeschlagen: ${error.message}` };
   }
   try {
+    if ((await realpath(target)) !== path.join(realParent, id)) throw new Error("Zielordner hat sich verschoben.");
     await mkdir(path.join(target, "Dokumente"));
     for (const f of ["manifest.webmanifest", "logo.png", "Anleitung-iPad-und-Admin.pdf", FILES.guide, path.join("Dokumente", "Rechtstexte-Pruefung.md")])
       await copyFile(path.join(SAMPLE, f), path.join(target, f));
@@ -602,6 +653,26 @@ const FORBIDDEN_DIRS = /(^|\/)(build|dist|test-results|node_modules|Exporte|Sich
 const FORBIDDEN_FILES = /\.(key|pem|crt|p12|pfx|csv|xlsx?|numbers|zip|json|pdf|jpe?g|heic|heif|mov|mp4|log)$|(^|\/)(Tattoo_Einwilligung_|Inkform_Einnahmen_|INKFORM_)|(^|\/)\.env|(^|\/)(\.DS_Store|Thumbs\.db)$/i;
 export const forbiddenPath = (p) => !["profile.json", "Anleitung-iPad-und-Admin.pdf"].includes(p) && (FORBIDDEN_DIRS.test(p) || FORBIDDEN_FILES.test(p));
 
+// Everything git writes (objects, refs, logs, HEAD, index …) lives below .git. No link may appear
+// anywhere in there, and no file may send git to another object store or common dir.
+async function gitStorageError(gitDir) {
+  for (const f of ["commondir", "gitdir", path.join("objects", "info", "alternates"), path.join("objects", "info", "http-alternates")])
+    if (await lstat(path.join(gitDir, f)).then(() => true, () => false)) return `.git/${f} ist nicht erlaubt.`;
+  const walk = async (dir) => {
+    for (const name of await readdir(dir)) {
+      const full = path.join(dir, name);
+      const st = await lstat(full);
+      if (st.isSymbolicLink()) return `${path.relative(gitDir, full)} ist eine Verknüpfung.`;
+      if (st.isDirectory()) {
+        const inner = await walk(full);
+        if (inner) return inner;
+      } else if (!st.isFile()) return `${path.relative(gitDir, full)} ist keine normale Datei.`;
+    }
+    return null;
+  };
+  return walk(gitDir);
+}
+
 // The studio must be its own repository: .git a real folder inside it (no link, no gitfile pointing
 // elsewhere), and git must report exactly that folder as its git and common dir.
 async function ownRepo(dir) {
@@ -615,7 +686,8 @@ async function ownRepo(dir) {
     );
     const [top, gitDir, common] = stdout.trim().split("\n");
     const [realDir, realGit] = [await realpath(dir), await realpath(path.join(dir, ".git"))];
-    return (await realpath(top)) === realDir && (await realpath(gitDir)) === realGit && (await realpath(common)) === realGit;
+    if (!((await realpath(top)) === realDir && (await realpath(gitDir)) === realGit && (await realpath(common)) === realGit)) return false;
+    return (await gitStorageError(path.join(dir, ".git"))) === null;
   } catch {
     return false;
   }
@@ -623,7 +695,7 @@ async function ownRepo(dir) {
 
 export async function pendingChanges(dir) {
   if (!(await ownRepo(dir))) return { error: "Der Studio-Ordner ist kein eigenes Git-Repo." };
-  const { stdout } = await run("git", ["--no-optional-locks", "-C", dir, "status", "--porcelain=v1", "-z", "-uall"], {
+  const { stdout } = await run("git", [...SAFE_GIT, "--no-optional-locks", "-C", dir, "status", "--porcelain=v1", "-z", "-uall"], {
     encoding: "utf8",
     env: { ...cleanEnv(), GIT_OPTIONAL_LOCKS: "0" },
   });
@@ -661,7 +733,7 @@ export async function commitStudio({ dir, message, files, env, stateDir }) {
   const indexEnv = { GIT_INDEX_FILE: path.join(work, "index"), GIT_LITERAL_PATHSPECS: "1" };
   const confirmed = now.files.map((f) => f.path);
   try {
-    const head = await run("git", ["-C", dir, "rev-parse", "--verify", "-q", "HEAD"], { encoding: "utf8", env: cleanEnv() }).then(() => true, () => false);
+    const head = await run("git", [...SAFE_GIT, "-C", dir, "rev-parse", "--verify", "-q", "HEAD"], { encoding: "utf8", env: cleanEnv() }).then(() => true, () => false);
     if (head) await git(dir, ["read-tree", "HEAD"], indexEnv);
     await git(dir, ["add", "-A", "--", ...confirmed], indexEnv);
     const staged = (
@@ -673,7 +745,7 @@ export async function commitStudio({ dir, message, files, env, stateDir }) {
     if (bad.length) return { error: `Nicht committet: Diese Dateien gehören nicht ins Repo: ${bad.join(", ")}.` };
     await git(dir, ["commit", "-q", "--no-verify", "-m", message.trim()], indexEnv);
     const reset = await git(dir, ["reset", "-q", "--", ...confirmed], { GIT_LITERAL_PATHSPECS: "1" }).then(() => null, (e) => e);
-    const { stdout } = await run("git", ["--no-optional-locks", "-C", dir, "log", "-1", "--format=%h"], { encoding: "utf8", env: cleanEnv() });
+    const { stdout } = await run("git", [...SAFE_GIT, "--no-optional-locks", "-C", dir, "log", "-1", "--format=%h"], { encoding: "utf8", env: cleanEnv() });
     return reset
       ? { commit: stdout.trim(), warning: `Committet, aber der Git-Index wurde nicht nachgezogen (${reset.message.split("\n")[0]}). git status zeigt die Dateien deshalb noch als geändert; „git reset“ im Studio-Ordner behebt das.` }
       : { commit: stdout.trim() };

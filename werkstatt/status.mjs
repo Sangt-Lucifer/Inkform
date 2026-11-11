@@ -66,7 +66,7 @@ export async function listStudios({ env = process.env, stateDir = defaultStateDi
 async function git(dir, args) {
   try {
     return (
-      await run("git", ["--no-optional-locks", "-C", dir, ...args], {
+      await run("git", ["-c", "core.fsmonitor=false", "--no-optional-locks", "-C", dir, ...args], {
         encoding: "utf8",
         env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
       })

@@ -462,3 +462,59 @@ test("check: a failing probe build leaves no temporary folder; .DS_Store is forb
   assert.equal(forbiddenPath("icons/Thumbs.db"), true);
   await rm(dir, { recursive: true, force: true });
 });
+
+// ---------- Review, third round ----------
+
+test("commit: links inside .git are refused; repo hooks never run", async () => {
+  await createStudio({ id: "git-innen", name: "Git Innen", env, stateDir });
+  const dir = path.join(studiosDir, "git-innen");
+  const elsewhere = path.join(base, "fremde-objekte");
+  await mkdir(elsewhere);
+  await rename(path.join(dir, ".git", "objects"), path.join(dir, ".git", "objects-echt"));
+  await symlink(elsewhere, path.join(dir, ".git", "objects"));
+  assert.match((await pendingChanges(dir)).error, /kein eigenes Git-Repo/);
+  assert.deepEqual(await readdir(elsewhere), []);
+  await rm(path.join(dir, ".git", "objects"));
+  await rename(path.join(dir, ".git", "objects-echt"), path.join(dir, ".git", "objects"));
+
+  const ran = path.join(base, "hook-lief");
+  const hook = path.join(dir, ".git", "hooks", "prepare-commit-msg");
+  await mkdir(path.dirname(hook), { recursive: true });
+  await writeFile(hook, `#!/bin/sh\ntouch "${ran}"\necho '{}' > kunden.json\ngit add -f kunden.json\n`, { mode: 0o755 });
+  const { files } = await pendingChanges(dir);
+  const done = await commitStudio({ dir, message: "Erstes Profil", files: files.map((f) => f.path) });
+  assert.ok(done.commit, done.error);
+  assert.equal(await stat(ran).then(() => true, () => false), false, "hook did not run");
+  assert.doesNotMatch(execFileSync("git", ["-C", dir, "ls-tree", "-r", "--name-only", "HEAD"], { encoding: "utf8" }), /kunden\.json/);
+  await rm(dir, { recursive: true, force: true });
+});
+
+test("new studio: a studios folder that really lies in an existing studio or in the core is refused", async () => {
+  const intoStudio = path.join(base, "link-in-studio");
+  await symlink(protectedDir, intoStudio);
+  const before = await snapshot(protectedDir);
+  const r1 = await createStudio({ id: "im-studio", name: "Im Studio", env: { ...process.env, INKFORM_STUDIOS: [intoStudio, studiosDir].join(path.delimiter) }, stateDir });
+  assert.match(r1.error, /bestehenden Studio/);
+  assert.equal(await snapshot(protectedDir), before);
+  const intoCore = path.join(base, "link-in-kern");
+  await symlink(path.join(root, "profiles"), intoCore);
+  const r2 = await createStudio({ id: "im-kern", name: "Im Kern", env: { ...process.env, INKFORM_STUDIOS: path.join(intoCore, "neu") }, stateDir });
+  assert.match(r2.error, /im Kern/);
+  assert.equal(await stat(path.join(root, "profiles", "neu")).then(() => true, () => false), false);
+});
+
+test("check: another studio's slow regex marker cannot hang the Werkstatt", async () => {
+  const slowDir = path.join(studiosDir, "langsam");
+  await mkdir(slowDir);
+  await writeFile(path.join(slowDir, "profile.json"), JSON.stringify({ id: "langsam", name: "Langsam", markers: [{ regex: "b*b*c" }], text: {} }));
+  try {
+    const dir = path.join(studiosDir, "atelier-nord");
+    const draft = { ...(await cleanDraft(dir, "Atelier Nord")), guideMd: "b".repeat(30_000) + "!" };
+    const started = Date.now();
+    const result = await checkDraft({ dir, id: "atelier-nord", draft, env });
+    assert.ok(Date.now() - started < 10_000);
+    assert.match(result.errors.join("\n"), /zu langsam für die Prüfung/);
+  } finally {
+    await rm(slowDir, { recursive: true, force: true });
+  }
+});
