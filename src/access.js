@@ -3,6 +3,10 @@ export const ADMIN_PIN_KEY = "inkform.admin.pin.v1";
 export const ADMIN_LOCK_KEY = "inkform.admin.lock.v1";
 export const MAX_PIN_FAILURES = 5;
 export const PIN_LOCK_MS = 30000;
+// Known limits (accepted, see README "PIN-Sperre"): with two app windows open at the same time AND
+// failing storage writes, one window can overwrite a lock the other just set; with two windows
+// correcting a set-back clock at different moments, a running lock can last up to one extra
+// period. On the iPad the home-screen app runs in a single window, where all cases are handled.
 export function createPinLockout(storage, now = () => Date.now()) {
   // Normally the stored record wins, so a reload or a second window sees the same counter.
   // If a write fails (e.g. storage full), memory becomes authoritative; the stored record seen at
