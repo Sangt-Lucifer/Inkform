@@ -1,6 +1,6 @@
 # 1. Start und erste Einrichtung
 
-INKFORM – neutrale Vorlage. Anleitung für die Studioverwaltung. Stand: 7. November 2026.
+INKFORM – neutrale Vorlage. Anleitung für die Studioverwaltung. Stand: 11. November 2026.
 
 Mit Inkform füllt der Kunde seine Tattoo-Einwilligung aus und unterschreibt auf dem Gerät. Das PDF entsteht lokal. Eine separate Einnahmenliste enthält nur Name, Termin, Artist und Preise. Gesundheitsangaben und Unterschriften landen nicht in dieser Liste.
 
@@ -36,9 +36,18 @@ Für den gewünschten Start über ein Symbol muss die vorbereitete Ausgabe dist/
 
 Formularverarbeitung, Unterschrift, PDF und Einnahmenliste bleiben auf dem Gerät. Beim ersten Abruf über den Weblink erhält der Hostinganbieter übliche Verbindungsdaten. Es gibt keine Kundendaten-Uploads durch die App. Die lokale Mac-Datei benötigt auch beim ersten Start keinen Webzugriff.
 
-PDFs unter Auf meinem iPad sichern, wenn keine Cloud-Ablage gewünscht ist. Geräte-Backups und Synchronisierung werden durch iPadOS gesteuert und müssen separat geprüft werden. Die Dateien-Vorschau allein ist kein verlässlicher Browser für diese App.
+PDFs nur unter Auf meinem iPad sichern, nicht in iCloud Drive: Sonst liegen Gesundheitsangaben in der Apple-Cloud. Die Dateien-Vorschau allein ist kein verlässlicher Browser für diese App.
 
 Safari kann Offline-Daten entfernen. Deshalb vor jedem Arbeitstag den Offline-Start prüfen. Die echte iPad-Installation, Apple-Pencil-Eingabe und Dateien-Ablage müssen auf dem vorgesehenen Gerät getestet werden.
+
+## Das iPad absichern
+
+Die App schützt ihren Admin-Bereich mit der PIN. Die unterschriebenen PDFs in der Dateien-App schützt nur das iPad selbst. Diese Punkte kann die App nicht prüfen; die Admin-Übersicht zeigt sie als Checkliste.
+
+- Gerätecode mit mindestens 6 Ziffern einrichten und die automatische Sperre kurz halten. Erst mit Gerätecode verschlüsselt das iPad seine Daten; unter Einstellungen, Face ID & Code steht dann Datenschutz ist aktiviert.
+- Geführter Zugriff für die Übergabe an Kunden: Einstellungen, Bedienungshilfen, Geführter Zugriff einschalten und einen eigenen Code festlegen, nicht die App-PIN. In der App dreimal die Seiten- oder Home-Taste drücken und starten. Der Kunde kann die App dann nicht verlassen.
+- iCloud-Backup für dieses iPad ausschalten. Stattdessen regelmäßig ein verschlüsseltes Backup über den Mac erstellen: iPad per Kabel verbinden, im Finder Lokales Backup verschlüsseln wählen. Time Machine sichert es mit. Welche App-Daten ein iCloud-Backup genau enthält, wurde nicht geprüft.
+- Safari-Verlauf und Websitedaten löschen oder das Home-Bildschirm-Symbol entfernen löscht Einnahmenliste, PIN und eine offene Einwilligung. Vorher sichern.
 
 Apple-Anleitung: [Website auf dem iPad in eine App verwandeln](https://support.apple.com/de-de/guide/ipad/ipad8f1f7a29/ipados).
 
@@ -54,14 +63,14 @@ Apple-Anleitung: [Website auf dem iPad in eine App verwandeln](https://support.a
 
 ## PDF speichern und Gerät zurückgeben
 
-- PDF erstellen & sichern wählen. Das Dokument wird auf diesem Gerät erzeugt. Name, Tattoo-Termin, Artist und Preise werden dabei in die lokale Einnahmenliste übernommen.
+- PDF erstellen & sichern wählen. Das Dokument wird auf diesem Gerät erzeugt. Namen mit Sonderzeichen wie Ş, Ł oder ı erscheinen korrekt. Zeichen, die die PDF-Schrift nicht darstellen kann (zum Beispiel ✓, Emojis oder arabische Schrift), meldet die App vorher.
 - Wenn iPadOS den Systemdialog öffnet: In Dateien sichern, Auf meinem iPad, den Studioordner und Sichern wählen. Alternativ wird der PDF-Download verwendet.
 - Die App zeigt jetzt den schwarzen Bildschirm Vielen Dank. Der Kunde kann das Formular oder den Admin-Bereich nicht weiter über die Oberfläche bedienen.
 - Der Inhaber wählt Studio entsperren und gibt seine PIN ein. Das letzte PDF und die Ablagehinweise stehen wieder zur Verfügung. Bei Abbruch oder Fehler die Speicherung hier wiederholen.
 - Das PDF in der Dateien-App tatsächlich öffnen und den Speicherort prüfen. Die App kann nicht feststellen, ob das Dokument im Systemordner gespeichert wurde.
-- Erst danach PDF ist gespeichert / Nächster Kunde bestätigen. Die Angaben werden geleert und das nächste Kundenformular wird freigegeben; der Admin ist wieder gesperrt.
+- Erst danach PDF ist gespeichert / Nächster Kunde bestätigen. Erst jetzt werden Name, Tattoo-Termin, Artist und Preise in die Einnahmenliste gebucht, genau einmal. Die Angaben werden geleert, das nächste Kundenformular wird freigegeben und der Admin ist wieder gesperrt.
 
-Vor der tatsächlichen PDF-Ablage nicht neu laden oder schließen: PDF und Unterschrift sind nur im Arbeitsspeicher und können dadurch verloren gehen. Der finanzielle Listeneintrag ersetzt das unterschriebene PDF nicht.
+Bis zur Bestätigung bleibt die unterschriebene Einwilligung auf diesem iPad zwischengespeichert, auch wenn die App neu geladen oder geschlossen wird. Danach wird diese Kopie gelöscht. Kann das PDF nach einem Neuladen nicht wiederhergestellt werden, zeigt die App PDF nicht mehr verfügbar; die Einnahme lässt sich dann mit dem Vermerk PDF fehlt buchen. Meldet der Vielen-Dank-Bildschirm, dass nicht zwischengespeichert werden konnte, nicht neu laden, sondern sofort entsperren und ablegen. Eine offene Einwilligung zeigt die Admin-Übersicht nach 7 Tagen als Erinnerung an. Der finanzielle Listeneintrag ersetzt das unterschriebene PDF nicht.
 
 Bei einem Fehler der Einnahmenspeicherung bleibt das Formular erhalten. Nicht neu laden und keine Browserdaten löschen. Der Inhaber kann den Fehler prüfen und die Bestätigung erneut versuchen. Ein schwarzer Vielen-Dank-Bildschirm allein ist noch kein Nachweis einer erfolgreichen PDF-Ablage.
 
@@ -125,7 +134,16 @@ Ein Eintrag wird beim Erstellen des unterschriebenen Kunden-PDFs automatisch ang
 
 Ein wiederholter identischer Einnahmenimport erzeugt keine Duplikate. Enthält eine Sicherung einen inzwischen anders bearbeiteten Eintrag mit derselben Kennung, wird der Import als Ganzes abgelehnt. Vorhandene Daten werden nicht still überschrieben. Die App nimmt keine automatische Cloud-Sicherung vor und bestätigt nicht, dass ein heruntergeladener Export tatsächlich auf dem Datenträger liegt.
 
-Nach jedem Arbeitstag sichern; vor Updates, Gerätewechseln oder dem Löschen von Browserdaten zusätzlich prüfen. Aufbewahrung und Löschung muss der Inhaber im Dateibestand und in der Einnahmenliste selbst umsetzen. Es gibt keinen automatischen Löschlauf für exportierte PDFs.
+Mindestens wöchentlich sichern, besser nach jedem Arbeitstag; vor Updates, Gerätewechseln oder dem Löschen von Browserdaten zusätzlich. Die Admin-Übersicht zeigt, wann die Einnahmen zuletzt gesichert wurden. Sicherungen auf dem Mac in einem verschlüsselten Ordner ablegen.
+
+## Aufbewahrung und Löschung
+
+Im Admin-Bereich Aufbewahrung legt das Studio zwei Fristen in Jahren fest, gezählt ab dem Tattoo-Termin. Die App gibt keine Fristen vor; ohne Frist wird nichts angezeigt. Welche Fristen gelten, klärt das Studio im Zweifel mit Datenschutz- oder Steuerberatung.
+
+- Löschliste: Zeigt die Einwilligungs-PDFs, deren Frist abgelaufen ist, mit Dateinamen. Die App kann Dateien in der Dateien-App weder sehen noch löschen. Das PDF dort und in allen Sicherungen löschen und erst dann in der App als gelöscht markieren.
+- Anonymisieren: Entfernt nach Ablauf der zweiten Frist Name und PDF-Dateiname aus der Einnahmenliste. Datum, Artist und Beträge bleiben für die Summen erhalten. Vorher eine Sicherung erstellen; das Anonymisieren lässt sich nicht rückgängig machen. Ältere JSON-Sicherungen enthalten die Namen weiterhin und müssen separat gelöscht werden.
+
+Es gibt keinen automatischen Löschlauf.
 
 # 7. Hilfe und wichtige Grenzen
 
@@ -136,7 +154,8 @@ Nach jedem Arbeitstag sichern; vor Updates, Gerätewechseln oder dem Löschen vo
 - PIN vergessen: Es gibt keinen Online-Reset. Vorhandene App-Daten nicht vorschnell löschen. Mit den separat abgelegten JSON-Sicherungen lässt sich die Einrichtung in einer neuen Browserumgebung mit neuer PIN wiederherstellen. Ohne Sicherung gibt es keinen vorgesehenen Wiederherstellungsweg über die Oberfläche.
 - Einnahmenliste ist leer: Artist, Jahr und Monat kontrollieren. In einem anderen Browser oder über das Home-Bildschirm-Symbol kann ein anderer lokaler Datenbestand verwendet werden. Die Einnahmen-JSON separat importieren.
 - App startet offline nicht: Vor dem nächsten Kundeneinsatz einmal über den eingerichteten Weblink laden, Offline bereit abwarten und im Flugmodus erneut testen. Ein belegter Offline-Cache kann durch iPadOS oder das Löschen von Browserdaten verloren gehen.
-- Ein PDF mit ungewöhnlichen Schriftzeichen lässt sich nicht ausgeben: Für die Einnahmenliste CSV verwenden; die mitgelieferte PDF-Schrift unterstützt nicht alle Schriftsysteme.
+- Die App meldet nicht darstellbare Zeichen: Die mitgelieferte PDF-Schrift deckt lateinische, griechische und kyrillische Schrift ab, aber zum Beispiel keine Emojis, Symbole wie ✓ und keine arabische Schrift. Die gemeldeten Zeichen ersetzen oder weglassen; für die Einnahmenliste notfalls CSV verwenden.
+- PDF nicht mehr verfügbar nach einem Neuladen: Die Einwilligung erneut ausfüllen lassen, falls sie gebraucht wird, und die vorbereitete Einnahme mit dem Vermerk PDF fehlt buchen. Den Vermerk in der Einnahmenliste entfernen, sobald das PDF doch vorliegt.
 
 ## Vor dem ersten echten Kunden
 
@@ -145,5 +164,7 @@ Nach jedem Arbeitstag sichern; vor Updates, Gerätewechseln oder dem Löschen vo
 - Vielen-Dank-Sperre, PIN-Entsperrung und Freigabe eines leeren nächsten Formulars testen.
 - Einen Eintrag ohne Preis erzeugen, den Preis nachtragen und die Artist-/Monatsauswertung kontrollieren.
 - Studio-JSON und Einnahmen-JSON sichern und eine Wiederherstellung mit Testdaten ausprobieren.
+- Gerätecode, Geführten Zugriff und das verschlüsselte Mac-Backup einrichten; iCloud-Backup ausschalten.
+- Unter Aufbewahrung die Fristen des Studios eintragen oder bewusst leer lassen.
 
 Die rechtlichen Texte sind neutrale Entwürfe zur Prüfung, keine verbindliche anwaltliche Freigabe. Die Aufbewahrung richtet sich nach Zweck, Erforderlichkeit und einschlägigen Fristen; es wurde keine pauschale gesetzliche 30-Jahres-Pflicht behauptet. Die gezeichnete Unterschrift und Gerätezeit sind keine qualifizierte elektronische Signatur oder vertrauenswürdiger externer Zeitstempel. Der konkrete iPad-Test bleibt erforderlich.

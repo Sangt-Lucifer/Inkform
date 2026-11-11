@@ -2876,3 +2876,21 @@ html[data-theme="dark"] dialog::backdrop {
   width: 18px;
   height: 18px;
 }
+.ad-reminder p {
+  margin: 0 0 6px;
+}
+.ad-checklist {
+  margin: 8px 0 12px;
+  padding-left: 18px;
+  line-height: 1.55;
+}
+.ad-checklist li + li {
+  margin-top: 4px;
+}
+.ad-warn {
+  color: var(--danger, #b13033);
+  font-weight: 600;
+}
+.ad-checklist {
+  font-size: 13px;
+}

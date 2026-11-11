@@ -8,6 +8,7 @@
 | `pin-einnahmen.mjs` | `Pruefungen-Inkform-Einnahmen-PIN-2026-11-06/Browser-Gesamtpruefung.mjs` | PIN-Ersteinrichtung, falsche PIN, Vielen-Dank-Sperre, ausstehendes Original-PDF, Speicherfehler, Einnahmen, Filter, CSV/PDF/JSON, Import, HTML-Export ohne PIN-Hash und Namen |
 | `offline.mjs` | `Pruefungen-Inkform-Einnahmen-PIN-2026-11-06/Browser-Offlinepruefung.mjs` | Offline-Cache der Web-App, eingebettete Anleitung, Neustart ohne Netz, PIN und Einnahmen offline |
 | `abschluss.mjs` | neu (Phase 3) | Validierung (Alter, Unterschrift, Pflicht-Einwilligungen), Unicode-Namen im PDF (Noto Sans), Buchung erst nach Bestätigung und nur einmal, Neuladen auf „Vielen Dank“, „PDF fehlt“, nicht darstellbare Zeichen, PIN-Sperre über Neuladen hinweg; alles im Flugmodus |
+| `aufbewahrung.mjs` | neu (Phase 4) | Erinnerung an offene Einwilligung, Sicherheits-Checkliste, Fristen, Löschliste, Anonymisieren, Sicherungsdatum |
 | `schriftgroessen.mjs` | neu (Phase 3) | Kundenbereich auf vier iPad-Größen: Eingaben, Beschriftungen und Fließtext ≥ 16 px, nichts < 14 px, kein seitliches Scrollen; mit `INKFORM_FONT_BASELINE=<datei>` zusätzlich: keine Schrift kleiner als vorher |
 | `lib.mjs` | neu | gemeinsamer CDP-Client für die neuen Prüfungen |
 | `../income-independent.test.mjs` | `Pruefungen-Inkform-Einnahmen-PIN-2026-11-06/Unabhaengige-Einnahmenpruefung.mjs` | Grenzfälle des Einnahmenmoduls (läuft mit `npm test`) |

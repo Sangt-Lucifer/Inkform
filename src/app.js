@@ -4,6 +4,13 @@ import { STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
 import { PDF_FONT, createPdfDocument, unsupportedPdfChars } from "./pdf-fonts.js";
 import { createIndexedDbFiles, createPendingStore } from "./pending.js";
 import { birthDateValid, fileSlug, moneyCents, studioInitials } from "./consent.js";
+import {
+  LAST_BACKUP_KEY,
+  PENDING_REMINDER_DAYS,
+  daysBetween,
+  dueForPdfDeletion,
+  readRetention,
+} from "./retention.js";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -1248,6 +1255,13 @@ const ADMIN_PAGES = {
     description:
       "Gesamtpreise je Termin und Artist auswerten, fehlende Preise ergänzen und Listen ausgeben.",
   },
+  retention: {
+    label: "Aufbewahrung",
+    icon: "lock",
+    title: "Aufbewahrung & Löschung",
+    description:
+      "Fristen festlegen, fällige Einwilligungs-PDFs löschen und alte Namen in der Einnahmenliste anonymisieren.",
+  },
   privacy: {
     label: "Datenschutz",
     icon: "lock",
@@ -1378,6 +1392,56 @@ function shortcuts() {
     )
     .join("");
 }
+// Overview: reminders about data that should not stay on the device unnoticed.
+function privacyReminders() {
+  const notes = [],
+    buttons = [];
+  try {
+    const pending = pendingStore?.read();
+    const age = pending ? daysBetween(pending.savedAt) : 0;
+    if (pending && age >= PENDING_REMINDER_DAYS && pendingConsent && !pendingConsent.confirmed) {
+      notes.push(
+        `Eine unterschriebene Einwilligung ist seit ${age} Tagen nicht als abgelegt bestätigt. Das PDF mit Gesundheitsangaben liegt so lange zusätzlich im Browser-Speicher. Bitte ablegen und bestätigen.`,
+      );
+      buttons.push('<button class="ad-button primary" type="button" data-admin-action="pending">Offene Einwilligung ablegen</button>');
+    }
+  } catch (_) {}
+  try {
+    const { pdfYears } = readRetention(localStorage);
+    const open = dueForPdfDeletion(incomeFeature.list(), pdfYears, localDate()).length;
+    if (open) {
+      notes.push(`${open} Einwilligungs-PDFs haben die eingetragene Aufbewahrungsfrist überschritten.`);
+      buttons.push('<button class="ad-button" type="button" data-admin-page="retention">Löschliste öffnen</button>');
+    }
+  } catch (_) {}
+  return notes.length
+    ? `<div class="ad-notice ad-reminder" role="status">${notes.map((n) => `<p>${escapeHtml(n)}</p>`).join("")}<div class="ad-actions-row">${buttons.join("")}</div></div>`
+    : "";
+}
+function securityChecklist() {
+  let last = null;
+  try {
+    last = localStorage.getItem(LAST_BACKUP_KEY);
+  } catch (_) {}
+  const age = last ? daysBetween(last) : null;
+  const backup =
+    age === null
+      ? "Noch keine Einnahmen-Sicherung auf diesem Gerät erstellt."
+      : `Letzte Einnahmen-Sicherung vor ${age} ${age === 1 ? "Tag" : "Tagen"}${age > 7 ? " – bitte neu sichern." : "."}`;
+  const items = [
+    "Gerätecode mit mindestens 6 Ziffern: erst damit verschlüsselt das iPad seine Daten (Einstellungen → Face ID & Code: „Datenschutz ist aktiviert“).",
+    "Geführter Zugriff für die Kundenübergabe, mit eigenem Code (Einstellungen → Bedienungshilfen → Geführter Zugriff).",
+    "PDFs nur unter „Auf meinem iPad“ ablegen, nicht in iCloud Drive.",
+    "iCloud-Backup für dieses iPad aus; stattdessen verschlüsseltes Backup über den Mac (Finder → „Lokales Backup verschlüsseln“).",
+    "Wöchentlich sichern: Einnahmen und Einstellungen als JSON, den PDF-Ordner auf den Mac.",
+    "Safari-Websitedaten löschen oder die Home-Bildschirm-App entfernen löscht Einnahmen, PIN und offene Einwilligung – vorher sichern.",
+  ];
+  return adminPanel(
+    "Sicherheit dieses iPads",
+    `<p class="ad-section-copy${age === null || age > 7 ? " ad-warn" : ""}">${escapeHtml(backup)}</p><ul class="ad-checklist">${items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul><div class="ad-actions-row"><button class="ad-button" type="button" data-admin-page="income">Einnahmen sichern</button><button class="ad-button" type="button" data-admin-page="retention">Aufbewahrung</button></div>`,
+    "Diese Punkte kann die App nicht selbst prüfen. Details in der Anleitung.",
+  );
+}
 function renderAdminSection() {
   const page = ADMIN_PAGES[adminPage];
   $("admin-page-title").textContent = page.title;
@@ -1399,6 +1463,8 @@ function renderAdminSection() {
   let content = "";
   if (adminPage === "income") {
     content = `<div id="income-content">${incomeFeature.view()}</div>`;
+  } else if (adminPage === "retention") {
+    content = `<div id="retention-content">${incomeFeature.retentionView()}</div>`;
   } else if (adminPage === "overview") {
     const filled = Object.values(adminDraft.studio).filter((v) => v.trim()).length;
     content = /* HTML */ `<div class="ad-stats">
@@ -1420,8 +1486,10 @@ function renderAdminSection() {
           <strong>${adminDraft.legal.length}</strong><small>Mit roten Prüfvermerken</small>
         </div>
       </div>
+      ${privacyReminders()}
       <div class="ad-columns">
         <div>
+          ${securityChecklist()}
           <section class="ad-panel">
             <div class="ad-panel-header">
               <h2>Dein Formular konfigurieren</h2>
@@ -1777,7 +1845,7 @@ function renderAdminSection() {
 }
 function updateAdminChrome() {
   const changed = adminChanged();
-  $("admin-savebar").hidden = adminPage === "income" && !changed;
+  $("admin-savebar").hidden = (adminPage === "income" || adminPage === "retention") && !changed;
   $("admin-savebar").classList.toggle("unsaved", changed);
   $("admin-save-state").textContent = changed
     ? "Ungespeicherte Änderungen"
@@ -2138,6 +2206,9 @@ $("admin-app").addEventListener("click", (event) => {
     }
   }
   switch (button.dataset.adminAction) {
+    case "pending":
+      if (pendingConsent && !pendingConsent.confirmed) renderPdfArtifact(pendingConsent);
+      break;
     case "guide": {
       const bytes = Uint8Array.from(atob(OWNER_GUIDE_BASE64), (ch) => ch.charCodeAt(0));
       presentPdfArtifact(

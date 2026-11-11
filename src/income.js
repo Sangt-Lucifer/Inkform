@@ -1,4 +1,14 @@
 // Only financial references are persisted. No health answers, signatures or PDFs.
+import {
+  ANONYMIZED,
+  LAST_BACKUP_KEY,
+  anonymizeRecord,
+  dueForAnonymization,
+  dueForPdfDeletion,
+  readRetention,
+  writeRetention,
+  yearsBefore,
+} from "./retention.js";
 export const INCOME_KEY = "inkform.income.v1";
 const incomeFields = [
   "id",
@@ -11,6 +21,10 @@ const incomeFields = [
   "updatedAt",
   // Optional: true when the income was booked although the signed PDF was not filed.
   "pdfMissing",
+  // Optional dates (YYYY-MM-DD): PDF deleted in the Files app after the retention period;
+  // name and PDF reference removed from this list.
+  "pdfDeletedAt",
+  "anonymizedAt",
 ];
 export function incomeId() {
   return (
@@ -63,6 +77,16 @@ export function validateIncomeRecord(value) {
     throw Error("Ungültige Angabe: pdfMissing.");
   // Stored only when set, so existing entries and backups stay unchanged.
   if (value.pdfMissing === true) row.pdfMissing = true;
+  for (const key of ["pdfDeletedAt", "anonymizedAt"]) {
+    if (value[key] === undefined || value[key] === null || value[key] === "") continue;
+    if (
+      typeof value[key] !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(value[key]) ||
+      !Number.isFinite(Date.parse(value[key]))
+    )
+      throw Error(`Ungültige Angabe: ${key}.`);
+    row[key] = value[key];
+  }
   return row;
 }
 export function validateIncomeBackup(value) {
@@ -113,6 +137,15 @@ export function createIncomeStore(storage) {
         if (!old || old.updatedAt !== expectedTime)
           throw Error("Dieser Eintrag wurde inzwischen geändert oder entfernt. Bitte neu öffnen.");
         return records.map((r) => (r.id === row.id ? row : r));
+      }),
+    // Several entries at once, all or nothing (retention actions).
+    updateMany: (rows) =>
+      mutate((records) => {
+        const changed = new Map(rows.map((r) => [r.id, validateIncomeRecord(r)]));
+        for (const id of changed.keys())
+          if (!records.some((r) => r.id === id))
+            throw Error("Ein Eintrag wurde inzwischen entfernt. Bitte neu öffnen.");
+        return records.map((r) => changed.get(r.id) ?? r);
       }),
     remove: (id, expectedTime) =>
       mutate((records) => {
@@ -192,7 +225,10 @@ export function incomeCsv(records) {
       r.customer,
       euros(r.totalCents),
       euros(r.depositCents),
-      (r.totalCents === null ? "Preis offen" : "Preis erfasst") + (r.pdfMissing ? " · PDF fehlt" : ""),
+      (r.totalCents === null ? "Preis offen" : "Preis erfasst") +
+        (r.pdfMissing ? " · PDF fehlt" : "") +
+        (r.pdfDeletedAt ? ` · PDF gelöscht ${r.pdfDeletedAt}` : "") +
+        (r.anonymizedAt ? ` · anonymisiert ${r.anonymizedAt}` : ""),
       r.source,
     ]),
   ];
@@ -301,6 +337,9 @@ export function createIncomeFeature({
         source: input("source").value,
         updatedAt: new Date().toISOString(),
         pdfMissing: input("pdfMissing").checked,
+        // Retention marks are kept when an entry is edited.
+        pdfDeletedAt: editing?.pdfDeletedAt,
+        anonymizedAt: editing?.anonymizedAt,
       });
       if (editing) store.update(row, editing.updatedAt);
       else store.add(row);
@@ -401,7 +440,7 @@ export function createIncomeFeature({
       <div class="income-summary"><strong>${money(summary.totalCents)}<small>Summe bekannter Gesamtpreise</small></strong><strong>${summary.count}<small>Einwilligungen</small></strong><strong>${summary.open}<small>Preise offen – nicht in der Summe</small></strong></div>
       <div class="ad-actions-row income-actions"><button class="ad-button primary" data-income-action="add">Einwilligung nachtragen</button><button class="ad-button" data-income-action="pdf"${rows.length ? "" : " disabled"}>Gefilterte Liste als PDF</button><button class="ad-button" data-income-action="csv"${rows.length ? "" : " disabled"}>Gefilterte Liste als CSV</button></div>
       <p class="ad-preview-note">Neue Einwilligungen werden übernommen, sobald du als Inhaber die Ablage des unterschriebenen PDFs bestätigst. Ältere PDFs hier nachtragen; die App durchsucht keine Dateien-Ordner.</p>
-      <div class="income-table-wrap"><table class="income-table"><caption>Einwilligungen im gewählten Zeitraum</caption><thead><tr><th>Termin</th><th>Artist</th><th>Name</th><th>Gesamtkosten</th><th>Anzahlung</th><th>Bearbeiten</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td>${e(r.date.split("-").reverse().join("."))}</td><td>${e(r.artist || "Nicht zugeordnet")}</td><td>${e(r.customer)}${r.pdfMissing ? ' <span class="income-open">PDF fehlt</span>' : ""}${r.source ? `<small>${e(r.source)}</small>` : ""}</td><td>${r.totalCents === null ? '<span class="income-open">Preis offen</span>' : money(r.totalCents)}</td><td>${r.depositCents === null ? "–" : money(r.depositCents)}</td><td><button class="ad-button" data-income-edit="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} bearbeiten">Bearbeiten</button><button class="ad-button danger" data-income-remove="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} entfernen">Entfernen</button></td></tr>`).join("") : '<tr><td colspan="6">Keine Einwilligungen für diese Auswahl.</td></tr>'}</tbody></table></div>
+      <div class="income-table-wrap"><table class="income-table"><caption>Einwilligungen im gewählten Zeitraum</caption><thead><tr><th>Termin</th><th>Artist</th><th>Name</th><th>Gesamtkosten</th><th>Anzahlung</th><th>Bearbeiten</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td>${e(r.date.split("-").reverse().join("."))}</td><td>${e(r.artist || "Nicht zugeordnet")}</td><td>${e(r.customer)}${r.pdfMissing ? ' <span class="income-open">PDF fehlt</span>' : ""}${r.source ? `<small>${e(r.source)}</small>` : ""}${r.pdfDeletedAt ? `<small>PDF gelöscht am ${e(r.pdfDeletedAt.split("-").reverse().join("."))}</small>` : ""}</td><td>${r.totalCents === null ? '<span class="income-open">Preis offen</span>' : money(r.totalCents)}</td><td>${r.depositCents === null ? "–" : money(r.depositCents)}</td><td><button class="ad-button" data-income-edit="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} bearbeiten">Bearbeiten</button><button class="ad-button danger" data-income-remove="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} entfernen">Entfernen</button></td></tr>`).join("") : '<tr><td colspan="6">Keine Einwilligungen für diese Auswahl.</td></tr>'}</tbody></table></div>
       <details class="income-daily"><summary>Tagessummen je Artist</summary><ul>${
         [...daily.values()]
           .map((day) => {
@@ -420,6 +459,63 @@ export function createIncomeFeature({
   function refresh() {
     const host = document.getElementById("income-content");
     if (host) host.innerHTML = view();
+    const retention = document.getElementById("retention-content");
+    if (retention) retention.innerHTML = retentionView();
+  }
+  const dateDe = (iso) => iso.split("-").reverse().join(".");
+  // Admin page "Aufbewahrung": deadlines, deletion list for consent PDFs, anonymization.
+  function retentionView() {
+    try {
+      if (!isUnlocked())
+        return '<p class="ad-notice">Bitte den Admin-Bereich mit der Inhaber-PIN entsperren.</p>';
+      const { pdfYears, incomeYears } = readRetention(storage),
+        all = store.list(),
+        day = today();
+      const pdfDue = dueForPdfDeletion(all, pdfYears, day),
+        anonDue = dueForAnonymization(all, incomeYears, day);
+      const deleted = all.filter((r) => r.pdfDeletedAt).length,
+        anonymized = all.filter((r) => r.anonymizedAt).length;
+      const field = (id, label, value, help) =>
+        `<div class="ad-field"><label for="${id}">${label}</label><input id="${id}" type="number" inputmode="numeric" min="1" max="50" step="1" placeholder="keine Frist" value="${value ?? ""}"><small>${help}</small></div>`;
+      const pdfRows = pdfDue
+        .map(
+          (r) =>
+            `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.customer)}</td><td>${r.source ? e(r.source) : "<em>kein Dateiname</em>"}</td><td><button class="ad-button" data-retention-deleted="${e(r.id)}" aria-label="PDF für ${e(r.customer)} als gelöscht markieren">Gelöscht</button></td></tr>`,
+        )
+        .join("");
+      const anonRows = anonDue
+        .slice(0, 50)
+        .map(
+          (r) =>
+            `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.artist || "Nicht zugeordnet")}</td><td>${e(r.customer)}</td><td>${r.totalCents === null ? "Preis offen" : money(r.totalCents)}</td></tr>`,
+        )
+        .join("");
+      return `<section class="ad-panel"><div class="ad-panel-header"><h2>Fristen</h2></div><div class="ad-panel-body">
+      <p class="ad-section-copy">Die Fristen legt das Studio selbst fest, im Zweifel mit Datenschutz- oder Steuerberatung. Die App gibt keine Fristen vor und löscht nichts von selbst. Gezählt wird ab dem Tattoo-Termin. Ohne Frist wird nichts angezeigt.</p>
+      <div class="ad-fields">${field("retention-pdf-years", "Einwilligungs-PDFs aufbewahren (Jahre)", pdfYears, "Danach erscheint das PDF in der Löschliste.")}${field("retention-income-years", "Namen in der Einnahmenliste behalten (Jahre)", incomeYears, "Danach können Name und PDF-Dateiname entfernt werden; Datum, Artist und Beträge bleiben.")}</div>
+      <div class="ad-actions-row"><button class="ad-button primary" data-retention-action="save">Fristen speichern</button></div>
+      <p class="ad-preview-note">Die Fristen gelten nur auf diesem Gerät und sind nicht Teil der Einstellungs-Sicherung.</p>
+      </div></section>
+      <section class="ad-panel"><div class="ad-panel-header"><h2>Löschliste: Einwilligungs-PDFs</h2><small>${deleted} bereits als gelöscht markiert</small></div><div class="ad-panel-body">
+      ${
+        pdfYears === null
+          ? '<p class="ad-notice">Keine Frist eingetragen. Es wird nichts zur Löschung angezeigt.</p>'
+          : `<p class="ad-section-copy">Termine vor dem ${e(dateDe(yearsBefore(day, pdfYears)))}. Die App kann Dateien in der Dateien-App nicht sehen und nicht löschen: Bitte jedes PDF dort löschen (auch in Sicherungen auf dem Mac) und erst dann hier als gelöscht markieren.</p>
+      <div class="income-table-wrap"><table class="income-table"><caption>Fällige Einwilligungs-PDFs</caption><thead><tr><th>Termin</th><th>Name</th><th>PDF-Dateiname</th><th>Erledigt</th></tr></thead><tbody>${pdfRows || '<tr><td colspan="4">Keine PDFs fällig.</td></tr>'}</tbody></table></div>`
+      }
+      </div></section>
+      <section class="ad-panel"><div class="ad-panel-header"><h2>Einnahmenliste anonymisieren</h2><small>${anonymized} Einträge bereits anonymisiert</small></div><div class="ad-panel-body">
+      ${
+        incomeYears === null
+          ? '<p class="ad-notice">Keine Frist eingetragen. Es wird nichts anonymisiert.</p>'
+          : `<p class="ad-section-copy">${anonDue.length} Einträge mit Termin vor dem ${e(dateDe(yearsBefore(day, incomeYears)))}. Beim Anonymisieren werden Name und PDF-Dateiname durch „${ANONYMIZED}“ bzw. leer ersetzt; Datum, Artist und Beträge bleiben für Summen erhalten. Das lässt sich nicht rückgängig machen. Ältere JSON-Sicherungen enthalten die Namen weiterhin und müssen separat gelöscht werden.</p>
+      ${anonRows ? `<div class="income-table-wrap"><table class="income-table"><caption>Vorschau${anonDue.length > 50 ? " (erste 50)" : ""}</caption><thead><tr><th>Termin</th><th>Artist</th><th>Name</th><th>Gesamtkosten</th></tr></thead><tbody>${anonRows}</tbody></table></div>` : ""}
+      <div class="ad-actions-row"><button class="ad-button" data-income-action="backup">Vorher alle Einnahmen als JSON sichern</button><button class="ad-button danger" data-retention-action="anonymize"${anonDue.length ? "" : " disabled"}>${anonDue.length} Einträge anonymisieren</button></div>`
+      }
+      </div></section>`;
+    } catch (error) {
+      return `<div class="ad-error" role="alert">Aufbewahrung nicht verfügbar: ${e(error.message)}</div>`;
+    }
   }
   function report(rows) {
     const missing = unsupportedChars(rows.map((r) => r.artist + r.customer).join(""));
@@ -491,6 +587,41 @@ export function createIncomeFeature({
     const button = event.target.closest("button");
     if (!button || !isUnlocked()) return;
     try {
+      if (button.dataset.retentionDeleted) {
+        const row = store.list().find((r) => r.id === button.dataset.retentionDeleted);
+        if (
+          row &&
+          window.confirm(
+            `Ist das PDF ${row.source ? `„${row.source}“` : `für ${row.customer}`} in der Dateien-App und in allen Sicherungen gelöscht?`,
+          )
+        ) {
+          store.updateMany([{ ...row, pdfDeletedAt: today(), updatedAt: new Date().toISOString() }]);
+          refresh();
+          notify("Als gelöscht markiert.");
+        }
+      }
+      if (button.dataset.retentionAction === "save") {
+        writeRetention(storage, {
+          pdfYears: document.getElementById("retention-pdf-years").value,
+          incomeYears: document.getElementById("retention-income-years").value,
+        });
+        refresh();
+        notify("Fristen gespeichert.");
+      }
+      if (button.dataset.retentionAction === "anonymize") {
+        const day = today(),
+          rows = dueForAnonymization(store.list(), readRetention(storage).incomeYears, day);
+        if (
+          rows.length &&
+          window.confirm(
+            `${rows.length} Einträge anonymisieren? Name und PDF-Dateiname werden entfernt, Beträge bleiben. Das lässt sich nicht rückgängig machen. Hast du vorher eine Sicherung erstellt?`,
+          )
+        ) {
+          store.updateMany(rows.map((r) => anonymizeRecord(r, day)));
+          refresh();
+          notify(`${rows.length} Einträge anonymisiert.`);
+        }
+      }
       if (button.dataset.incomeEdit)
         openEdit(store.list().find((r) => r.id === button.dataset.incomeEdit));
       if (button.dataset.incomeRemove) {
@@ -516,6 +647,9 @@ export function createIncomeFeature({
             }),
             `Inkform_Einnahmen_Sicherung_${today()}.json`,
           );
+          try {
+            storage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
+          } catch (_) {}
           break;
         case "import":
           picker.click();
@@ -539,6 +673,8 @@ export function createIncomeFeature({
   });
   return {
     view,
+    retentionView,
+    list: () => store.list(),
     lock() {
       editor.close();
       refresh();

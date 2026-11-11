@@ -33,6 +33,7 @@ const TEMPLATED = [
   "src/pdf-fonts.js",
   "src/pending.js",
   "src/consent.js",
+  "src/retention.js",
   "src/app.js",
 ];
 
@@ -133,19 +134,22 @@ export async function buildProfile(ref) {
       .replace("__PDF_FONT_COVERAGE__", () => pdfFonts.coverage),
     pending = filled["src/pending.js"],
     consent = filled["src/consent.js"],
+    retention = filled["src/retention.js"],
     app = filled["src/app.js"];
   const exported = /^export\s+(?=(?:const|(?:async\s+)?function)\s)/gm;
 
   // Both outputs include the logo and every library. No CDN or sibling file is needed.
+  // All modules are concatenated into one script, so their imports of each other are removed.
+  const local = /^import\s*\{[^}]*\}\s*from\s*["']\.\/[\w-]+\.js["'];?\s*/gm;
   const bundledJs = [
     defaults.replace(/^export\s+(?=const\s)/gm, ""),
     access.replace(/^export\s+(?=(?:const|(?:async\s+)?function)\s)/gm, ""),
-    income.replace(/^export\s+(?=(?:const|function)\s)/gm, ""),
+    retention.replace(exported, ""),
+    income.replace(local, "").replace(/^export\s+(?=(?:const|function)\s)/gm, ""),
     fonts.replace(exported, ""),
     pending.replace(exported, ""),
     consent.replace(exported, ""),
-    // All modules above are concatenated into one script, so app.js imports them directly.
-    app.replace(/^import\s*\{[^}]*\}\s*from\s*["']\.\/[\w-]+\.js["'];?\s*/gm, ""),
+    app.replace(local, ""),
   ].join("\n");
   if (/^\s*(?:import|export)\s/m.test(bundledJs) || /__PDF_FONT_\w+__/.test(bundledJs))
     throw new Error("Bundle enthält noch Modul-Importe/-Exporte oder Schrift-Platzhalter.");
