@@ -2,7 +2,7 @@
 // processes (the existing tools, unchanged) and turns their output into a readable summary.
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { root } from "../scripts/build.mjs";
 import { gitInfo } from "./status.mjs";
@@ -76,7 +76,7 @@ export async function testFileArgs() {
 }
 
 // fs and listTests can be replaced in tests to simulate disk and permission errors.
-export function createRunner({ stateDir, env = process.env, fs = { mkdir, writeFile, rename }, listTests = testFileArgs }) {
+export function createRunner({ stateDir, env = process.env, fs = { mkdir, writeFile, rename, rm }, listTests = testFileArgs }) {
   let current = null;
   // Results of this session's runs, shown even if their record could not be saved.
   const session = new Map();
@@ -162,12 +162,14 @@ export function createRunner({ stateDir, env = process.env, fs = { mkdir, writeF
       // Green only once the record is saved (written to a temporary file, then renamed, so a
       // record is never half-written). The slot is released last, on every path.
       const endedAt = new Date().toISOString();
+      const file = path.join(runsDir, `${record.startedAt.replace(/[:.]/g, "-")}_${entry.key}_${kind}.json`);
       try {
         await fs.mkdir(runsDir, { recursive: true, mode: 0o700 });
-        const file = path.join(runsDir, `${record.startedAt.replace(/[:.]/g, "-")}_${entry.key}_${kind}.json`);
         await fs.writeFile(`${file}.tmp`, JSON.stringify({ ...record, ok, endedAt }, null, 2));
         await fs.rename(`${file}.tmp`, file);
       } catch (error) {
+        // No half-written leftovers: the temporary file goes, whatever step failed.
+        await fs.rm?.(`${file}.tmp`, { force: true }).catch(() => {});
         ok = false;
         record.saveError = `Protokoll nicht gespeichert: ${error.message}`;
         record.log += `\n${record.saveError}\n`;
@@ -201,7 +203,7 @@ export function createRunner({ stateDir, env = process.env, fs = { mkdir, writeF
       }
       if (!Array.isArray(r?.steps)) continue;
       for (const s of r.steps)
-        if (KINDS[s.kind]) result[`${r.studio}:${s.kind}`] = { at: r.endedAt, ok: s.ok === true, text: String(s.text ?? ""), core: r.core, profile: r.profile };
+        if (s && typeof s === "object" && Object.hasOwn(KINDS, s.kind)) result[`${r.studio}:${s.kind}`] = { at: r.endedAt, ok: s.ok === true, text: String(s.text ?? ""), core: r.core, profile: r.profile };
     }
     // This session's results win, including runs whose record could not be saved.
     for (const [key, value] of session) result[key] = value;

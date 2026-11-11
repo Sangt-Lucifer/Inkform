@@ -289,3 +289,37 @@ test("a damaged run record is skipped and never blocks the overview", async () =
   const latest = await runner.latest();
   assert.equal(latest["blanko:build"].ok, true);
 });
+
+test("a damaged step inside a readable record is skipped too", async () => {
+  const state = path.join(base, "state-null-step");
+  const { mkdir: mk } = await import("node:fs/promises");
+  await mk(path.join(state, "laeufe"), { recursive: true });
+  await writeFile(
+    path.join(state, "laeufe", "2026-01-01_blanko_build.json"),
+    JSON.stringify({ studio: "blanko", endedAt: "x", steps: [null, 7, { kind: "toString" }, { kind: "build", ok: true, text: "ok" }] }),
+  );
+  const latest = await createRunner({ stateDir: state, env }).latest();
+  assert.equal(latest["blanko:build"].ok, true);
+  assert.equal(Object.keys(latest).length, 1);
+});
+
+test("a failed save leaves no temporary file behind", async () => {
+  const state = path.join(base, "state-rename");
+  const real = await import("node:fs/promises");
+  const runner = createRunner({
+    stateDir: state,
+    env,
+    fs: {
+      mkdir: real.mkdir,
+      writeFile: real.writeFile,
+      rename: async () => {
+        throw Object.assign(Error("EIO: i/o error, rename"), { code: "EIO" });
+      },
+      rm: real.rm,
+    },
+  });
+  await runner.start(await blankoEntry(), "build");
+  const run = await finished(runner);
+  assert.equal(run.ok, false);
+  assert.deepEqual(await real.readdir(path.join(state, "laeufe")), []);
+});
