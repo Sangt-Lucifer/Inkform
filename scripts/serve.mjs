@@ -41,7 +41,15 @@ const types = {
 
 const logRequests = process.argv.includes("--log-requests");
 const handler = async (request, response) => {
-  if (logRequests) console.log(`ANFRAGE ${new Date().toISOString()} ${request.method} ${new URL(request.url, "http://localhost").pathname}`);
+  if (logRequests)
+    // After the answer, with its status; only time, method, status and path (never the client).
+    response.on("finish", () => {
+      let pathname = "?";
+      try {
+        pathname = new URL(request.url, "http://localhost").pathname;
+      } catch {}
+      console.log(`ANFRAGE ${new Date().toISOString()} ${request.method} ${response.statusCode} ${pathname.replace(/\s/g, "")}`);
+    });
   try {
     if (!["GET", "HEAD"].includes(request.method)) {
       response.writeHead(405).end();

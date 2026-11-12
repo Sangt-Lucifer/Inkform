@@ -16,7 +16,7 @@ import { checkDraft, commitStudio, createStudio, editable, pendingChanges, readE
 import { execFile } from "node:child_process";
 import { certStatus, createCert, renewCert } from "./certs.mjs";
 import { exportStudio, listExports, readiness } from "./export.mjs";
-import { ADDRESS, CHECKLIST, approveNeutralName, confirmInstalled, createOnsite, setChecklist, studioState, writeWebloc } from "./onsite.mjs";
+import { ADDRESS, CHECKLIST, approveNeutralName, loadedByDevice, confirmInstalled, createOnsite, setChecklist, studioState, writeWebloc } from "./onsite.mjs";
 import { qrMatrix } from "./qr.mjs";
 import { createRunner } from "./runs.mjs";
 import {
@@ -203,8 +203,8 @@ export async function startWerkstatt({
     if (p === "/api/vor-ort/freigeben") {
       // Only after a Blanko session that the (test) iPad actually loaded.
       const s = onsite.current();
-      if (entry.kind !== "blanko" || !s || s.id !== entry.id || !s.requests.some((r) => r.path === "/" || r.path === "/index.html"))
-        return send(res, 409, { error: "Erst mit Blanko im Vor-Ort-Modus ein Test-iPad die App laden lassen." });
+      if (entry.kind !== "blanko" || !s || s.id !== entry.id || !loadedByDevice(s.requests))
+        return send(res, 409, { error: "Erst mit Blanko im Vor-Ort-Modus ein Test-iPad die App vollständig laden lassen (Startseite und Offline-Speicher)." });
       return send(res, 200, { neutralApproved: await approveNeutralName(stateDir) });
     }
     return send(res, 404, { error: "Unbekannt." });

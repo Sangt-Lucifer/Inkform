@@ -5,6 +5,7 @@
 // the request log keeps time and path only, never an address. State kept per studio: installed
 // version and date, checklist dates. No customer data.
 import { execFile, spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -73,18 +74,32 @@ async function readState(stateDir) {
 async function writeState(stateDir, data) {
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   const file = path.join(stateDir, "vor-ort.json");
-  await writeFile(`${file}.tmp`, JSON.stringify(data, null, 2) + "\n", { mode: 0o600 });
-  await rename(`${file}.tmp`, file);
+  const tmp = `${file}.${randomBytes(6).toString("hex")}.tmp`;
+  await writeFile(tmp, JSON.stringify(data, null, 2) + "\n", { mode: 0o600 });
+  await rename(tmp, file);
+}
+// All changes to the state file run one after another: no click can overwrite another one.
+let stateQueue = Promise.resolve();
+function locked(work) {
+  const result = stateQueue.then(work, work);
+  stateQueue = result.catch(() => {});
+  return result;
 }
 export async function studioState(stateDir, id) {
   const data = await readState(stateDir);
   return { installed: data.studios?.[id]?.installed ?? null, checklist: data.studios?.[id]?.checklist ?? {}, neutralApproved: data.neutralApproved ?? null };
 }
-async function updateStudio(stateDir, id, change) {
-  const data = await readState(stateDir);
-  data.studios ??= {};
-  data.studios[id] = change({ installed: null, checklist: {}, ...(data.studios[id] ?? {}) });
-  await writeState(stateDir, data);
+// change() may return { error } to refuse; it always sees the latest saved state.
+function updateStudio(stateDir, id, change) {
+  return locked(async () => {
+    const data = await readState(stateDir);
+    data.studios ??= {};
+    const next = change({ installed: null, checklist: {}, ...(data.studios[id] ?? {}) });
+    if (next.error) return next;
+    data.studios[id] = next;
+    await writeState(stateDir, data);
+    return null;
+  });
 }
 export async function setChecklist(stateDir, id, key, done, now = new Date()) {
   if (!CHECKLIST.some(([k]) => k === key)) return { error: "Unbekannter Punkt." };
@@ -98,17 +113,26 @@ export async function setChecklist(stateDir, id, key, done, now = new Date()) {
 }
 export async function confirmInstalled(stateDir, id, version, now = new Date()) {
   if (!/^\d+\.\d+\.\d+-p\d+$/.test(String(version))) return { error: "Ungültige Version." };
-  const current = await studioState(stateDir, id);
-  if (current.installed && compareVersions(version, current.installed.version) < 0) return { error: "Das wäre ein Rückschritt; nicht bestätigt." };
-  await updateStudio(stateDir, id, (s) => ({ ...s, installed: { version, date: now.toISOString().slice(0, 10) } }));
-  return studioState(stateDir, id);
+  const refused = await updateStudio(stateDir, id, (s) =>
+    s.installed && compareVersions(version, s.installed.version) < 0
+      ? { error: "Das wäre ein Rückschritt; nicht bestätigt." }
+      : { ...s, installed: { version, date: now.toISOString().slice(0, 10) } },
+  );
+  return refused ?? studioState(stateDir, id);
 }
 // After a successful first test with a test iPad (Blanko), the neutral name may be used for studios.
-export async function approveNeutralName(stateDir, now = new Date()) {
-  const data = await readState(stateDir);
-  data.neutralApproved = now.toISOString().slice(0, 10);
-  await writeState(stateDir, data);
-  return data.neutralApproved;
+export function approveNeutralName(stateDir, now = new Date()) {
+  return locked(async () => {
+    const data = await readState(stateDir);
+    data.neutralApproved = now.toISOString().slice(0, 10);
+    await writeState(stateDir, data);
+    return data.neutralApproved;
+  });
+}
+// A test iPad really loaded the app: index and service worker delivered successfully via GET.
+export function loadedByDevice(requests) {
+  const ok = (p) => requests.some((r) => r.method === "GET" && r.status === 200 && p.includes(r.path));
+  return ok(["/", "/index.html"]) && ok(["/sw.js"]);
 }
 
 // .webloc for AirDrop: opens the address directly in Safari.
@@ -174,20 +198,37 @@ export function createOnsite({
     return { ok: list.every((c) => c.ok), checks: list, exp, net, cert, state };
   }
 
+  let starting = null;
+  function stopSession(session, reason) {
+    if (!session || session.endedAt) return session;
+    clearTimeout(session.timer);
+    for (const child of [session.server, session.announce]) if (child && child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+    session.endedAt = new Date().toISOString();
+    session.reason = reason;
+    return session;
+  }
   function stop(reason = "beendet") {
-    if (!current || current.endedAt) return current;
-    clearTimeout(current.timer);
-    for (const child of [current.server, current.announce]) if (child && child.exitCode === null) child.kill("SIGTERM");
-    current.endedAt = new Date().toISOString();
-    current.reason = reason;
-    return current;
+    // A start still in its checks is cancelled; it never spawns anything afterwards.
+    if (starting) starting.cancelled = reason;
+    return stopSession(current, reason);
   }
 
   async function start(entry, exportName) {
-    if (current && !current.endedAt) return { error: "Der Vor-Ort-Modus läuft schon." };
-    const result = await checks(entry, exportName);
-    if (!result.ok) return { error: "Voraussetzungen nicht erfüllt.", checks: result.checks };
-    const { exp, net } = result;
+    // The slot is taken before the first await: two starts can never both run.
+    if ((current && !current.endedAt) || starting) return { error: "Der Vor-Ort-Modus läuft schon oder startet gerade." };
+    const attempt = { cancelled: null };
+    starting = attempt;
+    try {
+      const result = await checks(entry, exportName);
+      if (attempt.cancelled) return { error: `Start abgebrochen (${attempt.cancelled}).` };
+      if (!result.ok) return { error: "Voraussetzungen nicht erfüllt.", checks: result.checks };
+      return await launch(entry, result);
+    } finally {
+      starting = null;
+    }
+  }
+
+  async function launch(entry, { exp, net }) {
     const session = {
       studio: entry.key,
       id: entry.id,
@@ -202,14 +243,17 @@ export function createOnsite({
       reason: null,
     };
     current = session;
+    const end = (reason) => stopSession(session, reason);
     const idle = () => {
       clearTimeout(session.timer);
-      session.timer = setTimeout(() => stop("30 Minuten ohne Anfrage"), idleMs);
+      session.timer = setTimeout(() => end("30 Minuten ohne Anfrage"), idleMs);
       session.timer.unref?.();
     };
-    // Announce the neutral name for the Wi-Fi address only, without renaming the Mac.
+    // Announce the neutral name for the Wi-Fi address only, without renaming the Mac. If the
+    // announcement ends, the on-site mode ends with it: the address would no longer work.
     session.announce = spawnFn("dns-sd", ["-P", `Inkform ${entry.id}`, "_https._tcp", "local", String(port), NEUTRAL_HOST, net.ip], { stdio: "ignore" });
-    session.announce.on?.("error", () => stop("Bonjour-Ankündigung fehlgeschlagen"));
+    session.announce.on?.("error", () => end("Bonjour-Ankündigung fehlgeschlagen"));
+    session.announce.on?.("exit", () => end(session.endedAt ? session.reason : "Bonjour-Ankündigung beendet; die Adresse ist nicht mehr erreichbar"));
     session.server = spawnFn(
       process.execPath,
       [path.join(root, "scripts", "serve.mjs"), "--lan", "--dir", path.join(exp.folder, "dist"), "--cert-dir", studioCertDir(entry.id, env), "--bind", net.ip, "--port", String(port), "--log-requests"],
@@ -224,10 +268,10 @@ export function createOnsite({
           const line = buffer.slice(0, nl);
           buffer = buffer.slice(nl + 1);
           if (line.startsWith("Für das iPad")) resolve(true);
-          const m = line.match(/^ANFRAGE (\S+) (GET|HEAD) (\S+)$/);
+          const m = line.match(/^ANFRAGE (\S+) (GET|HEAD) (\d{3}) (\S+)$/);
           if (m) {
             session.lastRequest = m[1];
-            session.requests.push({ at: m[1], path: m[3] });
+            session.requests.push({ at: m[1], method: m[2], status: Number(m[3]), path: m[4] });
             if (session.requests.length > 200) session.requests.shift();
             idle();
           }
@@ -236,13 +280,16 @@ export function createOnsite({
       session.server.on("error", () => resolve(false));
       session.server.on("exit", () => {
         resolve(false);
-        stop(session.endedAt ? session.reason : "Server beendet");
+        end(session.endedAt ? session.reason : "Server beendet");
       });
     });
     const started = await Promise.race([ready, new Promise((r) => setTimeout(() => r(false), 10_000).unref())]);
-    if (!started) {
-      stop("Server konnte nicht starten");
-      return { error: "Der Server konnte nicht starten (Port belegt oder Zertifikat fehlt?)." };
+    // Give the announcement a moment: if it fails right away, nothing is reported as running.
+    await new Promise((r) => setTimeout(r, 300));
+    if (!started || session.endedAt) {
+      const why = session.endedAt ? session.reason : "Server konnte nicht starten";
+      end(why);
+      return { error: `Vor-Ort-Modus nicht gestartet: ${why}.` };
     }
     idle();
     return { session: view(session) };

@@ -11,7 +11,7 @@
 // a file) and never stored. The existing installation's certificate in .../Inkform/zertifikat/ is
 // not touched by any of this.
 import { spawn } from "node:child_process";
-import { access, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -60,7 +60,8 @@ async function until(file) {
 
 export async function certStatus(id, env = process.env) {
   const dir = studioCertDir(id, env);
-  if (!(await exists(path.join(dir, "ca.key")))) return { exists: false, dir, host: NEUTRAL_HOST };
+  // Complete means: encrypted root key and root certificate. Anything less counts as missing.
+  if (!(await exists(path.join(dir, "ca.key"))) || !(await exists(path.join(dir, `${id}.crt`)))) return { exists: false, dir, host: NEUTRAL_HOST };
   const root = await until(path.join(dir, `${id}.crt`)).catch(() => null);
   const server = (await exists(path.join(dir, "server.crt"))) ? await until(path.join(dir, "server.crt")).catch(() => null) : null;
   const warnings = [];
@@ -86,13 +87,11 @@ async function serverCert(dir, id, password) {
     );
     await ssl(["verify", "-CAfile", file(`${id}.crt`), file("server.crt.neu")]);
   } catch (error) {
-    const { rm } = await import("node:fs/promises");
     await rm(file("server.key.neu"), { force: true });
     await rm(file("server.crt.neu"), { force: true });
     throw error;
   }
   // Replaced only once the new pair is complete and verified.
-  const { rename } = await import("node:fs/promises");
   await rename(file("server.key.neu"), file("server.key"));
   await rename(file("server.crt.neu"), file("server.crt"));
   await writeFile(file("host.txt"), NEUTRAL_HOST + "\n");
@@ -103,21 +102,29 @@ export async function createCert(id, password, env = process.env) {
   const bad = passwordError(password);
   if (bad) return { error: bad };
   const dir = studioCertDir(id, env);
-  if (await exists(path.join(dir, "ca.key"))) return { error: "Für dieses Studio gibt es schon ein Stammzertifikat. Es wird nicht ersetzt." };
-  await mkdir(dir, { recursive: true, mode: 0o700 });
-  await chmod(dir, 0o700);
-  await chmod(path.dirname(dir), 0o700).catch(() => {});
-  const file = (n) => path.join(dir, n);
-  await writeFile(
-    file("ca.cnf"),
-    `[req]\ndistinguished_name = dn\nprompt = no\nx509_extensions = v3\n[dn]\nCN = Inkform ${id} (${NEUTRAL_HOST})\nO = Inkform\n[v3]\nbasicConstraints = critical, CA:TRUE, pathlen:0\nkeyUsage = critical, keyCertSign, cRLSign\nsubjectKeyIdentifier = hash\nnameConstraints = critical, permitted;DNS:${NEUTRAL_HOST}\n`,
-  );
+  if ((await certStatus(id, env)).exists) return { error: "Für dieses Studio gibt es schon ein Stammzertifikat. Es wird nicht ersetzt." };
+  // Everything is made in a private work folder next to it and only takes the studio's name once
+  // complete and verified. A half-made folder from an interrupted earlier attempt is kept aside
+  // (renamed, never deleted), so a new attempt is always possible.
+  const parent = path.dirname(dir);
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  await chmod(parent, 0o700).catch(() => {});
+  const work = await mkdtemp(path.join(parent, `.${id}.neu-`));
+  await chmod(work, 0o700);
+  const file = (n) => path.join(work, n);
   try {
+    await writeFile(
+      file("ca.cnf"),
+      `[req]\ndistinguished_name = dn\nprompt = no\nx509_extensions = v3\n[dn]\nCN = Inkform ${id} (${NEUTRAL_HOST})\nO = Inkform\n[v3]\nbasicConstraints = critical, CA:TRUE, pathlen:0\nkeyUsage = critical, keyCertSign, cRLSign\nsubjectKeyIdentifier = hash\nnameConstraints = critical, permitted;DNS:${NEUTRAL_HOST}\n`,
+    );
     await ssl(["genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:3072", "-aes-256-cbc", "-pass", "fd:3", "-out", file("ca.key")], password);
     await chmod(file("ca.key"), 0o600);
     await ssl(["req", "-x509", "-new", "-key", file("ca.key"), "-passin", "fd:3", "-sha256", "-days", "3650", "-out", file(`${id}.crt`), "-config", file("ca.cnf")], password);
-    await serverCert(dir, id, password);
+    await serverCert(work, id, password);
+    if (await exists(dir)) await rename(dir, path.join(parent, `.${id}.unvollstaendig-${Date.now()}`));
+    await rename(work, dir);
   } catch (error) {
+    await rm(work, { recursive: true, force: true }).catch(() => {});
     return { error: `Zertifikat konnte nicht erzeugt werden: ${error.message}` };
   }
   return certStatus(id, env);
@@ -128,7 +135,7 @@ export async function renewCert(id, password, env = process.env) {
   const bad = passwordError(password);
   if (bad) return { error: bad };
   const dir = studioCertDir(id, env);
-  if (!(await exists(path.join(dir, "ca.key")))) return { error: "Noch kein Stammzertifikat für dieses Studio." };
+  if (!(await certStatus(id, env)).exists) return { error: "Noch kein vollständiges Stammzertifikat für dieses Studio." };
   try {
     await serverCert(dir, id, password);
   } catch (error) {

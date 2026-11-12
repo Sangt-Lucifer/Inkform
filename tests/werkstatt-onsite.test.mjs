@@ -6,6 +6,7 @@ import test from "node:test";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { request as httpsRequest } from "node:https";
+import { connect as tlsConnect } from "node:tls";
 import { request } from "node:http";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,7 +15,7 @@ import { deflateSync } from "node:zlib";
 import { root } from "../scripts/build.mjs";
 import { NEUTRAL_HOST, certStatus, createCert, renewCert, studioCertDir } from "../werkstatt/certs.mjs";
 import { exportStudio } from "../werkstatt/export.mjs";
-import { compareVersions, confirmInstalled, createOnsite, setChecklist, studioState } from "../werkstatt/onsite.mjs";
+import { compareVersions, confirmInstalled, createOnsite, loadedByDevice, setChecklist, studioState } from "../werkstatt/onsite.mjs";
 import { qrMatrix } from "../werkstatt/qr.mjs";
 import { listStudios } from "../werkstatt/status.mjs";
 import { startWerkstatt } from "../werkstatt/server.mjs";
@@ -188,7 +189,7 @@ test("serve.mjs with --cert-dir, --bind and --log-requests: only that address, l
     await new Promise((r) => setTimeout(r, 100));
     const log = s.lines.filter((l) => l.startsWith("ANFRAGE"));
     assert.equal(log.length, 1);
-    assert.match(log[0], /^ANFRAGE \S+ GET \/sw\.js$/);
+    assert.match(log[0], /^ANFRAGE \S+ GET 200 \/sw\.js$/);
     assert.doesNotMatch(log[0], /127\.0\.0\.1/);
   } finally {
     s.child.kill();
@@ -276,8 +277,8 @@ test("on-site: serves the export over HTTPS on the given address only, logs path
   assert.match(res.body, /<html/i);
   await new Promise((r) => setTimeout(r, 200));
   const s = onsite.current();
-  assert.deepEqual(s.requests.map((r) => r.path), ["/"]);
-  for (const r of s.requests) assert.deepEqual(Object.keys(r).sort(), ["at", "path"], "time and path only, no client address");
+  assert.deepEqual(s.requests.map((r) => [r.method, r.status, r.path]), [["GET", 200, "/"]]);
+  for (const r of s.requests) assert.deepEqual(Object.keys(r).sort(), ["at", "method", "path", "status"], "no client address");
   assert.match((await onsite.start(blanko, name)).error, /läuft schon/);
   await new Promise((r) => setTimeout(r, 2000));
   const ended = onsite.current();
@@ -354,4 +355,81 @@ test("no repository contains certificate or key files", () => {
     }
     assert.deepEqual(files.split("\n").filter((f) => /\.(key|crt|pem|p12|pfx|csr)$/i.test(f)), [], repo);
   }
+});
+
+// ---------- Review of Phase 4 ----------
+
+test("serve.mjs: a malformed request with --log-requests does not stop the server", async () => {
+  const dir = studioCertDir("beispiel", env);
+  const ca = await readFile(path.join(dir, "beispiel.crt"));
+  const p = port();
+  const s = serve(["--lan", "--port", String(p), "--cert-dir", dir, "--bind", "127.0.0.1", "--log-requests"]);
+  try {
+    await s.first;
+    await new Promise((resolve) => {
+      const socket = tlsConnect({ host: "127.0.0.1", port: p, ca, servername: NEUTRAL_HOST }, () => socket.end("GET //[ HTTP/1.1\r\nHost: x\r\n\r\n"));
+      socket.on("data", () => {});
+      socket.on("close", resolve);
+      socket.on("error", resolve);
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(s.child.exitCode, null, "still running");
+    assert.equal((await getHttps(p, "/", ca)).status, 200);
+  } finally {
+    s.child.kill();
+  }
+});
+
+test("on-site: two starts at once never both run; a stop during the checks cancels the start", async () => {
+  const blanko = (await listStudios({ env, stateDir })).find((s) => s.key === "blanko");
+  const name = (await (await import("../werkstatt/export.mjs")).listExports("beispiel", env)).filter((e) => e.valid).at(-1).name;
+  const onsite = onsiteFor({ port: port() });
+  const [a, b] = await Promise.all([onsite.start(blanko, name), onsite.start(blanko, name)]);
+  assert.equal([a, b].filter((r) => r.session).length, 1);
+  assert.match([a, b].find((r) => r.error).error, /läuft schon oder startet gerade/);
+  onsite.stop("Test");
+  const pending = onsite.start(blanko, name);
+  onsite.stop("sofort beendet");
+  assert.match((await pending).error, /abgebrochen/);
+  assert.ok(!onsite.current() || onsite.current().endedAt);
+});
+
+test("on-site: if the Bonjour announcement ends, the server ends too and nothing is reported as running", async () => {
+  const blanko = (await listStudios({ env, stateDir })).find((s) => s.key === "blanko");
+  const name = (await (await import("../werkstatt/export.mjs")).listExports("beispiel", env)).filter((e) => e.valid).at(-1).name;
+  const p = port();
+  const onsite = onsiteFor({ port: p, spawnFn: (cmd, args, opts) => (cmd === "dns-sd" ? spawn("/usr/bin/false", [], { stdio: "ignore" }) : spawn(cmd, args, opts)) });
+  const r = await onsite.start(blanko, name);
+  assert.match(r.error, /Bonjour-Ankündigung beendet/);
+  await new Promise((res) => setTimeout(res, 300));
+  await assert.rejects(getHttps(p, "/", await readFile(path.join(studioCertDir("beispiel", env), "beispiel.crt"))));
+});
+
+test("certificate: an interrupted earlier attempt never blocks a new one (kept aside, not deleted)", async () => {
+  const dir = studioCertDir("halb", env);
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, "ca.key"), "abgebrochen");
+  assert.equal((await certStatus("halb", env)).exists, false);
+  const r = await createCert("halb", PASSWORD, env);
+  assert.ok(r.exists, r.error);
+  const aside = (await readdir(path.dirname(dir))).filter((n) => n.startsWith(".halb.unvollstaendig-"));
+  assert.equal(aside.length, 1);
+  assert.equal(await readFile(path.join(path.dirname(dir), aside[0], "ca.key"), "utf8"), "abgebrochen");
+  assert.deepEqual((await readdir(path.dirname(dir))).filter((n) => n.startsWith(".halb.neu-")), [], "no work folder left");
+});
+
+test("state: simultaneous clicks are all kept; the installed version never goes backwards", async () => {
+  await Promise.all(["safari", "homescreen", "offline", "flugmodus"].map((k) => setChecklist(stateDir, "parallel", k, true)));
+  assert.deepEqual(Object.keys((await studioState(stateDir, "parallel")).checklist).sort(), ["flugmodus", "homescreen", "offline", "safari"]);
+  await Promise.all([confirmInstalled(stateDir, "parallel", "1.2.0-p5"), confirmInstalled(stateDir, "parallel", "1.2.0-p2")]);
+  assert.equal((await studioState(stateDir, "parallel")).installed.version, "1.2.0-p5");
+  assert.deepEqual((await readdir(stateDir)).filter((n) => n.endsWith(".tmp")), []);
+});
+
+test("approval needs a real load: index and service worker via GET with status 200", () => {
+  const at = new Date().toISOString();
+  assert.equal(loadedByDevice([{ at, method: "HEAD", status: 200, path: "/" }]), false);
+  assert.equal(loadedByDevice([{ at, method: "GET", status: 200, path: "/" }]), false, "the app itself was not loaded yet");
+  assert.equal(loadedByDevice([{ at, method: "GET", status: 404, path: "/" }, { at, method: "GET", status: 200, path: "/sw.js" }]), false);
+  assert.equal(loadedByDevice([{ at, method: "GET", status: 200, path: "/" }, { at, method: "GET", status: 200, path: "/sw.js" }]), true);
 });
