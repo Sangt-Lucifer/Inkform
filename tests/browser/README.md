@@ -10,6 +10,7 @@
 | `abschluss.mjs` | Validierung, Unicode-Namen im PDF, Buchung genau einmal, Neuladen auf „Vielen Dank“, „PDF fehlt“, nicht darstellbare Zeichen, PIN-Sperre über Neuladen; alles im Flugmodus |
 | `aufbewahrung.mjs` | Erinnerung an offene Einwilligung, Sicherheits-Checkliste, Fristen, Löschliste, Anonymisieren, Sicherungsdatum |
 | `sicherung.mjs` | Erinnerung ohne Sicherung und nach dem Abstand, Hinweis auf nicht exportierte Monate, Inhalt der Gesamtsicherung ohne PIN, Abbrechen und beschädigte Dateien ändern nichts, Wiederherstellen ersetzt alles außer der PIN; im Flugmodus |
+| `blanko.mjs` | Nur mit Profil `blanko`: im Flugmodus, keine Mac-Hinweise, PIN nur Ziffern mit eigenen Meldungen, Einrichtungsassistent, Beispieldaten laden und entfernen, Einwilligung mit eingerichtetem Studio |
 | `export.mjs` | PDF-Kopie für den Export beim Bestätigen, Entfernen bei „PDF fehlt“ und gelöschtem Eintrag, Vorschau, leerer Zeitraum, Monat/Jahr/von–bis, Filter, ZIP mit `unzip`, `ditto` und Python geprüft; im Flugmodus |
 | `schriftgroessen.mjs` | Kundenbereich auf vier iPad-Größen: Eingaben und Fließtext ≥ 16 px, nichts < 14 px, kein seitliches Scrollen; mit `INKFORM_FONT_BASELINE=<datei>` zusätzlich keine Schrift kleiner als vorher |
 | `update.mjs` | App-Update: wartet bei angefangenem Formular, übernimmt im Leerlauf ohne Neuladen und löscht die alte Version aus dem Offline-Speicher |

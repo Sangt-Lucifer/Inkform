@@ -36,10 +36,10 @@ function leaks(name, contents, other) {
   return hits;
 }
 
-test("the built-in sample profile exists and lives in the core", () => {
+test("the built-in profiles (sample and neutral edition) exist and live in the core", () => {
   assert.deepEqual(
     builtin.map((d) => path.relative(root, d)),
-    [path.join("profiles", "beispiel")],
+    [path.join("profiles", "beispiel"), path.join("profiles", "blanko")],
   );
 });
 

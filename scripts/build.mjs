@@ -9,6 +9,8 @@
 // Shared code lives in src/. Studio-specific texts are %%token%% placeholders that are
 // filled from <profil>/profile.json. Logo, icons, manifest and owner guide come from the
 // profile folder. Nothing is fetched at runtime: every script, style and image is embedded.
+// A profile with "blank": true is the neutral edition without a studio: no owner guide, a setup
+// assistant at the first start and optional sample data.
 //
 // Studio profiles live outside this repository so that neither the code nor its history
 // contains any studio's data. Their builds default to <profil>/build/ and may never be
@@ -37,6 +39,7 @@ const TEMPLATED = [
   "src/zip.js",
   "src/export.js",
   "src/backup.js",
+  "src/sample.js",
   "src/app.js",
 ];
 
@@ -89,6 +92,9 @@ async function loadProfile(ref) {
   if (profile.id !== id) throw new Error(`${dir}/profile.json: id muss "${id}" sein (Ordnername).`);
   if (inside(dir, root) && !isBuiltin(dir))
     throw new Error("Studio-Profile gehören nicht in das Kern-Repo, sondern nach ../Inkform-Studios/.");
+  if (profile.blank !== undefined && typeof profile.blank !== "boolean")
+    throw new Error(`${id}: "blank" muss true oder false sein.`);
+  if (!profile.blank && !profile.guide) throw new Error(`${id}: profile.json braucht "guide" (Anleitung als PDF).`);
   if (!Array.isArray(profile.markers) || profile.markers.length === 0)
     throw new Error(`${id}: profile.json braucht eine Liste "markers" mit den eigenen Kennzeichen.`);
   for (const [key, value] of Object.entries(profile.text ?? {})) {
@@ -123,7 +129,7 @@ export async function buildProfile(ref) {
     read("public/vendor/tailwind-browser.js"),
     read("public/vendor/jspdf.umd.min.js"),
     readFile(path.join(profile.dir, profile.logo)),
-    readFile(path.join(profile.dir, "Anleitung-iPad-und-Admin.pdf")),
+    profile.blank ? Buffer.alloc(0) : readFile(path.join(profile.dir, "Anleitung-iPad-und-Admin.pdf")),
     loadPdfFonts(path.join(root, "public/vendor")),
   ]);
   const template = filled["src/index.html"],
@@ -141,7 +147,8 @@ export async function buildProfile(ref) {
     zip = filled["src/zip.js"],
     exporter = filled["src/export.js"],
     backup = filled["src/backup.js"],
-    app = filled["src/app.js"];
+    sample = filled["src/sample.js"],
+    app = filled["src/app.js"].replace('"__BLANK_EDITION__"', profile.blank ? '"true"' : '"false"');
   const exported = /^export\s+(?=(?:const|(?:async\s+)?function)\s)/gm;
 
   // Both outputs include the logo and every library. No CDN or sibling file is needed.
@@ -158,9 +165,10 @@ export async function buildProfile(ref) {
     zip.replace(exported, ""),
     exporter.replace(local, "").replace(exported, ""),
     backup.replace(local, "").replace(exported, ""),
+    sample.replace(exported, ""),
     app.replace(local, ""),
   ].join("\n");
-  if (/^\s*(?:import|export)\s/m.test(bundledJs) || /__PDF_FONT_\w+__/.test(bundledJs))
+  if (/^\s*(?:import|export)\s/m.test(bundledJs) || /__PDF_FONT_\w+__|__BLANK_EDITION__/.test(bundledJs))
     throw new Error("Bundle enthält noch Modul-Importe/-Exporte oder Schrift-Platzhalter.");
   const escapeScript = (source) => source.replace(/<\/script/gi, "<\\/script");
   let portable = template

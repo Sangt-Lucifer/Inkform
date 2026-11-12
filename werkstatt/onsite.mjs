@@ -120,7 +120,7 @@ export async function confirmInstalled(stateDir, id, version, now = new Date()) 
   );
   return refused ?? studioState(stateDir, id);
 }
-// After a successful first test with a test iPad (Blanko), the neutral name may be used for studios.
+// After a successful first test with a test iPad (Beispiel), the neutral name may be used for studios.
 export function approveNeutralName(stateDir, now = new Date()) {
   return locked(async () => {
     const data = await readState(stateDir);
@@ -177,13 +177,13 @@ export function createOnsite({
     const exp = exports.find((e) => e.name === exportName);
     add("export", !!exp, exp ? `Export ${exp.name} (geprüft, vollständig)` : "Kein gültiger Export ausgewählt.");
     const state = await studioState(stateDir, entry.id);
-    if (entry.kind !== "blanko")
+    if (entry.kind !== "beispiel")
       add(
         "name",
         !!state.neutralApproved,
         state.neutralApproved
           ? `Neutraler Name freigegeben (Test-iPad am ${state.neutralApproved})`
-          : "Der neutrale Name ist noch nicht mit einem Test-iPad geprüft. Erst mit Blanko testen und dort freigeben.",
+          : "Der neutrale Name ist noch nicht mit einem Test-iPad geprüft. Erst mit dem Beispiel testen und dort freigeben.",
       );
     const cert = await certStatus(entry.id, env);
     add(

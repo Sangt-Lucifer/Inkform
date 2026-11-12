@@ -138,7 +138,7 @@ export function createRunner({ stateDir, env = process.env, fs = { mkdir, writeF
       profile: null,
     };
     current = record;
-    const ref = entry.kind === "blanko" ? entry.id : entry.dir;
+    const ref = entry.kind === "beispiel" ? entry.id : entry.dir;
     const sequence = kind === "alles" ? ["build", "test", "browser"] : [kind];
     (async () => {
       let ok = false,

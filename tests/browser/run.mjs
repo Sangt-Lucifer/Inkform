@@ -1,6 +1,7 @@
 // Browser checks against a fresh local build, entirely on this Mac.
 //
-//   npm run test:browser                          profile "beispiel", all checks
+//   npm run test:browser                          profile "beispiel", then the "blanko" check
+//   node tests/browser/run.mjs                    profile "beispiel", all checks of that profile
 //   npm run test:browser -- --profile ../Inkform-Studios/<studio>   a studio profile
 //   npm run test:browser -- offline               only some checks (file names without .mjs)
 //
@@ -16,7 +17,9 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defaultOut, isBuiltin, resolveProfileDir, root } from "../../scripts/build.mjs";
 
-const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "export", "sicherung", "schriftgroessen", "offline", "update", "werkstatt"];
+const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "export", "sicherung", "schriftgroessen", "offline", "update", "werkstatt", "blanko"];
+// Checks bound to one built-in profile; that profile runs only these.
+const PROFILE_CHECKS = { blanko: ["blanko"] };
 // Checks of the core itself, not of a studio's app: only with the built-in profile.
 const CORE_ONLY = ["werkstatt"];
 const argv = process.argv.slice(2);
@@ -32,6 +35,10 @@ const httpPort = 18080 + Math.floor(Math.random() * 800);
 const cdpPort = 19900 + Math.floor(Math.random() * 90);
 const profileDir = resolveProfileDir(profile);
 if (!isBuiltin(profileDir)) checks = checks.filter((c) => !CORE_ONLY.includes(c));
+const bound = PROFILE_CHECKS[path.basename(profileDir)];
+checks = bound
+  ? checks.filter((c) => bound.includes(c))
+  : checks.filter((c) => !Object.values(PROFILE_CHECKS).flat().includes(c));
 const buildDir = defaultOut(profileDir);
 const results = isBuiltin(profileDir) ? root : profileDir;
 const out = path.join(results, "test-results", `${path.basename(profileDir)}-${new Date().toISOString().replace(/[:.]/g, "-")}`);

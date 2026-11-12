@@ -170,7 +170,7 @@ export async function readiness(entry, { latest, git = gitInfo } = {}) {
   return { ok: reasons.length === 0, reasons, state };
 }
 
-// Markers and files of every other profile (Blanko included), only read.
+// Markers and files of every other profile (Beispiel included), only read.
 async function otherProfiles(entry, env) {
   const dirs = [...(await listBuiltinProfiles()), ...(await discoverStudioProfiles(env))];
   const out = [];
@@ -252,7 +252,7 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
     `Version: ${version}`,
     `Datum: ${now.toISOString()}`,
     `Kern-Commit: ${ready.state.core}`,
-    `Studio-Commit: ${ready.state.profile ?? "keiner (Blanko liegt im Kern)"}`,
+    `Studio-Commit: ${ready.state.profile ?? "keiner (Beispiel liegt im Kern)"}`,
     `Tests: ${lastRun("test").text} (${lastRun("test").at})`,
     `Browser-Prüfungen: ${lastRun("browser").text} (${lastRun("browser").at})`,
     `Build: aktuell (identisch mit build.mjs)`,

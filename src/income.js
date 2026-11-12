@@ -170,6 +170,7 @@ export function createIncomeStore(storage) {
           throw Error("Dieser Eintrag wurde inzwischen geändert. Bitte neu öffnen.");
         return records.filter((r) => r.id !== id);
       }),
+    removeMany: (ids) => mutate((records) => records.filter((r) => !ids.includes(r.id))),
     merge: (backup) => {
       const incoming = validateIncomeBackup(backup);
       return mutate((records) => {
@@ -716,6 +717,10 @@ export function createIncomeFeature({
     retentionView,
     list: () => store.list(),
     reportPdf: (rows, scope) => reportPdf(rows, scope).blob,
+    removeMany(ids) {
+      store.removeMany(ids);
+      refresh();
+    },
     lock() {
       editor.close();
       refresh();

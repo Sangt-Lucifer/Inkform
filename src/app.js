@@ -5,6 +5,7 @@ import { PDF_FONT, createPdfDocument, unsupportedPdfChars } from "./pdf-fonts.js
 import { createIndexedDbFiles, createPendingStore } from "./pending.js";
 import { birthDateValid, fileSlug, moneyCents, studioInitials } from "./consent.js";
 import { ARCHIVE_DB, EXPORT_LOG_KEY, createExportFeature, formatSize, readExportLog } from "./export.js";
+import { isSample, sampleRecords } from "./sample.js";
 import { BACKUP_INTERVALS, BACKUP_INTERVAL_KEY, createFullBackup, readBackupDays, readFullBackup } from "./backup.js";
 import {
   LAST_BACKUP_KEY,
@@ -30,6 +31,8 @@ const MEDICAL = clone(DEFAULT_SETTINGS.medical);
 const LEGAL = clone(DEFAULT_SETTINGS.legal);
 const SETTINGS_KEY = "inkform.settings.v1";
 const OWNER_GUIDE_BASE64 = "__OWNER_GUIDE__";
+// Neutral edition without a studio: setup assistant, sample data, no owner guide.
+const BLANK_EDITION = "__BLANK_EDITION__" === "true";
 const THEME_KEY = "inkform.theme.v1";
 function validateSettings(value) {
   if (
@@ -1233,6 +1236,14 @@ function runFilesTest() {
   });
 }
 const ADMIN_PAGES = {
+  ...(BLANK_EDITION && {
+    setup: {
+      label: "Einrichtung",
+      icon: "settings",
+      title: "Einrichtung",
+      description: "Studio auf diesem Gerät einrichten. Alles bleibt hier gespeichert und ist später unter „Studio & Kontakt“ änderbar.",
+    },
+  }),
   overview: {
     label: "Übersicht",
     icon: "grid",
@@ -1573,6 +1584,78 @@ backupPicker.addEventListener("change", async () => {
     toast("Wiederherstellen nicht möglich: " + error.message);
   }
 });
+function needsSetup() {
+  return BLANK_EDITION && !settings.studio.name.trim();
+}
+function finishSetup() {
+  const missing = ["name", "contact", "address", "location"].filter((key) => !adminDraft.studio[key].trim());
+  if (missing.length) {
+    configError("Bitte Studio, Datenschutzkontakt, Anschrift und Ort der Unterschrift ausfüllen.");
+    return;
+  }
+  try {
+    writeRetention(localStorage, { pdfYears: $("setup-pdf-years").value, incomeYears: $("setup-income-years").value });
+  } catch (error) {
+    configError(error.message);
+    return;
+  }
+  if (!saveAdmin()) return;
+  adminPage = "overview";
+  renderAdminSection();
+  toast("Einrichtung abgeschlossen. Alles ist nur auf diesem Gerät gespeichert.");
+}
+function samplePanel() {
+  const loaded = incomeFeature.list().some(isSample);
+  return adminPanel(
+    "Beispieldaten",
+    `<p class="ad-section-copy">${
+      loaded
+        ? "Erfundene Beispieldaten sind geladen: Einträge in der Einnahmenliste und PDFs für den Export. Sie lassen sich jederzeit vollständig entfernen."
+        : "Zum Ausprobieren: sechs erfundene Einwilligungen mit PDFs in den letzten zwei Monaten. Sie lassen sich jederzeit vollständig entfernen. Standard ist leer."
+    }</p><div class="ad-actions-row">${
+      loaded
+        ? `<button class="ad-button danger" type="button" data-admin-action="sample-remove">${adminIcon("trash")}Beispieldaten entfernen</button>`
+        : `<button class="ad-button" type="button" data-admin-action="sample-load">${adminIcon("plus")}Beispieldaten laden</button>`
+    }</div>`,
+  );
+}
+function samplePdf(record) {
+  const doc = createPdfDocument(window.jspdf.jsPDF, { unit: "mm", format: "a4" });
+  doc.setFont(PDF_FONT, "bold");
+  doc.setFontSize(20);
+  doc.text("Beispiel-Einwilligung (erfunden)", 20, 30);
+  doc.setFont(PDF_FONT, "normal");
+  doc.setFontSize(12);
+  doc.text(`Name: ${record.customer}`, 20, 48);
+  doc.text(`Termin: ${dateFormat(record.date)}`, 20, 56);
+  doc.text(`Artist: ${record.artist || "Nicht zugeordnet"}`, 20, 64);
+  doc.text("Erfundene Beispieldaten zum Ausprobieren. Keine echte Einwilligung.", 20, 80);
+  return doc.output("blob");
+}
+async function loadSamples() {
+  if (!libraryAvailable()) return toast("Die eingebettete PDF-Funktion ist nicht verfügbar.");
+  if (incomeFeature.list().some(isSample)) return;
+  try {
+    for (const record of sampleRecords(localDate())) {
+      incomeFeature.book(record);
+      await exportFeature.keep(record.id, samplePdf(record));
+    }
+    toast("Beispieldaten geladen.");
+  } catch (error) {
+    toast("Beispieldaten nicht vollständig geladen: " + error.message);
+  }
+  renderAdminSection();
+}
+async function removeSamples() {
+  try {
+    incomeFeature.removeMany(incomeFeature.list().filter(isSample).map((r) => r.id));
+    await exportFeature.sync();
+    toast("Beispieldaten entfernt.");
+  } catch (error) {
+    toast("Beispieldaten nicht entfernt: " + error.message);
+  }
+  renderAdminSection();
+}
 function securityChecklist() {
   const items = [
     "Gerätecode mit mindestens 6 Ziffern: erst damit verschlüsselt das iPad seine Daten (Einstellungen → Face ID & Code: „Datenschutz ist aktiviert“).",
@@ -1609,6 +1692,16 @@ function renderAdminSection() {
   let content = "";
   if (adminPage === "income") {
     content = `<div id="income-content">${incomeFeature.view()}</div>`;
+  } else if (adminPage === "setup") {
+    content = `${adminPanel(
+      "Willkommen bei Inkform",
+      `<p class="ad-section-copy">Diese Angaben stehen im Kundenformular, in den Datenschutzhinweisen und auf jedem PDF. Sie werden nur auf diesem Gerät gespeichert.</p>
+      <div class="ad-fields">${adminField("studio.name", "Studio / verantwortliche Person", { placeholder: "Studio und vollständiger Name / Firma", max: 160 })}${adminField("studio.contact", "Datenschutzkontakt / E-Mail", { type: "email", placeholder: "kontakt@dein-studio.de", max: 160 })}${adminField("studio.address", "Vollständige Anschrift", { area: true, rows: 2, placeholder: "Straße, Hausnummer, Postleitzahl und Ort", max: 300 })}${adminField("studio.location", "Ort der Unterschrift", { placeholder: "%%locationPlaceholder%%", max: 100 })}
+      <div class="ad-field"><label for="setup-pdf-years">Aufbewahrung der PDFs in Jahren, optional</label><input id="setup-pdf-years" inputmode="numeric" maxlength="2"></div>
+      <div class="ad-field"><label for="setup-income-years">Namen in der Einnahmenliste in Jahren, optional</label><input id="setup-income-years" inputmode="numeric" maxlength="2"></div></div>
+      <p class="ad-preview-note">Formulartexte, Gesundheitsfragen und Datenschutzhinweise sind neutral vorbereitet und vor dem Einsatz zu prüfen. Fristen lassen sich später unter „Aufbewahrung“ eintragen.</p>
+      <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="setup-finish">${adminIcon("check")}Einrichtung abschließen</button></div>`,
+    )}${samplePanel()}`;
   } else if (adminPage === "export") {
     content = `<div id="export-content">${exportFeature.view()}</div>`;
   } else if (adminPage === "retention") {
@@ -1634,7 +1727,7 @@ function renderAdminSection() {
           <strong>${adminDraft.legal.length}</strong><small>Mit roten Prüfvermerken</small>
         </div>
       </div>
-      ${privacyReminders()}${backupPanel()}
+      ${privacyReminders()}${backupPanel()}${BLANK_EDITION ? samplePanel() : ""}
       <div class="ad-columns">
         <div>
           ${securityChecklist()}
@@ -2124,7 +2217,7 @@ function openAdminAuthorized(page = "overview") {
   if (!adminAccess.isUnlocked()) return;
   $("completion-screen").hidden = true;
   if (!adminOpen) adminDraft = clone(settings);
-  adminPage = ADMIN_PAGES[page] ? page : "overview";
+  adminPage = needsSetup() ? "setup" : ADMIN_PAGES[page] ? page : "overview";
   adminOpen = true;
   $("customer-app").hidden = true;
   $("admin-app").hidden = false;
@@ -2374,6 +2467,15 @@ $("admin-app").addEventListener("click", (event) => {
     }
   }
   switch (button.dataset.adminAction) {
+    case "setup-finish":
+      finishSetup();
+      break;
+    case "sample-load":
+      loadSamples();
+      break;
+    case "sample-remove":
+      removeSamples();
+      break;
     case "backup-create":
       if (adminPage !== "overview") openAdminAuthorized("overview");
       createBackup();
@@ -2510,6 +2612,8 @@ try {
 } catch (_) {}
 setTheme(initialTheme, false);
 if (configLoadError) toast(configLoadError);
+if (BLANK_EDITION) document.querySelectorAll("[data-studio-only]").forEach((node) => (node.hidden = true));
+if (!OWNER_GUIDE_BASE64) document.querySelectorAll('[data-admin-action="guide"]').forEach((node) => (node.hidden = true));
 if (sessionStorage.getItem("inkform.restored")) {
   sessionStorage.removeItem("inkform.restored");
   toast("Sicherung wiederhergestellt.");
@@ -2534,7 +2638,7 @@ try {
     showCompletion(true);
     openAdmin("overview");
   } else if (hasPending || sessionStorage.getItem("inkform.completion")) showCompletion();
-  else if (location.hash === "#admin") openAdmin();
+  else if (location.hash === "#admin" || needsSetup()) openAdmin();
 } catch (error) {
   showCompletion(true);
   toast(error.message);

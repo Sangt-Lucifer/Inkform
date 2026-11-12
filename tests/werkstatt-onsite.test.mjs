@@ -17,7 +17,7 @@ import { compareVersions, confirmInstalled, createOnsite, loadedByDevice, setChe
 import { qrMatrix } from "../werkstatt/qr.mjs";
 import { listStudios } from "../werkstatt/status.mjs";
 import { startWerkstatt } from "../werkstatt/server.mjs";
-import { callApi, ensureBlankoBuild, fakeGit, qrPng } from "./lib/werkstatt.mjs";
+import { callApi, ensureBeispielBuild, fakeGit, qrPng } from "./lib/werkstatt.mjs";
 
 const base = await mkdtemp(path.join(tmpdir(), "inkform-vorort-"));
 const env = {
@@ -34,13 +34,13 @@ test.after(async () => {
 });
 const PASSWORD = "testpasswort-nur-fuer-tests";
 
-// One Blanko export for all on-site tests, made once before them.
-let blanko, exportName;
+// One Beispiel export for all on-site tests, made once before them.
+let beispiel, exportName;
 test.before(async () => {
-  await ensureBlankoBuild();
-  blanko = (await listStudios({ env, stateDir })).find((s) => s.key === "blanko");
+  await ensureBeispielBuild();
+  beispiel = (await listStudios({ env, stateDir })).find((s) => s.key === "beispiel");
   const r = { ok: true, text: "ok", at: new Date().toISOString(), core: { commit: "c0ffee1", clean: true }, profile: null };
-  const result = await exportStudio(blanko, { latest: { "blanko:test": r, "blanko:browser": r }, env, git: fakeGit });
+  const result = await exportStudio(beispiel, { latest: { "beispiel:test": r, "beispiel:browser": r }, env, git: fakeGit });
   assert.ok(result.folder, JSON.stringify(result));
   exportName = result.name;
 });
@@ -79,7 +79,7 @@ test("versions compare part by part", () => {
 
 // ---------- certificates ----------
 test("certificate per studio: only for inkform-app.local, root key encrypted, renew needs the password", async () => {
-  assert.match((await createCert("blanko-test", "kurz", env)).error, /12 Zeichen/);
+  assert.match((await createCert("beispiel-test", "kurz", env)).error, /12 Zeichen/);
   const created = await createCert("beispiel", PASSWORD, env);
   assert.ok(created.exists, created.error);
   const dir = studioCertDir("beispiel", env);
@@ -212,7 +212,7 @@ test("on-site: checks name every missing precondition", async () => {
     vault: async () => false,
     wifi: async () => ({ error: "Nicht mit einem WLAN verbunden." }),
   });
-  const { ok, checks } = await onsite.checks(blanko, name);
+  const { ok, checks } = await onsite.checks(beispiel, name);
   assert.equal(ok, false);
   const byKey = Object.fromEntries(checks.map((c) => [c.key, c]));
   assert.equal(byKey.frei.ok, false);
@@ -220,10 +220,10 @@ test("on-site: checks name every missing precondition", async () => {
   assert.equal(byKey.filevault.ok, false);
   assert.equal(byKey.wlan.ok, false);
   assert.equal(byKey.export.ok, true);
-  assert.ok(!byKey.name, "Blanko is the test: no approval needed");
-  assert.equal((await onsite.checks(blanko, "inkform-beispiel-0.0.0-p1-2000-01-01")).checks.find((c) => c.key === "export").ok, false);
+  assert.ok(!byKey.name, "Beispiel is the test: no approval needed");
+  assert.equal((await onsite.checks(beispiel, "inkform-beispiel-0.0.0-p1-2000-01-01")).checks.find((c) => c.key === "export").ok, false);
   await confirmInstalled(stateDir, "beispiel", "99.0.0-p1");
-  assert.equal((await onsite.checks(blanko, name)).checks.find((c) => c.key === "version").ok, false, "no downgrade");
+  assert.equal((await onsite.checks(beispiel, name)).checks.find((c) => c.key === "version").ok, false, "no downgrade");
   await rm(path.join(stateDir, "vor-ort.json"));
 });
 
@@ -231,7 +231,7 @@ test("on-site: serves the export over HTTPS on the given address only, logs path
   const name = exportName;
   const p = port();
   const onsite = onsiteFor({ port: p, idleMs: 1500 });
-  const started = await onsite.start(blanko, name);
+  const started = await onsite.start(beispiel, name);
   assert.ok(started.session, JSON.stringify(started));
   assert.deepEqual(announced.at(-1), ["-P", "Inkform beispiel", "_https._tcp", "local", String(p), NEUTRAL_HOST, "127.0.0.1"]);
   const ca = await readFile(path.join(studioCertDir("beispiel", env), "beispiel.crt"));
@@ -242,7 +242,7 @@ test("on-site: serves the export over HTTPS on the given address only, logs path
   const s = onsite.current();
   assert.deepEqual(s.requests.map((r) => [r.method, r.status, r.path]), [["GET", 200, "/"]]);
   for (const r of s.requests) assert.deepEqual(Object.keys(r).sort(), ["at", "method", "path", "status"], "no client address");
-  assert.match((await onsite.start(blanko, name)).error, /läuft schon/);
+  assert.match((await onsite.start(beispiel, name)).error, /läuft schon/);
   await new Promise((r) => setTimeout(r, 2000));
   const ended = onsite.current();
   assert.ok(ended.endedAt);
@@ -250,7 +250,7 @@ test("on-site: serves the export over HTTPS on the given address only, logs path
   await assert.rejects(getHttps(p, "/", ca));
 });
 
-test("server: on-site routes refuse protected studios; approval needs a Blanko session the iPad loaded", async () => {
+test("server: on-site routes refuse protected studios; approval needs a Beispiel session the iPad loaded", async () => {
   const protectedDir = path.join(env.INKFORM_STUDIOS, "bestand");
   await cp(path.join(root, "profiles", "beispiel"), protectedDir, { recursive: true });
   const p = JSON.parse(await readFile(path.join(protectedDir, "profile.json"), "utf8"));
@@ -270,13 +270,13 @@ test("server: on-site routes refuse protected studios; approval needs a Blanko s
     for (const route of ["start", "zertifikat", "finder", "checkliste", "installiert", "freigeben", "pruefen"])
       assert.equal((await callApi(server, token, "POST", `/api/vor-ort/${route}`, { studio: "s-bestand", password: PASSWORD, action: "create" })).status, 403, route);
     assert.equal(await stat(studioCertDir("bestand", env)).then(() => true, () => false), false, "no certificate for the protected studio");
-    const info = await callApi(server, token, "GET", "/api/vor-ort?key=blanko");
+    const info = await callApi(server, token, "GET", "/api/vor-ort?key=beispiel");
     assert.equal(info.status, 200);
     assert.ok(info.json.exports.length >= 1);
-    assert.equal((await callApi(server, token, "POST", "/api/vor-ort/freigeben", { studio: "blanko" })).status, 409);
-    assert.equal((await callApi(server, token, "POST", "/api/vor-ort/finder", { studio: "blanko", what: "zertifikat" })).status, 200);
+    assert.equal((await callApi(server, token, "POST", "/api/vor-ort/freigeben", { studio: "beispiel" })).status, 409);
+    assert.equal((await callApi(server, token, "POST", "/api/vor-ort/finder", { studio: "beispiel", what: "zertifikat" })).status, 200);
     assert.ok(shown.at(-1).endsWith("beispiel.crt"), "the certificate, never the key");
-    assert.equal((await callApi(server, token, "POST", "/api/vor-ort/finder", { studio: "blanko", what: "webloc" })).status, 200);
+    assert.equal((await callApi(server, token, "POST", "/api/vor-ort/finder", { studio: "beispiel", what: "webloc" })).status, 200);
     assert.match(await readFile(shown.at(-1), "utf8"), /<string>https:\/\/inkform-app\.local:8443\/<\/string>/);
     const qr = await callApi(server, token, "GET", "/api/vor-ort/qr");
     assert.equal(qr.json.address, "https://inkform-app.local:8443/");
@@ -332,11 +332,11 @@ test("serve.mjs: a malformed request with --log-requests does not stop the serve
 test("on-site: two starts at once never both run; a stop during the checks cancels the start", async () => {
   const name = exportName;
   const onsite = onsiteFor({ port: port() });
-  const [a, b] = await Promise.all([onsite.start(blanko, name), onsite.start(blanko, name)]);
+  const [a, b] = await Promise.all([onsite.start(beispiel, name), onsite.start(beispiel, name)]);
   assert.equal([a, b].filter((r) => r.session).length, 1);
   assert.match([a, b].find((r) => r.error).error, /läuft schon oder startet gerade/);
   onsite.stop("Test");
-  const pending = onsite.start(blanko, name);
+  const pending = onsite.start(beispiel, name);
   onsite.stop("sofort beendet");
   assert.match((await pending).error, /abgebrochen/);
   assert.ok(!onsite.current() || onsite.current().endedAt);
@@ -346,7 +346,7 @@ test("on-site: if the Bonjour announcement ends, the server ends too and nothing
   const name = exportName;
   const p = port();
   const onsite = onsiteFor({ port: p, spawnFn: (cmd, args, opts) => (cmd === "dns-sd" ? spawn("/usr/bin/false", [], { stdio: "ignore" }) : spawn(cmd, args, opts)) });
-  const r = await onsite.start(blanko, name);
+  const r = await onsite.start(beispiel, name);
   assert.match(r.error, /Bonjour-Ankündigung beendet/);
   await new Promise((res) => setTimeout(res, 300));
   await assert.rejects(getHttps(p, "/", await readFile(path.join(studioCertDir("beispiel", env), "beispiel.crt"))));

@@ -11,6 +11,17 @@ test("first setup requires matching six-or-more digit PIN", async () => {
   await assert.rejects(p.setup("123456", "654321"));
   assert.equal(p.configured(), false);
 });
+test("setup explains what is wrong with the PIN: digits only, too short, too long", async () => {
+  const p = createAdminPinStore(memory());
+  for (const pin of ["12345a", "1234 56", "12-34-56", "１２３４５６"])
+    await assert.rejects(p.setup(pin, pin), /Nur Ziffern 0–9 erlaubt/, pin);
+  for (const pin of ["", "12345"]) await assert.rejects(p.setup(pin, pin), /zu kurz: mindestens 6 Ziffern/, pin);
+  await assert.rejects(p.setup("1234567890123", "1234567890123"), /zu lang: höchstens 12 Ziffern/);
+  await assert.rejects(p.setup("123456", "123457"), /stimmen nicht überein/);
+  assert.equal(p.configured(), false);
+  await p.setup("123456789012", "123456789012");
+  assert.equal(p.configured(), true);
+});
 test("PIN is salted and hashed, never persisted as plaintext", async () => {
   const storage = memory(),
     p = createAdminPinStore(storage);

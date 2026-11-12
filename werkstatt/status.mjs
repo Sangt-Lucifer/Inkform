@@ -10,7 +10,7 @@ import {
   buildProfile,
   defaultOut,
   discoverStudioProfiles,
-  listBuiltinProfiles,
+  resolveProfileDir,
   root,
 } from "../scripts/build.mjs";
 import { compileMarkers, findMarkers } from "../tests/lib/leaks.mjs";
@@ -51,7 +51,8 @@ export const SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor
 
 // Studios are display-only unless their folder is listed in <state>/freigegeben.json
 // ({"studios": ["/abs/path"]}). Existing installations therefore stay untouched by default;
-// only the built-in sample ("Blanko") is always available for building and checking.
+// only the built-in sample ("Beispiel") is always available for building and checking. The neutral
+// "blanko" build is made and checked by scripts/blanko-pruefen.mjs, not in the Werkstatt.
 export async function releasedStudios(stateDir) {
   const data = await readJson(path.join(stateDir, "freigegeben.json")).catch(() => ({ studios: [] }));
   return new Set((Array.isArray(data.studios) ? data.studios : []).map((p) => path.resolve(String(p))));
@@ -61,11 +62,9 @@ export async function listStudios({ env = process.env, stateDir = defaultStateDi
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   const released = await releasedStudios(stateDir);
   const entries = [];
-  for (const dir of await listBuiltinProfiles()) {
-    const profile = await readJson(path.join(dir, "profile.json")).catch(() => null);
-    if (!profile) continue;
-    entries.push({ key: "blanko", id: profile.id, name: profile.name, dir, kind: "blanko", actionable: true });
-  }
+  const sample = resolveProfileDir("beispiel"),
+    profile = await readJson(path.join(sample, "profile.json")).catch(() => null);
+  if (profile) entries.push({ key: "beispiel", id: profile.id, name: profile.name, dir: sample, kind: "beispiel", actionable: true });
   for (const dir of await discoverStudioProfiles(env)) {
     const profile = await readJson(path.join(dir, "profile.json")).catch(() => null);
     if (!profile || !/^[a-z0-9-]+$/.test(profile.id ?? "")) continue;
@@ -146,12 +145,12 @@ export async function buildState(dir) {
 }
 
 // Read-only warnings: sample-studio texts left in a real studio, guide PDF older than its text.
-export async function warnings(entry, blankoMarkers) {
+export async function warnings(entry, beispielMarkers) {
   const list = [];
   const profile = await readJson(path.join(entry.dir, "profile.json")).catch(() => ({}));
   if (entry.kind === "studio") {
     const guide = await readFile(path.join(entry.dir, "Dokumente", "Anleitung.md"), "utf8").catch(() => "");
-    const hits = findMarkers(JSON.stringify(profile.text ?? {}) + "\n" + guide, blankoMarkers);
+    const hits = findMarkers(JSON.stringify(profile.text ?? {}) + "\n" + guide, beispielMarkers);
     if (hits.length) list.push(`Enthält noch Texte des Musterstudios (${hits.join(", ")}).`);
   }
   const [md, pdf] = await Promise.all(
@@ -177,7 +176,7 @@ export async function certInfo(certDir = defaultCertDir()) {
   }
 }
 
-export async function blankoMarkers() {
+export async function beispielMarkers() {
   const profile = await readJson(path.join(root, "profiles", "beispiel", "profile.json")).catch(() => ({ markers: [] }));
   return compileMarkers(profile.markers);
 }

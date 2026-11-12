@@ -1,0 +1,36 @@
+{
+  "id": "blanko",
+  "name": "Inkform (blanko)",
+  "description": "Neutrale Fassung ohne Studio und ohne Daten. Beim ersten Start richtet ein Assistent das Studio auf dem Gerät ein.",
+  "blank": true,
+  "markers": [
+    "Inkform blanko edition"
+  ],
+  "logo": "logo.png",
+  "text": {
+    "accessText": "Zugriff auf das Einwilligungs-PDF und die darin enthaltenen Gesundheitsdaten hat ausschließlich die Studioleitung. Ablage und Sicherung erfolgen lokal; es gibt keine automatische Cloud-Synchronisierung oder Übermittlung durch diese App. Eine etwa gesetzlich erforderliche Offenlegung bleibt vorbehalten. Die gesondert gewählte Veröffentlichung von Tattoo-Fotos umfasst nicht die Weitergabe dieses Formulars, der Gesundheitsdaten oder der Unterschrift.",
+    "complaintAuthority": "der für das Studio zuständigen Datenschutzaufsichtsbehörde beschweren",
+    "cssBrandNote": "Inkform blanko edition",
+    "customerStudioName": "Tattoo-Studio",
+    "eyebrowPrefix": "",
+    "filesFolder": "Inkform",
+    "healthStudio": "das Studio",
+    "homeIconName": "INKFORM",
+    "legalReviewNote": "Diese neutralen Textvorlagen sind vor dem Einsatz an das konkrete Studio anzupassen und rechtlich zu prüfen",
+    "locationPlaceholder": "Ort des Studios",
+    "logoAlt": "INKFORM",
+    "metaName": "INKFORM",
+    "photoChannels": "auf der Website und den Social-Media-Profilen des Studios",
+    "photoStudio": "dem Studio",
+    "reportStudio": "INKFORM",
+    "retentionText": "Die Dokumentation wird während der Terminvorbereitung und Durchführung und anschließend nur so lange aufbewahrt, wie sie zum Nachweis der Einwilligung oder zur Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen erforderlich ist. Maßgeblich sind die jeweils einschlägigen Verjährungsfristen und die Erforderlichkeit im Einzelfall. Bei Ansprüchen wegen Körper- oder Gesundheitsschäden kann die Verjährungshöchstfrist nach § 199 Abs. 2 BGB 30 Jahre betragen; daraus folgt keine pauschale Aufbewahrungspflicht von 30 Jahren. Entfallen die Zwecke und besteht keine weitere Rechtsgrundlage, löscht die Studioleitung die Unterlagen einschließlich der lokalen Sicherungskopien. Bei einem konkreten Rechtsstreit bleiben die hierfür erforderlichen Unterlagen bis zu dessen Abschluss und dem Wegfall weiterer Aufbewahrungsgründe erhalten.",
+    "revocationContact": "über die angegebenen Kontaktdaten des Studios",
+    "studioAddress": "",
+    "studioContact": "",
+    "studioLocation": "",
+    "studioName": "",
+    "titlePrefix": "",
+    "welcomeStudio": "im Studio",
+    "wordmarkLabel": "Inkform"
+  }
+}

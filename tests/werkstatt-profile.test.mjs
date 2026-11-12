@@ -65,9 +65,9 @@ test("new studio: existing folders, bad ids and reserved names are refused witho
   assert.ok(!released.some((p) => p.endsWith("bestand")), "protected studio was never released");
 });
 
-test("editor: Blanko and display-only studios cannot be edited", async () => {
+test("editor: Beispiel and display-only studios cannot be edited", async () => {
   const list = await listStudios({ env, stateDir });
-  assert.match(await editable(list.find((s) => s.key === "blanko"), stateDir, env), /Beispiel-Fassung/);
+  assert.match(await editable(list.find((s) => s.key === "beispiel"), stateDir, env), /Beispiel-Fassung/);
   assert.match(await editable(list.find((s) => s.key === "s-bestand"), stateDir, env), /Nur Anzeige/);
 });
 
@@ -172,7 +172,7 @@ test("server: editor routes refuse the protected studio and leave its folder (an
   const before = await snapshot(protectedDir);
   try {
     assert.equal((await callApi(server, token, "GET", "/api/studio?key=s-bestand")).status, 403);
-    assert.equal((await callApi(server, token, "GET", "/api/studio?key=blanko")).status, 403);
+    assert.equal((await callApi(server, token, "GET", "/api/studio?key=beispiel")).status, 403);
     const draft = await cleanDraft(protectedDir, "Bestand Süd");
     for (const p of ["/api/studio/check", "/api/studio/save"])
       assert.equal((await callApi(server, token, "POST", p, { studio: "s-bestand", draft, version: "x" })).status, 403, p);

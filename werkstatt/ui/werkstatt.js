@@ -54,8 +54,8 @@ function runLine(label, run) {
 
 function card(s, busy) {
   const kindBadge =
-    s.kind === "blanko"
-      ? el("span", { class: "badge demo" }, "Blanko · Demo mit Musterstudio")
+    s.kind === "beispiel"
+      ? el("span", { class: "badge demo" }, "Beispiel · Demo mit Musterstudio")
       : s.actionable
         ? el("span", { class: "badge" }, "Studio")
         : el("span", { class: "badge lock" }, "geschützt · nur Anzeige");
@@ -553,7 +553,7 @@ function renderOnsite() {
   $("onsite-installed").disabled = !chosen;
   $("onsite-installed").textContent = chosen ? `Installation von ${chosen.version} bestätigen` : "Installation bestätigen";
   $("onsite-state").textContent = d.state.installed ? `Installiert: ${d.state.installed.version} am ${d.state.installed.date}.` : "Noch keine Installation bestätigt.";
-  $("onsite-approve").hidden = !d.blanko || !!d.state.neutralApproved;
+  $("onsite-approve").hidden = !d.beispiel || !!d.state.neutralApproved;
 }
 async function refreshOnsite() {
   if (!onsiteKey) return;

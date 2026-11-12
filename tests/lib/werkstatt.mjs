@@ -110,9 +110,9 @@ export function callApi(server, token, method, pathname, body) {
   });
 }
 
-// Exporting Blanko needs a current Blanko build in the core (build/beispiel). After a change in src/
-// it is outdated, so tests that export Blanko build it first themselves.
-export async function ensureBlankoBuild() {
+// Exporting Beispiel needs a current Beispiel build in the core (build/beispiel). After a change in src/
+// it is outdated, so tests that export Beispiel build it first themselves.
+export async function ensureBeispielBuild() {
   if ((await buildState(path.join(root, "profiles", "beispiel"))).state !== "aktuell")
     execFileSync(process.execPath, [path.join(root, "scripts", "build.mjs"), "--profile", "beispiel"], { stdio: "ignore" });
 }

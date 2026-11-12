@@ -120,6 +120,9 @@ export function createAdminPinStore(storage) {
     configured: () => !!config(),
     async setup(pin, repeat) {
       if (config()) throw Error("Für diesen Browser ist bereits eine PIN eingerichtet.");
+      if (/\D/.test(pin)) throw Error("Nur Ziffern 0–9 erlaubt, keine Buchstaben, Leer- oder Sonderzeichen.");
+      if (pin.length < 6) throw Error("Die PIN ist zu kurz: mindestens 6 Ziffern.");
+      if (pin.length > 12) throw Error("Die PIN ist zu lang: höchstens 12 Ziffern.");
       if (!/^\d{6,12}$/.test(pin)) throw Error("Bitte eine PIN mit 6 bis 12 Ziffern wählen.");
       if (pin !== repeat) throw Error("Die beiden PIN-Eingaben stimmen nicht überein.");
       const salt = [...crypto.getRandomValues(new Uint8Array(16))],
@@ -148,7 +151,7 @@ export function createAdminAccess({ storage, onExternalLock, now = () => Date.no
   dialog.setAttribute("aria-labelledby", "admin-pin-title");
   dialog.innerHTML = `<div class="dialog-head"><h2 id="admin-pin-title">Studio entsperren</h2><button class="close-button" type="button" id="admin-pin-close" aria-label="Dialog schließen">×</button></div>
   <form id="admin-pin-form" class="dialog-body" novalidate><p id="admin-pin-copy" class="ad-section-copy"></p><div class="ad-fields">
-  <div class="ad-field"><label for="admin-pin">PIN (6 bis 12 Ziffern)</label><input id="admin-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" required></div>
+  <div class="ad-field"><label for="admin-pin">PIN (6 bis 12 Ziffern, nur Zahlen 0–9)</label><input id="admin-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" required></div>
   <div class="ad-field" id="admin-pin-repeat-field"><label for="admin-pin-repeat">PIN wiederholen</label><input id="admin-pin-repeat" name="repeat" type="password" inputmode="numeric" autocomplete="off" maxlength="12"></div></div>
   <p id="admin-pin-error" class="ad-error" role="alert" hidden></p><div class="dialog-actions"><button class="primary-button" type="submit" id="admin-pin-submit">Entsperren</button></div>
   <p class="ad-preview-note">Die PIN schützt die Admin-Oberfläche auf diesem Gerät. Sie verschlüsselt keine Browserdaten und ersetzt keine Gerätesperre. Es gibt keinen Online-Reset. Einnahmen regelmäßig separat sichern.</p></form>`;
@@ -162,6 +165,15 @@ export function createAdminAccess({ storage, onExternalLock, now = () => Date.no
     dialog.close();
   }
   dialog.querySelector("#admin-pin-close").addEventListener("click", close);
+  // Only digits can be entered (also pasted text); a removed character is explained at once.
+  for (const input of [form.elements.pin, form.elements.repeat])
+    input.addEventListener("input", () => {
+      const digits = input.value.replace(/\D/g, "");
+      if (digits === input.value) return;
+      input.value = digits;
+      errorNode.textContent = "Nur Ziffern 0–9 erlaubt, keine Buchstaben, Leer- oder Sonderzeichen.";
+      errorNode.hidden = false;
+    });
   dialog.addEventListener("cancel", (event) => {
     event.preventDefault();
     close();

@@ -10,7 +10,7 @@ npm run werkstatt        # http://127.0.0.1:8090
 
 Knopf „Neues Studio“, dann Kennung und Name eingeben. Die Kennung hat 3 bis 40 Zeichen aus `a–z`, `0–9` und `-`, zum Beispiel `atelier-nord`. Die Werkstatt:
 
-- kopiert Blanko nach `../Inkform-Studios/<kennung>/`, ohne dessen README und Prüfbericht;
+- kopiert das Beispiel (`profiles/beispiel`) nach `../Inkform-Studios/<kennung>/`, ohne dessen README und Prüfbericht;
 - legt eine `.gitignore` an, die Builds, Testausgaben, Zertifikate und Kundendaten ausschließt;
 - richtet ein Git-Repo ohne Remote ein, noch ohne Commit;
 - trägt das Studio in die Freigaben ein.
@@ -19,7 +19,7 @@ Knopf „Neues Studio“, dann Kennung und Name eingeben. Die Kennung hat 3 bis 
 
 „Profil bearbeiten“ auf der Karte des Studios:
 
-- **Kennzeichen:** alles, woran man das Studio erkennt, also Name in allen Schreibweisen, Inhaber, Adresse, E-Mail, Website und Social-Media-Namen. Die Probe zeigt, wo ein Kennzeichen im Build steht. Zu allgemeine Wörter, die auch in Blanko oder einem anderen Studio vorkommen, werden abgelehnt.
+- **Kennzeichen:** alles, woran man das Studio erkennt, also Name in allen Schreibweisen, Inhaber, Adresse, E-Mail, Website und Social-Media-Namen. Die Probe zeigt, wo ein Kennzeichen im Build steht. Zu allgemeine Wörter, die auch im Beispiel oder einem anderen Studio vorkommen, werden abgelehnt.
 - **Texte:** Alle Texte ersetzen; keiner darf noch auf das Musterstudio verweisen. Aufbewahrung, Zugriff und Aufsichtsbehörde müssen dem echten Ablauf entsprechen und rechtlich geprüft sein.
 - **Anleitung, Logo, Manifest:** Das Logo ist ein quadratisches PNG; die Icons entstehen daraus.
 
@@ -37,6 +37,6 @@ Gespeichert wird erst, wenn die Prüfung keinen Fehler mehr meldet. Das Anleitun
 
 „Exportieren …“ ist erst möglich, wenn Kern und Studio committet sind und die Prüfungen für genau diesen Stand grün sind. Das Paket landet in `../Inkform-Exporte/<kennung>/`.
 
-Aufs iPad kommt es mit „Vor Ort …“ im Studio-WLAN. Für Studios ist der Vor-Ort-Modus erst möglich, nachdem `inkform-app.local` einmal mit Blanko an einem Test-iPad geprüft und freigegeben wurde.
+Aufs iPad kommt es mit „Vor Ort …“ im Studio-WLAN. Für Studios ist der Vor-Ort-Modus erst möglich, nachdem `inkform-app.local` einmal mit dem Beispiel an einem Test-iPad geprüft und freigegeben wurde.
 
 Nie weitergeben: andere Studio-Ordner, `test-results/`, Sicherungen oder Zertifikatsschlüssel. Soll ein Studio den Quelltext bekommen, dann nur den Kern und seinen eigenen Studio-Ordner, ohne `build/` und `test-results/`.

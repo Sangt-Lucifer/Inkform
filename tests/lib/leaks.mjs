@@ -250,14 +250,19 @@ export async function filesBelow(dir, skip = new Set([".git", "node_modules"])) 
 
 export async function fingerprints(profileDir, logo) {
   // Binary assets that identify a studio: logo, icons and the owner guide.
+  // The neutral edition has no guide.
   const files = [path.join(profileDir, logo), path.join(profileDir, "Anleitung-iPad-und-Admin.pdf")];
   for (const icon of await readdir(path.join(profileDir, "icons"))) if (!icon.startsWith(".")) files.push(path.join(profileDir, "icons", icon));
-  return Promise.all(
+  const prints = await Promise.all(
     files.map(async (file) => {
-      const bytes = await readFile(file);
-      return { label: path.relative(profileDir, file), bytes, base64: bytes.toString("base64") };
+      const bytes = await readFile(file).catch((error) => {
+        if (error.code === "ENOENT" && file.endsWith(".pdf")) return null;
+        throw error;
+      });
+      return bytes && { label: path.relative(profileDir, file), bytes, base64: bytes.toString("base64") };
     }),
   );
+  return prints.filter(Boolean);
 }
 
 export function findFingerprints(contents, prints) {

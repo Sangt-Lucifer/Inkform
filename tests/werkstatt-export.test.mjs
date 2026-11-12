@@ -12,7 +12,7 @@ import { exportStudio, listExports, nextVersion, publish, readiness } from "../w
 import { commitStudio, createStudio, pendingChanges, readEditable, saveDraft } from "../werkstatt/profile.mjs";
 import { gitInfo, listStudios } from "../werkstatt/status.mjs";
 import { startWerkstatt } from "../werkstatt/server.mjs";
-import { callApi, ensureBlankoBuild, fakeGit, neutralTexts, solidPng } from "./lib/werkstatt.mjs";
+import { callApi, ensureBeispielBuild, fakeGit, neutralTexts, solidPng } from "./lib/werkstatt.mjs";
 
 const base = await mkdtemp(path.join(tmpdir(), "inkform-export-"));
 const studiosDir = path.join(base, "studios"),
@@ -108,7 +108,7 @@ test("export: complete, checked, read-only package from exactly the build files"
   const report = await readFile(path.join(result.folder, "PRUEFBERICHT.txt"), "utf8");
   assert.match(report, /Kern-Commit: c0ffee1/);
   assert.match(report, new RegExp(`Studio-Commit: ${(await gitInfo(dir)).commit}`));
-  assert.match(report, /Leak-Prüfung: keine Funde; geprüft gegen 1 anderes Profil/);
+  assert.match(report, /Leak-Prüfung: keine Funde; geprüft gegen 2 andere Profile/);
   assert.doesNotMatch(report, /beispiel/, "no ids of other profiles in the report");
   assert.equal((await stat(path.join(result.folder, "index.html"))).mode & 0o222, 0, "read-only");
   assert.equal((await stat(result.folder)).mode & 0o222, 0, "folder read-only");
@@ -178,7 +178,7 @@ test("export: never into the core or into a studio folder", async () => {
   assert.match(r.error, /Studio-Ordner/);
 });
 
-test("server: protected studios cannot be exported; Blanko readiness is shown", async () => {
+test("server: protected studios cannot be exported; Beispiel readiness is shown", async () => {
   const protectedDir = path.join(studiosDir, "bestand");
   await cp(path.join(root, "profiles", "beispiel"), protectedDir, { recursive: true });
   const p = JSON.parse(await readFile(path.join(protectedDir, "profile.json"), "utf8"));
@@ -188,9 +188,9 @@ test("server: protected studios cannot be exported; Blanko readiness is shown", 
     assert.equal((await callApi(server, token, "GET", "/api/export?key=s-bestand")).status, 403);
     assert.equal((await callApi(server, token, "POST", "/api/export", { studio: "s-bestand" })).status, 403);
     assert.equal(await stat(path.join(exportsDir, "bestand")).then(() => true, () => false), false);
-    const blanko = await callApi(server, token, "GET", "/api/export?key=blanko");
-    assert.equal(blanko.status, 200);
-    assert.equal(blanko.json.ok, false, "no runs yet");
+    const beispiel = await callApi(server, token, "GET", "/api/export?key=beispiel");
+    assert.equal(beispiel.status, 200);
+    assert.equal(beispiel.json.ok, false, "no runs yet");
     const overview = await callApi(server, token, "GET", "/api/overview");
     assert.match(overview.json.studios.find((s) => s.key === "s-atelier-nord").lastExport.name, /-p2-/);
   } finally {
@@ -290,15 +290,15 @@ test("export: an existing ZIP is never replaced or deleted", async () => {
   assert.deepEqual((await exportNames()).filter((n) => n.startsWith(".")), []);
 });
 
-test("export: Blanko's unchanged state is not exported twice", async () => {
-  await ensureBlankoBuild();
-  const blanko = (await listStudios({ env, stateDir })).find((s) => s.key === "blanko");
+test("export: Beispiel's unchanged state is not exported twice", async () => {
+  await ensureBeispielBuild();
+  const beispiel = (await listStudios({ env, stateDir })).find((s) => s.key === "beispiel");
   const r = (text) => ({ ok: true, text, at: NOW.toISOString(), core: { commit: "c0ffee1", clean: true }, profile: null });
-  const latest = { "blanko:test": r("ok"), "blanko:browser": r("ok") };
-  const first = await exportStudio(blanko, { latest, env, git: fakeGit, now: NOW });
+  const latest = { "beispiel:test": r("ok"), "beispiel:browser": r("ok") };
+  const first = await exportStudio(beispiel, { latest, env, git: fakeGit, now: NOW });
   assert.ok(first.folder, JSON.stringify(first));
   assert.match(await readFile(path.join(first.folder, "PRUEFBERICHT.txt"), "utf8"), /Studio-Commit: keiner/);
-  assert.match((await exportStudio(blanko, { latest, env, git: fakeGit, now: NOW })).error, /bereits exportiert/);
+  assert.match((await exportStudio(beispiel, { latest, env, git: fakeGit, now: NOW })).error, /bereits exportiert/);
 });
 
 // ---------- package validity and exclusive publishing ----------

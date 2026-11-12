@@ -35,11 +35,11 @@ function http(port, { method = "GET", pathname = "/", headers = {}, body } = {})
   });
 }
 
-test("studios are display-only unless released; Blanko is always available", async () => {
+test("studios are display-only unless released; Beispiel is always available", async () => {
   const list = await listStudios({ env, stateDir });
-  const blanko = list.find((s) => s.key === "blanko"),
+  const beispiel = list.find((s) => s.key === "beispiel"),
     studio = list.find((s) => s.key === "s-testatelier");
-  assert.equal(blanko.actionable, true);
+  assert.equal(beispiel.actionable, true);
   assert.equal(studio.actionable, false);
   assert.match(studio.protectedReason, /Nur Anzeige/);
   await writeFile(path.join(stateDir, "freigegeben.json"), JSON.stringify({ studios: [studioDir] }));
@@ -90,7 +90,7 @@ test("server: only 127.0.0.1 with the right Host, API only with the session toke
     assert.equal(studio.actionable, false);
     assert.equal(studio.build.state, "fehlt");
     assert.ok(studio.warnings.some((w) => w.includes("Musterstudio")), "sample texts left in a studio are reported");
-    assert.equal(overview.studios.find((s) => s.key === "blanko").kind, "blanko");
+    assert.equal(overview.studios.find((s) => s.key === "beispiel").kind, "beispiel");
     assert.equal(overview.cert, null);
     // Static files: only the UI, no path traversal.
     assert.equal((await http(port, { pathname: "/werkstatt.js" })).status, 200);
@@ -118,7 +118,7 @@ test("a protected studio cannot be built or checked, and its folder stays unchan
     }
     assert.equal(await snapshot(studioDir), before);
     assert.equal(
-      (await http(port, { method: "POST", pathname: "/api/run", headers: { "x-werkstatt-token": token }, body: JSON.stringify({ studio: "blanko", kind: "rm -rf" }) })).status,
+      (await http(port, { method: "POST", pathname: "/api/run", headers: { "x-werkstatt-token": token }, body: JSON.stringify({ studio: "beispiel", kind: "rm -rf" }) })).status,
       400,
     );
   } finally {
@@ -126,7 +126,7 @@ test("a protected studio cannot be built or checked, and its folder stays unchan
   }
 });
 
-test("building Blanko through the Werkstatt works and is recorded outside the repositories", async () => {
+test("building Beispiel through the Werkstatt works and is recorded outside the repositories", async () => {
   const { server, token, runner } = await startWerkstatt({ port: 0, env, stateDir, certDir: base });
   const port = server.address().port;
   try {
@@ -134,14 +134,14 @@ test("building Blanko through the Werkstatt works and is recorded outside the re
       method: "POST",
       pathname: "/api/run",
       headers: { "x-werkstatt-token": token },
-      body: JSON.stringify({ studio: "blanko", kind: "build" }),
+      body: JSON.stringify({ studio: "beispiel", kind: "build" }),
     });
     assert.equal(res.status, 202);
     const second = await http(port, {
       method: "POST",
       pathname: "/api/run",
       headers: { "x-werkstatt-token": token },
-      body: JSON.stringify({ studio: "blanko", kind: "build" }),
+      body: JSON.stringify({ studio: "beispiel", kind: "build" }),
     });
     assert.equal(second.status, 409, "only one run at a time");
     for (let i = 0; i < 200 && !runner.current().endedAt; i++) await new Promise((r) => setTimeout(r, 50));
@@ -174,7 +174,7 @@ test("two simultaneous start requests: exactly one run starts", async () => {
   const port = server.address().port;
   try {
     const post = () =>
-      http(port, { method: "POST", pathname: "/api/run", headers: { "x-werkstatt-token": token }, body: JSON.stringify({ studio: "blanko", kind: "build" }) });
+      http(port, { method: "POST", pathname: "/api/run", headers: { "x-werkstatt-token": token }, body: JSON.stringify({ studio: "beispiel", kind: "build" }) });
     const results = await Promise.all([post(), post(), post()]);
     assert.deepEqual(results.map((r) => r.status).sort(), [202, 409, 409]);
     for (let i = 0; i < 200 && !runner.current().endedAt; i++) await new Promise((r) => setTimeout(r, 50));
@@ -222,7 +222,7 @@ const finished = async (runner) => {
   for (let i = 0; i < 300 && !runner.current()?.endedAt; i++) await new Promise((r) => setTimeout(r, 50));
   return runner.current();
 };
-const blankoEntry = async () => (await listStudios({ env, stateDir })).find((s) => s.key === "blanko");
+const beispielEntry = async () => (await listStudios({ env, stateDir })).find((s) => s.key === "beispiel");
 
 test("a run whose record cannot be saved is red, also in the overview", async () => {
   const runner = createRunner({
@@ -236,14 +236,14 @@ test("a run whose record cannot be saved is red, also in the overview", async ()
       rename: async () => {},
     },
   });
-  await runner.start(await blankoEntry(), "build");
+  await runner.start(await beispielEntry(), "build");
   const run = await finished(runner);
   assert.equal(run.ok, false);
   assert.match(run.saveError, /ENOSPC/);
   assert.equal(run.steps.at(-1).ok, false);
   const latest = await runner.latest();
-  assert.equal(latest["blanko:build"].ok, false, "overview must not show green");
-  assert.match(latest["blanko:build"].text, /nicht gespeichert/);
+  assert.equal(latest["beispiel:build"].ok, false, "overview must not show green");
+  assert.match(latest["beispiel:build"].text, /nicht gespeichert/);
 });
 
 test("a failure before the check starts replaces an older green result", async () => {
@@ -252,8 +252,8 @@ test("a failure before the check starts replaces an older green result", async (
   const { mkdir: mk } = await import("node:fs/promises");
   await mk(runsDir, { recursive: true });
   await writeFile(
-    path.join(runsDir, "2026-01-01T00-00-00-000Z_blanko_test.json"),
-    JSON.stringify({ studio: "blanko", endedAt: "2026-01-01T00:00:00.000Z", steps: [{ kind: "test", ok: true, text: "alt grün" }] }),
+    path.join(runsDir, "2026-01-01T00-00-00-000Z_beispiel_test.json"),
+    JSON.stringify({ studio: "beispiel", endedAt: "2026-01-01T00:00:00.000Z", steps: [{ kind: "test", ok: true, text: "alt grün" }] }),
   );
   const runner = createRunner({
     stateDir: state,
@@ -262,25 +262,25 @@ test("a failure before the check starts replaces an older green result", async (
       throw Object.assign(Error("EACCES: permission denied, scandir 'tests'"), { code: "EACCES" });
     },
   });
-  assert.equal((await runner.latest())["blanko:test"].ok, true, "old green result exists");
-  await runner.start(await blankoEntry(), "test");
+  assert.equal((await runner.latest())["beispiel:test"].ok, true, "old green result exists");
+  await runner.start(await beispielEntry(), "test");
   const run = await finished(runner);
   assert.equal(run.ok, false);
   assert.deepEqual(run.steps.map((s) => [s.kind, s.ok]), [["test", false]]);
   const latest = await runner.latest();
-  assert.equal(latest["blanko:test"].ok, false);
-  assert.match(latest["blanko:test"].text, /Vorbereitung fehlgeschlagen/);
+  assert.equal(latest["beispiel:test"].ok, false);
+  assert.match(latest["beispiel:test"].text, /Vorbereitung fehlgeschlagen/);
 });
 
 test("a damaged run record is skipped and never blocks the overview", async () => {
   const state = path.join(base, "state-damaged");
   const { mkdir: mk } = await import("node:fs/promises");
   await mk(path.join(state, "laeufe"), { recursive: true });
-  await writeFile(path.join(state, "laeufe", "2026-01-01_blanko_build.json"), '{"studio":"blanko","steps":[{"kind":"bu');
-  await writeFile(path.join(state, "laeufe", "2026-01-02_blanko_build.json"), JSON.stringify({ studio: "blanko", endedAt: "x", steps: [{ kind: "build", ok: true, text: "ok" }] }));
+  await writeFile(path.join(state, "laeufe", "2026-01-01_beispiel_build.json"), '{"studio":"beispiel","steps":[{"kind":"bu');
+  await writeFile(path.join(state, "laeufe", "2026-01-02_beispiel_build.json"), JSON.stringify({ studio: "beispiel", endedAt: "x", steps: [{ kind: "build", ok: true, text: "ok" }] }));
   const runner = createRunner({ stateDir: state, env });
   const latest = await runner.latest();
-  assert.equal(latest["blanko:build"].ok, true);
+  assert.equal(latest["beispiel:build"].ok, true);
 });
 
 test("a damaged step inside a readable record is skipped too", async () => {
@@ -288,11 +288,11 @@ test("a damaged step inside a readable record is skipped too", async () => {
   const { mkdir: mk } = await import("node:fs/promises");
   await mk(path.join(state, "laeufe"), { recursive: true });
   await writeFile(
-    path.join(state, "laeufe", "2026-01-01_blanko_build.json"),
-    JSON.stringify({ studio: "blanko", endedAt: "x", steps: [null, 7, { kind: "toString" }, { kind: "build", ok: true, text: "ok" }] }),
+    path.join(state, "laeufe", "2026-01-01_beispiel_build.json"),
+    JSON.stringify({ studio: "beispiel", endedAt: "x", steps: [null, 7, { kind: "toString" }, { kind: "build", ok: true, text: "ok" }] }),
   );
   const latest = await createRunner({ stateDir: state, env }).latest();
-  assert.equal(latest["blanko:build"].ok, true);
+  assert.equal(latest["beispiel:build"].ok, true);
   assert.equal(Object.keys(latest).length, 1);
 });
 
@@ -311,7 +311,7 @@ test("a failed save leaves no temporary file behind", async () => {
       rm: real.rm,
     },
   });
-  await runner.start(await blankoEntry(), "build");
+  await runner.start(await beispielEntry(), "build");
   const run = await finished(runner);
   assert.equal(run.ok, false);
   assert.deepEqual(await real.readdir(path.join(state, "laeufe")), []);

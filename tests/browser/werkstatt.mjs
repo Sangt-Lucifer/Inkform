@@ -1,5 +1,5 @@
 // Werkstatt UI in the real browser: a throw-away studio (temporary folder) is shown as protected
-// without buttons, Blanko can be built, a new studio is created, edited, saved and committed,
+// without buttons, Beispiel can be built, a new studio is created, edited, saved and committed,
 // and the page runs under its strict CSP without errors. Everything happens in a temporary folder.
 import { execFileSync } from "node:child_process";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -25,13 +25,13 @@ const { cmd, ev, until, check, screenshot, errors } = await connect();
 try {
   await cmd("Page.navigate", { url });
   await until(`document.querySelectorAll('.card').length === 2`);
-  check("Werkstatt zeigt Blanko und das Wegwerf-Studio", await ev(`[...document.querySelectorAll('.card h2')].map(h=>h.textContent).join('|').includes('Testatelier')`));
+  check("Werkstatt zeigt Beispiel und das Wegwerf-Studio", await ev(`[...document.querySelectorAll('.card h2')].map(h=>h.textContent).join('|').includes('Testatelier')`));
   check(
     "Nicht freigegebenes Studio: nur Anzeige, keine Knöpfe",
     await ev(`(()=>{const c=document.querySelector('.card[data-key="s-testatelier"]');return !c.querySelector('button')&&c.textContent.includes('nur Anzeige')&&c.textContent.includes('Musterstudios')})()`),
   );
-  check("Blanko hat die Knöpfe zum Bauen und Prüfen", await ev(`document.querySelectorAll('.card[data-key="blanko"] button[data-kind]').length === 4`));
-  await ev(`document.querySelector('button[data-studio="blanko"][data-kind="build"]').click()`);
+  check("Beispiel hat die Knöpfe zum Bauen und Prüfen", await ev(`document.querySelectorAll('.card[data-key="beispiel"] button[data-kind]').length === 4`));
+  await ev(`document.querySelector('button[data-studio="beispiel"][data-kind="build"]').click()`);
   await until(`document.getElementById('run-state').textContent === 'alles grün'`, 300);
   check("Bauen über die Oberfläche: Ergebnis verständlich angezeigt", await ev(`document.getElementById('run-steps').textContent.includes('Gebaut')`));
   await screenshot("werkstatt");
@@ -39,7 +39,7 @@ try {
   // New studio -> editor -> check -> save -> commit.
   const protectedBefore = await snapshot(studioDir);
   check("Geschütztes Studio: kein Bearbeiten-Knopf", await ev(`!document.querySelector('.card[data-key="s-testatelier"] [data-edit]')`));
-  check("Blanko wird nicht im Editor bearbeitet", await ev(`!document.querySelector('.card[data-key="blanko"] [data-edit]')`));
+  check("Beispiel wird nicht im Editor bearbeitet", await ev(`!document.querySelector('.card[data-key="beispiel"] [data-edit]')`));
   await ev(`document.getElementById('new-studio').click()`);
   await ev(`(()=>{const f=document.getElementById('new-form');f.elements.id.value='atelier-nord';f.elements.name.value='Atelier Nord';f.requestSubmit()})()`);
   await until(`!document.getElementById('editor').hidden && document.querySelectorAll('#texts textarea').length > 20`);
@@ -87,7 +87,7 @@ try {
 
   // The on-site panel opens, shows the QR code and starts nothing by itself.
   check("Geschütztes Studio: kein Vor-Ort-Knopf", await ev(`!document.querySelector('.card[data-key="s-testatelier"] [data-onsite]')`));
-  await ev(`document.querySelector('.card[data-key="blanko"] [data-onsite]').click()`);
+  await ev(`document.querySelector('.card[data-key="beispiel"] [data-onsite]').click()`);
   await until(`!document.getElementById('onsite').hidden && document.querySelector('#onsite-qr path')`);
   check(
     "Vor-Ort: QR-Code gezeichnet, Zertifikat noch nicht vorhanden, nichts gestartet",

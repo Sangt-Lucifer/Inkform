@@ -20,7 +20,7 @@ import { ADDRESS, CHECKLIST, approveNeutralName, loadedByDevice, confirmInstalle
 import { qrMatrix } from "./qr.mjs";
 import { createRunner } from "./runs.mjs";
 import {
-  blankoMarkers,
+  beispielMarkers,
   buildState,
   certInfo,
   defaultCertDir,
@@ -90,7 +90,7 @@ export async function startWerkstatt({
   async function overview(refresh) {
     const entries = await studios();
     if (refresh || !statusCache) {
-      const markers = await blankoMarkers();
+      const markers = await beispielMarkers();
       statusCache = {};
       for (const e of entries)
         statusCache[e.key] = {
@@ -152,7 +152,7 @@ export async function startWerkstatt({
     }
   }
 
-  // ---------- on-site mode (only Blanko and released studios) ----------
+  // ---------- on-site mode (only Beispiel and released studios) ----------
   async function onsiteEntry(res, key) {
     const entry = (await studios()).find((e) => e.key === key);
     if (!entry) send(res, 404, { error: "Studio nicht gefunden." });
@@ -176,7 +176,7 @@ export async function startWerkstatt({
         state: await studioState(stateDir, entry.id),
         checklist: CHECKLIST,
         session: onsite.current(),
-        blanko: entry.kind === "blanko",
+        beispiel: entry.kind === "beispiel",
       });
     }
     const input = req.method === "POST" ? await body(req) : {};
@@ -212,10 +212,10 @@ export async function startWerkstatt({
       return send(res, result.error ? 400 : 200, result);
     }
     if (p === "/api/vor-ort/freigeben") {
-      // Only after a Blanko session that the (test) iPad actually loaded.
+      // Only after a Beispiel session that the (test) iPad actually loaded.
       const s = onsite.current();
-      if (entry.kind !== "blanko" || !s || s.id !== entry.id || !loadedByDevice(s.requests))
-        return send(res, 409, { error: "Erst mit Blanko im Vor-Ort-Modus ein Test-iPad die App vollständig laden lassen (Startseite und Offline-Speicher)." });
+      if (entry.kind !== "beispiel" || !s || s.id !== entry.id || !loadedByDevice(s.requests))
+        return send(res, 409, { error: "Erst mit dem Beispiel im Vor-Ort-Modus ein Test-iPad die App vollständig laden lassen (Startseite und Offline-Speicher)." });
       return send(res, 200, { neutralApproved: await approveNeutralName(stateDir) });
     }
     return send(res, 404, { error: "Unbekannt." });

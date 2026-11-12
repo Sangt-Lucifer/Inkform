@@ -1,5 +1,5 @@
 // Create a new studio and edit its profile. Only studios released in
-// <state>/freigegeben.json can be edited; Blanko (the sample in the core) and every other studio
+// <state>/freigegeben.json can be edited; Beispiel (the sample in the core) and every other studio
 // are never written to. Every save is checked with the same rules as build.mjs plus the
 // cross-studio marker rules, by building the draft in a temporary folder first. Nothing is saved
 // while an error is open. No customer data is read or written here.
@@ -177,7 +177,7 @@ function fields(draft) {
 
 let sampleBuild = null;
 async function sampleText() {
-  // The sample (Blanko) build is the neutral reference: a studio marker found there is too general.
+  // The sample (Beispiel) build is the neutral reference: a studio marker found there is too general.
   sampleBuild ??= buildProfile(SAMPLE).then(({ files }) => [...files.values()].map((c) => scanText(c)).join("\n"));
   return sampleBuild;
 }
@@ -677,10 +677,10 @@ export async function commitStudio({ dir, message, files, env, stateDir }) {
   }
 }
 
-// Only released studios (not Blanko, not display-only ones) may be edited or committed.
+// Only released studios (not Beispiel, not display-only ones) may be edited or committed.
 export async function editable(entry, stateDir, env = process.env) {
   if (!entry) return "Studio nicht gefunden.";
-  if (entry.kind === "blanko") return "Blanko ist die Beispiel-Fassung im Kern und wird in der Werkstatt nicht bearbeitet.";
+  if (entry.kind === "beispiel") return "Die Beispiel-Fassung gehört zum Kern und wird in der Werkstatt nicht bearbeitet.";
   if (!entry.actionable) return "Nur Anzeige: Dieses Studio ist nicht freigegeben und wird nicht verändert.";
   return studioGuard(entry.dir, { env, stateDir });
 }
