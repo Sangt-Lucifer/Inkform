@@ -1,16 +1,18 @@
 import { createAdminAccess } from "./access.js";
-import { createIncomeFeature, incomeId } from "./income.js";
+import { INCOME_KEY, createIncomeFeature, incomeId } from "./income.js";
 import { STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
 import { PDF_FONT, createPdfDocument, unsupportedPdfChars } from "./pdf-fonts.js";
 import { createIndexedDbFiles, createPendingStore } from "./pending.js";
 import { birthDateValid, fileSlug, moneyCents, studioInitials } from "./consent.js";
-import { ARCHIVE_DB, createExportFeature } from "./export.js";
+import { ARCHIVE_DB, EXPORT_LOG_KEY, createExportFeature, formatSize, readExportLog } from "./export.js";
+import { BACKUP_INTERVALS, BACKUP_INTERVAL_KEY, createFullBackup, readBackupDays, readFullBackup } from "./backup.js";
 import {
   LAST_BACKUP_KEY,
   PENDING_REMINDER_DAYS,
   daysBetween,
   dueForPdfDeletion,
   readRetention,
+  writeRetention,
 } from "./retention.js";
 
 function clone(value) {
@@ -1443,31 +1445,146 @@ function privacyReminders() {
     notes.push(`${open} Einwilligungs-PDFs haben die eingetragene Aufbewahrungsfrist überschritten.`);
     buttons.push('<button class="ad-button" type="button" data-admin-page="retention">Löschliste öffnen</button>');
   }
+  const backup = backupState();
+  if (records.length && (backup.age === null || backup.age >= backup.days)) {
+    notes.push(
+      backup.age === null
+        ? "Es gibt noch keine Gesamtsicherung."
+        : `Die letzte Gesamtsicherung ist ${backup.age} ${backup.age === 1 ? "Tag" : "Tage"} alt.`,
+    );
+    buttons.push('<button class="ad-button" type="button" data-admin-action="backup-create">Jetzt sichern</button>');
+  }
+  let log = [];
+  try {
+    log = readExportLog(localStorage);
+  } catch (_) {}
+  const months = exportFeature.unexportedMonths(log);
+  if (months.length) {
+    const name = (month) => new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" }).format(new Date(`${month}-15T12:00:00`));
+    notes.push(`Noch nicht als ZIP exportiert: ${months.map(name).join(", ")}.`);
+    buttons.push('<button class="ad-button" type="button" data-admin-page="export">Export öffnen</button>');
+  }
   return notes.length
     ? `<div class="ad-notice ad-reminder" role="status">${notes.map((n) => `<p>${escapeHtml(n)}</p>`).join("")}<div class="ad-actions-row">${buttons.join("")}</div></div>`
     : "";
 }
-function securityChecklist() {
-  let last = null;
+function backupState() {
+  let last = null,
+    days = 7;
   try {
     last = localStorage.getItem(LAST_BACKUP_KEY);
+    days = readBackupDays(localStorage);
   } catch (_) {}
-  const age = last ? daysBetween(last) : null;
-  const backup =
+  return { age: last ? daysBetween(last) : null, days };
+}
+let preparedBackup = null;
+function backupPanel() {
+  const { age, days } = backupState();
+  const status =
     age === null
-      ? "Noch keine Einnahmen-Sicherung auf diesem Gerät erstellt."
-      : `Letzte Einnahmen-Sicherung vor ${age} ${age === 1 ? "Tag" : "Tagen"}${age > 7 ? " – bitte neu sichern." : "."}`;
+      ? "Noch keine Gesamtsicherung auf diesem Gerät erstellt."
+      : `Letzte Gesamtsicherung vor ${age} ${age === 1 ? "Tag" : "Tagen"}${age >= days ? " – bitte neu sichern." : "."}`;
+  return adminPanel(
+    "Gesamtsicherung",
+    `<p class="ad-section-copy${age === null || age >= days ? " ad-warn" : ""}">${escapeHtml(status)}</p>
+    <p class="ad-section-copy">Eine Datei mit allem, was zum Wiederherstellen nötig ist: Einstellungen, Einnahmenliste, Fristen, Export-Protokoll und die Einwilligungs-PDFs für den ZIP-Export. Sie enthält Gesundheitsangaben und Unterschriften: nur auf dem iPad oder dem Mac ablegen, nicht in iCloud Drive. Nicht enthalten sind die PIN und eine noch offene Einwilligung.</p>
+    <div class="income-filters"><label>Erinnern nach<select id="backup-interval">${BACKUP_INTERVALS.map((d) => `<option value="${d}"${d === days ? " selected" : ""}>${d} ${d === 1 ? "Tag" : "Tagen"}</option>`).join("")}</select></label></div>
+    <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="backup-create">${adminIcon("download")}Gesamtsicherung erstellen</button><button class="ad-button primary" type="button" data-admin-action="backup-save" hidden>${adminIcon("share")}In Dateien sichern</button><button class="ad-button" type="button" data-admin-action="backup-restore">${adminIcon("upload")}Aus Sicherung wiederherstellen</button></div>
+    <p class="ad-preview-note" id="backup-note" role="status"></p>`,
+  );
+}
+async function createBackup() {
+  const note = $("backup-note");
+  preparedBackup = null;
+  document.querySelector('[data-admin-action="backup-save"]').hidden = true;
+  note.textContent = "Sicherung wird erstellt …";
+  try {
+    const backup = createFullBackup({
+      settings,
+      theme: document.documentElement.dataset.theme,
+      retention: readRetention(localStorage),
+      backupDays: readBackupDays(localStorage),
+      exports: readExportLog(localStorage),
+      records: incomeFeature.list(),
+      pdfs: await exportFeature.pdfs(),
+    });
+    preparedBackup = new File([JSON.stringify(backup)], `Inkform_Sicherung_${localDate()}.json`, { type: "application/json" });
+    note.textContent = `Sicherung bereit: ${backup.income.records.length} Einträge, ${backup.pdfs.length} PDFs, ${formatSize(preparedBackup.size)}. Jetzt „In Dateien sichern“ tippen.`;
+    document.querySelector('[data-admin-action="backup-save"]').hidden = false;
+  } catch (error) {
+    note.textContent = "Sicherung nicht möglich: " + error.message;
+  }
+}
+function saveBackup() {
+  const file = preparedBackup;
+  if (!file) return;
+  saveFile(file).then(
+    (way) => {
+      localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
+      preparedBackup = null;
+      if (adminPage === "overview") renderAdminSection();
+      $("backup-note").textContent =
+        way === "download"
+          ? `${file.name} an den Browser übergeben. Bitte in der Dateien-App prüfen und auf den Mac kopieren.`
+          : `Systemdialog abgeschlossen. Prüfe in der Dateien-App, ob ${file.name} im gewählten Ordner liegt.`;
+    },
+    (error) =>
+      ($("backup-note").textContent =
+        error.name === "AbortError"
+          ? "Speichern abgebrochen. Über „In Dateien sichern“ erneut versuchen."
+          : "Der Systemdialog konnte nicht geöffnet werden. Bitte erneut versuchen."),
+  );
+}
+const backupPicker = document.createElement("input");
+backupPicker.type = "file";
+backupPicker.accept = ".json,application/json";
+backupPicker.hidden = true;
+backupPicker.id = "backup-file";
+document.body.append(backupPicker);
+// Everything is checked first; the PDFs are written before the entries, so a failure leaves the
+// current data in place (PDFs without an entry are removed by the next sync).
+backupPicker.addEventListener("change", async () => {
+  const file = backupPicker.files[0];
+  backupPicker.value = "";
+  if (!file || !adminAccess.isUnlocked()) return;
+  try {
+    if ((pendingConsent && !pendingConsent.confirmed) || pendingStore.read())
+      throw Error("Bitte zuerst die offene Einwilligung ablegen und bestätigen.");
+    if (adminChanged()) throw Error("Bitte zuerst die Änderungen speichern oder verwerfen.");
+    const data = readFullBackup(JSON.parse(await file.text()), validateSettings);
+    if (
+      !window.confirm(
+        `Sicherung vom ${timeFormat(new Date(data.createdAt))} wiederherstellen?\n\nSie enthält ${data.records.length} Einträge, ${data.pdfs.length} PDFs, Einstellungen und Fristen.\n\nAlles auf diesem Gerät wird ersetzt: Einnahmenliste (aktuell ${incomeFeature.list().length} Einträge), PDFs für den ZIP-Export, Einstellungen, Fristen und Export-Protokoll. Das lässt sich nicht rückgängig machen. Die PIN bleibt.`,
+      )
+    )
+      return;
+    await exportFeature.restore(data.pdfs);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
+    localStorage.setItem(THEME_KEY, data.theme);
+    writeRetention(localStorage, data.retention);
+    localStorage.setItem(BACKUP_INTERVAL_KEY, String(data.backupDays));
+    localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(data.exports));
+    localStorage.setItem(INCOME_KEY, JSON.stringify({ schemaVersion: 1, records: data.records }));
+    localStorage.setItem(LAST_BACKUP_KEY, data.createdAt);
+    await exportFeature.sync();
+    sessionStorage.setItem("inkform.restored", data.createdAt);
+    location.reload();
+  } catch (error) {
+    toast("Wiederherstellen nicht möglich: " + error.message);
+  }
+});
+function securityChecklist() {
   const items = [
     "Gerätecode mit mindestens 6 Ziffern: erst damit verschlüsselt das iPad seine Daten (Einstellungen → Face ID & Code: „Datenschutz ist aktiviert“).",
     "Geführter Zugriff für die Kundenübergabe, mit eigenem Code (Einstellungen → Bedienungshilfen → Geführter Zugriff).",
     "PDFs nur unter „Auf meinem iPad“ ablegen, nicht in iCloud Drive.",
     "iCloud-Backup für dieses iPad aus; stattdessen verschlüsseltes Backup über den Mac (Finder → „Lokales Backup verschlüsseln“).",
-    "Wöchentlich sichern: Einnahmen und Einstellungen als JSON, den PDF-Ordner auf den Mac.",
+    "Regelmäßig die Gesamtsicherung erstellen und zusammen mit den ZIP-Exporten auf den Mac kopieren.",
     "Safari-Websitedaten löschen oder die Home-Bildschirm-App entfernen löscht Einnahmen, PIN und offene Einwilligung – vorher sichern.",
   ];
   return adminPanel(
     "Sicherheit dieses iPads",
-    `<p class="ad-section-copy${age === null || age > 7 ? " ad-warn" : ""}">${escapeHtml(backup)}</p><ul class="ad-checklist">${items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul><div class="ad-actions-row"><button class="ad-button" type="button" data-admin-page="income">Einnahmen sichern</button><button class="ad-button" type="button" data-admin-page="retention">Aufbewahrung</button></div>`,
+    `<ul class="ad-checklist">${items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul><div class="ad-actions-row"><button class="ad-button" type="button" data-admin-page="retention">Aufbewahrung</button></div>`,
     "Diese Punkte kann die App nicht selbst prüfen. Details in der Anleitung.",
   );
 }
@@ -1517,7 +1634,7 @@ function renderAdminSection() {
           <strong>${adminDraft.legal.length}</strong><small>Mit roten Prüfvermerken</small>
         </div>
       </div>
-      ${privacyReminders()}
+      ${privacyReminders()}${backupPanel()}
       <div class="ad-columns">
         <div>
           ${securityChecklist()}
@@ -2071,6 +2188,19 @@ function requestAdminLeave() {
   if (adminChanged()) showDialog("admin-leave-dialog");
   else finishAdminLeave();
 }
+// Share sheet ("In Dateien sichern") where available, otherwise a browser download. Call it
+// synchronously from the tap, so Safari keeps the user activation.
+function saveFile(file) {
+  let native = false;
+  try {
+    native = !!(window.isSecureContext && navigator.share && navigator.canShare?.({ files: [file] }));
+  } catch (_) {}
+  if (!native) {
+    downloadFile(file, file.name);
+    return Promise.resolve("download");
+  }
+  return navigator.share({ files: [file], title: file.name }).then(() => "share");
+}
 function downloadFile(blob, name) {
   const url = URL.createObjectURL(blob),
     link = document.createElement("a");
@@ -2173,6 +2303,11 @@ $("admin-defaults-confirm").addEventListener("click", () => {
   renderAdminSection();
   toast("Standardvorlage als Entwurf geladen. Zum Übernehmen speichern.");
 });
+$("admin-app").addEventListener("change", (event) => {
+  if (event.target.id !== "backup-interval" || !adminAccess.isUnlocked()) return;
+  localStorage.setItem(BACKUP_INTERVAL_KEY, event.target.value);
+  renderAdminSection();
+});
 $("admin-app").addEventListener("input", (event) => {
   const path = event.target.dataset.configPath;
   if (!path) return;
@@ -2239,6 +2374,16 @@ $("admin-app").addEventListener("click", (event) => {
     }
   }
   switch (button.dataset.adminAction) {
+    case "backup-create":
+      if (adminPage !== "overview") openAdminAuthorized("overview");
+      createBackup();
+      break;
+    case "backup-save":
+      saveBackup();
+      break;
+    case "backup-restore":
+      backupPicker.click();
+      break;
     case "pending":
       if (pendingConsent && !pendingConsent.confirmed) renderPdfArtifact(pendingConsent);
       break;
@@ -2352,7 +2497,9 @@ exportFeature = createExportFeature({
   isUnlocked: () => adminAccess.isUnlocked(),
   escape: escapeHtml,
   notify: toast,
-  download: downloadFile,
+  save: saveFile,
+  logExport: (entry) =>
+    localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify([...readExportLog(localStorage), entry].slice(-1000))),
   today: localDate,
 });
 exportFeature.sync().catch((error) => console.error("Export-Archiv nicht abgeglichen:", error));
@@ -2363,6 +2510,10 @@ try {
 } catch (_) {}
 setTheme(initialTheme, false);
 if (configLoadError) toast(configLoadError);
+if (sessionStorage.getItem("inkform.restored")) {
+  sessionStorage.removeItem("inkform.restored");
+  toast("Sicherung wiederhergestellt.");
+}
 pendingStore = createPendingStore({
   storage: {
     getItem: (key) => localStorage.getItem(key),

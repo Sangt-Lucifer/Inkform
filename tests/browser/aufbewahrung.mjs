@@ -37,7 +37,7 @@ check("Übersicht erinnert an die seit 8 Tagen offene Einwilligung", await ev(`d
 await ev(`document.querySelector('[data-admin-action="pending"]').click()`);
 check("Knopf „Offene Einwilligung ablegen“ öffnet die offene Einwilligung", await ev(`document.getElementById('pdf-dialog').open&&pdfArtifact===pendingConsent`));
 await ev(`document.getElementById('pdf-dialog').close()`);
-check("Sicherheits-Checkliste mit Gerätecode, Geführtem Zugriff, iCloud und Warnung „noch keine Sicherung“", await ev(`(()=>{const t=document.getElementById('admin-app').textContent;return t.includes('Geführter Zugriff')&&t.includes('Gerätecode')&&t.includes('iCloud-Backup')&&t.includes('Noch keine Einnahmen-Sicherung')})()`));
+check("Sicherheits-Checkliste mit Gerätecode, Geführtem Zugriff, iCloud und Warnung „noch keine Sicherung“", await ev(`(()=>{const t=document.getElementById('admin-app').textContent;return t.includes('Geführter Zugriff')&&t.includes('Gerätecode')&&t.includes('iCloud-Backup')&&t.includes('Noch keine Gesamtsicherung')})()`));
 await screenshot("aufbewahrung-uebersicht");
 
 // Retention page without deadlines: nothing listed.
@@ -80,8 +80,11 @@ await ev(`openAdmin('income')`);
 await until(`document.getElementById('admin-pin-dialog').open`);
 await ev(`unlockAdmin()`);
 await until(`!!document.querySelector('[data-income-action="backup"]')`);
-await ev(`document.querySelector('[data-income-action="backup"]').click();openAdminAuthorized('overview')`);
-check("Nach der Sicherung: Checkliste zeigt „vor 0 Tagen“, keine Erinnerung an offene Einwilligung", await ev(`document.getElementById('admin-app').textContent.includes('Letzte Einnahmen-Sicherung vor 0 Tagen')&&!document.querySelector('.ad-reminder')?.textContent.includes('seit')`));
+await ev(`openAdminAuthorized('overview');navigator.canShare=()=>true;navigator.share=async()=>{};document.querySelector('[data-admin-action="backup-create"]').click()`);
+await until(`!document.querySelector('[data-admin-action="backup-save"]').hidden`);
+await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
+await until(`document.getElementById('admin-app').textContent.includes('Letzte Gesamtsicherung vor 0 Tagen')`);
+check("Nach der Gesamtsicherung: „vor 0 Tagen“, keine Erinnerung an offene Einwilligung oder Sicherung", await ev(`!document.querySelector('.ad-reminder')?.textContent.includes('seit')&&!document.querySelector('.ad-reminder')?.textContent.includes('Gesamtsicherung')`));
 check("Einnahmenliste zeigt „PDF gelöscht am“", await ev(`(openAdminAuthorized('income'),(()=>{const el=document.getElementById('income-filter-year');el.value='';el.dispatchEvent(new Event('change',{bubbles:true}));return document.querySelector('.income-table').textContent.includes('PDF gelöscht am')})())`));
 await ev(`finishAdminLeave()`);
 

@@ -7,6 +7,7 @@ import { pdfMayExist } from "./retention.js";
 import { createZip } from "./zip.js";
 
 export const ARCHIVE_DB = "inkform-archive";
+export const EXPORT_LOG_KEY = "inkform.export.v1";
 export const EXPORT_TYPES = { all: "Alles", consents: "Nur Einwilligungen", income: "Nur Einnahmen" };
 
 // Calendar day YYYY-MM-DD that really exists (no 30 February).
@@ -84,12 +85,42 @@ export function exportPlan(records, archivedIds, period, type) {
   };
 }
 
+// Saved ZIP files: { from, to, type, at }. Used for the reminder about months not yet exported.
+export function validateExportLog(value) {
+  if (!Array.isArray(value) || value.length > 1000) throw Error("Ungültiges Export-Protokoll.");
+  return value.map((entry) => {
+    if (!entry || typeof entry.at !== "string" || !Object.hasOwn(EXPORT_TYPES, entry.type))
+      throw Error("Ungültiger Eintrag im Export-Protokoll.");
+    const { from, to } = exportPeriod({ kind: "range", from: entry.from, to: entry.to });
+    return { from, to, type: entry.type, at: entry.at };
+  });
+}
+export function readExportLog(storage) {
+  try {
+    return validateExportLog(JSON.parse(storage.getItem(EXPORT_LOG_KEY) || "[]"));
+  } catch (_) {
+    return [];
+  }
+}
+
+// Completed months with consent PDFs on this device that no saved ZIP with consents covered.
+export function unexportedMonths(records, archivedIds, log, today) {
+  const current = today.slice(0, 7),
+    months = new Set(records.filter((r) => exportable(r) && archivedIds.has(r.id) && r.date.slice(0, 7) < current).map((r) => r.date.slice(0, 7)));
+  return [...months]
+    .filter((month) => {
+      const { from, to } = exportPeriod({ kind: "month", month });
+      return !log.some((e) => e.type !== "income" && e.from <= from && e.to >= to);
+    })
+    .sort();
+}
+
 export function formatSize(bytes) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
   return `${(bytes / 1024 / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB`;
 }
 
-export function createExportFeature({ archive, records, incomeReport, isUnlocked, escape, notify, download, today }) {
+export function createExportFeature({ archive, records, incomeReport, isUnlocked, escape, notify, save: saveFile, logExport, today }) {
   const e = escape,
     dateDe = (iso) => iso.split("-").reverse().join(".");
   const state = {
@@ -102,7 +133,8 @@ export function createExportFeature({ archive, records, incomeReport, isUnlocked
   };
   let prepared = null,
     run = 0,
-    sharing = false;
+    sharing = false,
+    archived = new Set();
   const $ = (id) => document.getElementById(id),
     allowed = (id) => records().some((r) => r.id === id && exportable(r));
 
@@ -127,7 +159,7 @@ export function createExportFeature({ archive, records, incomeReport, isUnlocked
       }
       files.push({ name: `${base}.csv`, data: new TextEncoder().encode(incomeCsv(plan.income)) });
     }
-    return { name: `Inkform_${period.label}.zip`, files, consents, withoutPdf: plan.withoutPdf, note, basis: JSON.stringify(all) };
+    return { name: `Inkform_${period.label}.zip`, period, type: state.type, files, consents, withoutPdf: plan.withoutPdf, note, basis: JSON.stringify(all) };
   }
 
   function summary({ files, consents, withoutPdf, note }) {
@@ -179,20 +211,16 @@ export function createExportFeature({ archive, records, incomeReport, isUnlocked
       return;
     }
     const file = new File([createZip(ready.files)], ready.name, { type: "application/zip" });
-    let native = false;
-    try {
-      native = !!(window.isSecureContext && navigator.share && navigator.canShare?.({ files: [file] }));
-    } catch (_) {}
-    if (!native) {
-      download(file, file.name);
-      status.textContent = `${file.name} an den Browser übergeben. Prüfe die Datei in der Dateien-App im Downloadordner.`;
-      return;
-    }
     sharing = true;
-    navigator
-      .share({ files: [file], title: file.name })
+    saveFile(file)
       .then(
-        () => (status.textContent = `Systemdialog abgeschlossen. Prüfe in der Dateien-App, ob ${file.name} im gewählten Ordner liegt.`),
+        (way) => {
+          logExport({ from: ready.period.from, to: ready.period.to, type: ready.type, at: new Date().toISOString() });
+          status.textContent =
+            way === "download"
+              ? `${file.name} an den Browser übergeben. Prüfe die Datei in der Dateien-App im Downloadordner.`
+              : `Systemdialog abgeschlossen. Prüfe in der Dateien-App, ob ${file.name} im gewählten Ordner liegt.`;
+        },
         (error) =>
           (status.textContent =
             error.name === "AbortError"
@@ -244,13 +272,33 @@ export function createExportFeature({ archive, records, incomeReport, isUnlocked
     async keep(id, blob) {
       navigator.storage?.persist?.().catch(() => {});
       await archive.put(id, blob);
-      if (!allowed(id)) await archive.delete(id);
+      if (allowed(id)) archived.add(id);
+      else await archive.delete(id);
     },
     // The entries are re-read before each deletion: a PDF kept meanwhile (also by another window)
     // belongs to an entry that already exists, so it is never deleted.
     async sync() {
-      for (const key of await archive.keys()) if (!allowed(key)) await archive.delete(key);
+      for (const key of await archive.keys())
+        if (allowed(key)) archived.add(key);
+        else {
+          await archive.delete(key);
+          archived.delete(key);
+        }
       if ($("export-preview")) preview();
+    },
+    // From the last sync; the overview reads it synchronously.
+    unexportedMonths: (log) => unexportedMonths(records(), archived, log, today()),
+    async pdfs() {
+      const out = [];
+      for (const id of await archive.keys()) {
+        const blob = allowed(id) ? await archive.get(id) : null;
+        if (blob) out.push({ id, bytes: new Uint8Array(await blob.arrayBuffer()) });
+      }
+      return out;
+    },
+    // Restore writes the PDFs before the entries exist; the sync after the restore removes the rest.
+    async restore(pdfs) {
+      for (const { id, bytes } of pdfs) await archive.put(id, new Blob([bytes], { type: "application/pdf" }));
     },
   };
 }

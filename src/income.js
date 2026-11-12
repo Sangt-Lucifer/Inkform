@@ -1,7 +1,6 @@
 // Only financial references are persisted. No health answers, signatures or PDFs.
 import {
   ANONYMIZED,
-  LAST_BACKUP_KEY,
   anonymizeRecord,
   dueForAnonymization,
   dueForPdfDeletion,
@@ -691,9 +690,6 @@ export function createIncomeFeature({
             }),
             `Inkform_Einnahmen_Sicherung_${today()}.json`,
           );
-          try {
-            storage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
-          } catch (_) {}
           break;
         case "import":
           picker.click();

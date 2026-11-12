@@ -1,0 +1,92 @@
+// Full backup (src/backup.js): complete round trip, strict checks before anything is restored.
+import assert from "node:assert/strict";
+import test from "node:test";
+import { BACKUP_INTERVAL_KEY, createFullBackup, fromBase64, readBackupDays, readFullBackup, toBase64 } from "../src/backup.js";
+
+const row = (id, date, extra = {}) => ({
+  id,
+  date,
+  artist: "Alex",
+  customer: `Vorname${id} Nachname${id}`,
+  totalCents: 10000,
+  depositCents: null,
+  source: "",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  ...extra,
+});
+const pdf = (text) => new TextEncoder().encode(`%PDF-1.7 ${text}`);
+const settings = { schemaVersion: 1, studio: { name: "Musterstudio" }, app: {} };
+const validateSettings = (value) => {
+  if (value?.schemaVersion !== 1) throw Error("Diese Datei ist keine unterstützte INKFORM-Konfiguration (Version 1).");
+  return value;
+};
+const backup = (extra = {}) =>
+  JSON.parse(
+    JSON.stringify(
+      createFullBackup({
+        settings,
+        theme: "light",
+        retention: { pdfYears: 10, incomeYears: null },
+        backupDays: 14,
+        exports: [{ from: "2026-03-01", to: "2026-03-31", type: "all", at: "2026-04-02T10:00:00.000Z" }],
+        records: [row("a", "2026-03-01"), row("b", "2026-03-02", { pdfMissing: true })],
+        pdfs: [{ id: "a", bytes: pdf("Jürgen Müller") }],
+        now: new Date("2026-04-03T08:00:00.000Z"),
+        ...extra,
+      }),
+    ),
+  );
+
+test("base64 keeps every byte, also for large files", () => {
+  const bytes = new Uint8Array(200_000).map((_, i) => (i * 7) % 256);
+  assert.deepEqual(fromBase64(toBase64(bytes)), bytes);
+  assert.equal(toBase64(new Uint8Array(0)), "");
+});
+
+test("round trip: everything needed to restore, PDFs byte for byte", () => {
+  const data = readFullBackup(backup(), validateSettings);
+  assert.equal(data.createdAt, "2026-04-03T08:00:00.000Z");
+  assert.deepEqual(data.settings, settings);
+  assert.equal(data.theme, "light");
+  assert.deepEqual(data.retention, { pdfYears: 10, incomeYears: null });
+  assert.equal(data.backupDays, 14);
+  assert.equal(data.exports.length, 1);
+  assert.deepEqual(data.records.map((r) => r.id), ["a", "b"]);
+  assert.deepEqual(data.pdfs, [{ id: "a", bytes: pdf("Jürgen Müller") }]);
+});
+
+test("no PIN and no open consent in the file", () => {
+  const text = JSON.stringify(backup());
+  for (const key of ["pin", "salt", "hash", "pending"]) assert.ok(!text.toLowerCase().includes(`"${key}`), key);
+});
+
+test("wrong or damaged files are refused as a whole", () => {
+  const refuse = (change, message) => {
+    const value = backup();
+    change(value);
+    assert.throws(() => readFullBackup(value, validateSettings), message);
+  };
+  refuse((v) => (v.kind = "etwas-anderes"), /keine INKFORM-Gesamtsicherung/);
+  refuse((v) => (v.schemaVersion = 2), /keine INKFORM-Gesamtsicherung/);
+  refuse((v) => (v.createdAt = "gestern"), /Erstellungsdatum/);
+  refuse((v) => (v.theme = "blau"), /Farbschema/);
+  refuse((v) => (v.backupDays = 5), /Erinnerungsabstand/);
+  refuse((v) => (v.settings = { schemaVersion: 9 }), /Konfiguration/);
+  refuse((v) => (v.retention = { pdfYears: 0 }), /Fristen/);
+  refuse((v) => (v.exports = [{ from: "2026-03-31", to: "2026-03-01", type: "all", at: "x" }]), /nicht nach/);
+  refuse((v) => (v.income.records[0].health = "nein"), /Einnahmeneintrag/);
+  refuse((v) => (v.pdfs = null), /PDF-Liste/);
+  refuse((v) => (v.pdfs[0].id = "unbekannt"), /ohne passenden Einnahmeneintrag/);
+  refuse((v) => v.pdfs.push({ ...v.pdfs[0] }), /ohne passenden Einnahmeneintrag/);
+  refuse((v) => (v.pdfs[0].id = "b"), /ohne passenden Einnahmeneintrag/);
+  refuse((v) => (v.pdfs[0].pdf = "kein base64!"), /beschädigtes PDF/);
+  refuse((v) => (v.pdfs[0].pdf = toBase64(new TextEncoder().encode("GIF89a"))), /beschädigtes PDF/);
+});
+
+test("reminder interval: only the offered values, otherwise 7 days", () => {
+  const storage = (value) => ({ getItem: (k) => (k === BACKUP_INTERVAL_KEY ? value : null) });
+  assert.equal(readBackupDays(storage(null)), 7);
+  assert.equal(readBackupDays(storage("14")), 14);
+  assert.equal(readBackupDays(storage("5")), 7);
+  assert.equal(readBackupDays(storage("abc")), 7);
+});

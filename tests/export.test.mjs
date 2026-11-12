@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { consentFileName, createExportFeature, exportPeriod, exportPlan, exportable, formatSize, previousMonth, uniqueNames } from "../src/export.js";
+import { consentFileName, createExportFeature, exportPeriod, unexportedMonths, validateExportLog, exportPlan, exportable, formatSize, previousMonth, uniqueNames } from "../src/export.js";
 import { anonymizeRecord } from "../src/retention.js";
 
 const row = (id, date, extra = {}) => ({
@@ -163,7 +163,8 @@ function feature({ records, archive }) {
     isUnlocked: () => true,
     escape: (s) => s,
     notify() {},
-    download() {},
+    save: async () => "share",
+    logExport() {},
     today: () => "2026-04-10",
   });
   const change = (id, value) => listeners.forEach((fn) => fn({ target: { id, value } }));
@@ -221,4 +222,32 @@ test("income only works without the PDF store", async () => {
   assert.match(await preview(), /^1 PDF und 1 CSV, /);
   change("export-type", "all");
   assert.match(await preview(), /IndexedDB nicht verfügbar/);
+});
+
+test("months not yet exported: only completed months with PDFs on this device", () => {
+  const records = [
+    row("jan", "2026-01-10"),
+    row("feb", "2026-02-10"),
+    row("mar", "2026-03-31"),
+    row("old", "2025-12-10"),
+    row("gone", "2026-02-20", { pdfDeletedAt: "2026-03-01" }),
+    row("now", "2026-04-02"),
+  ];
+  const archived = new Set(["jan", "feb", "mar", "gone", "now"]);
+  assert.deepEqual(unexportedMonths(records, archived, [], "2026-04-10"), ["2026-01", "2026-02", "2026-03"]);
+  const log = [
+    { from: "2026-01-01", to: "2026-01-31", type: "income", at: "x" },
+    { from: "2026-02-01", to: "2026-02-27", type: "all", at: "x" },
+    { from: "2026-03-01", to: "2026-03-31", type: "consents", at: "x" },
+  ];
+  assert.deepEqual(unexportedMonths(records, archived, log, "2026-04-10"), ["2026-01", "2026-02"]);
+  assert.deepEqual(unexportedMonths(records, archived, [{ from: "2025-12-01", to: "2026-12-31", type: "all", at: "x" }], "2026-04-10"), []);
+  assert.deepEqual(unexportedMonths(records, archived, [], "2027-01-01").at(-1), "2026-04");
+});
+
+test("export log: checked entries only", () => {
+  assert.deepEqual(validateExportLog([]), []);
+  assert.throws(() => validateExportLog({}), /Protokoll/);
+  assert.throws(() => validateExportLog([{ from: "2026-01-01", to: "2026-01-31", type: "alles", at: "x" }]), /Protokoll/);
+  assert.throws(() => validateExportLog([{ from: "2026-02-30", to: "2026-03-01", type: "all", at: "x" }]), /Datum/);
 });
