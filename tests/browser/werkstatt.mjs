@@ -57,6 +57,10 @@ try {
   await until(`document.querySelector('#editor-result .badge.ok')`);
   check("Marker-Probe: im eigenen Build gefunden", await ev(`document.querySelector('#markers .probe').textContent.includes('im Build gefunden: ')`));
   await ev(`document.getElementById('editor-save').click()`);
+  check(
+    "Während des Speicherns ist der Editor gesperrt",
+    await ev(`[...document.querySelectorAll('#editor-form fieldset')].every((f) => f.disabled) && document.getElementById('editor-close').disabled`),
+  );
   await until(`document.getElementById('editor-result').textContent.includes('Gespeichert')`, 200);
   const saved = JSON.parse(await readFile(path.join(base, "studios", "atelier-nord", "profile.json"), "utf8"));
   check("Gespeichert: Profil ohne Musterstudio-Texte", saved.text.customerStudioName === "Atelier Nord" && saved.id === "atelier-nord");

@@ -66,9 +66,9 @@ def main():
     # Export root and studio folder: opened (or created) part by part without following links.
     place = [p for p in job["root"].split("/") if p] + [job["id"]]
 
-    def walk(create):
+    def walk(create, depth=None):
         fd = os.open("/", DIR)
-        for part in place:
+        for part in place[:depth]:
             try:
                 nxt = os.open(part, DIR, dir_fd=fd)
             except FileNotFoundError:
@@ -89,13 +89,14 @@ def main():
         os.close(again)
         return same
 
-    parent_fd = walk(True)
-    root_fd = os.open("..", DIR, dir_fd=parent_fd)
-    # Deliberately a second, independent check besides export.mjs (which compares with the known
-    # studios): here the folder itself must not look like a studio or a repository.
+    # The export root is checked before anything is created below it. Deliberately a second,
+    # independent check besides export.mjs (which compares with the known studios): the folder
+    # itself must not look like a studio or a repository.
+    root_fd = walk(True, len(place) - 1)
     studio_like = {"profile.json", "manifest.webmanifest", ".git", "package.json"}
     if studio_like & set(os.listdir(root_fd)):
         return say({"error": "Der Exportordner sieht aus wie ein Studio oder Repo. Dort wird nichts geschrieben."})
+    parent_fd = walk(True)
     # Entries an export folder may hold (pattern from export.mjs, the single source of these names).
     allowed = re.compile(job["allowed"])
     foreign = [n for n in os.listdir(parent_fd) if not allowed.match(n)]

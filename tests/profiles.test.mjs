@@ -92,3 +92,23 @@ test("cross-profile scan flags injected markers and embedded files", () => {
   assert.ok(hits.some((h) => h.includes("Kennzeichen")), hits.join());
   assert.ok(hits.some((h) => h.includes(`Datei ${q.profile.logo}`)), hits.join());
 });
+
+test("a changed manifest or icon alone gives a new service worker version", async () => {
+  const { cp, mkdtemp, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const base = await mkdtemp(path.join(tmpdir(), "inkform-sw-"));
+  const dir = path.join(base, "beispiel");
+  try {
+    await cp(path.join(root, "profiles", "beispiel"), dir, { recursive: true });
+    const before = String((await buildProfile(dir)).files.get("dist/sw.js"));
+    const manifest = JSON.parse(await readFile(path.join(dir, "manifest.webmanifest"), "utf8"));
+    await writeFile(path.join(dir, "manifest.webmanifest"), JSON.stringify({ ...manifest, theme_color: "#123456" }));
+    const afterManifest = String((await buildProfile(dir)).files.get("dist/sw.js"));
+    assert.notEqual(afterManifest, before);
+    const icon = await readFile(path.join(dir, "icons", "icon-192.png"));
+    await writeFile(path.join(dir, "icons", "icon-192.png"), Buffer.concat([icon, Buffer.from([0])]));
+    assert.notEqual(String((await buildProfile(dir)).files.get("dist/sw.js")), afterManifest);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});

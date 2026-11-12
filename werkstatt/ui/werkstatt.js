@@ -323,9 +323,16 @@ async function openEditor(key) {
   }
 }
 
+// While a check or save runs, the form, the editor buttons and switching to another studio are
+// locked: what is shown is always exactly what was sent.
+function lockEditor(locked) {
+  editing.busy = locked;
+  for (const set of form.querySelectorAll("fieldset")) set.disabled = locked;
+  for (const id of ["editor-check", "editor-save", "editor-close"]) $(id).disabled = locked;
+}
 async function submitDraft(save) {
-  const buttons = [$("editor-check"), $("editor-save")];
-  buttons.forEach((b) => (b.disabled = true));
+  const session = editing;
+  lockEditor(true);
   $("editor-result").replaceChildren(el("p", { class: "badge busy" }, save ? "Speichert und prüft …" : "Prüft …"));
   try {
     const { ok, status, data } = await request(
@@ -348,7 +355,7 @@ async function submitDraft(save) {
   } catch (error) {
     $("editor-result").replaceChildren(el("p", { class: "error" }, error.message));
   } finally {
-    buttons.forEach((b) => (b.disabled = false));
+    if (editing === session) lockEditor(false);
   }
 }
 
@@ -430,6 +437,7 @@ $("commit-form").addEventListener("submit", async (event) => {
 });
 
 function startEdit(button) {
+  if (editing?.busy) return;
   if (editing?.dirty && editing.key !== button.dataset.edit && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
   openEditor(button.dataset.edit);
 }

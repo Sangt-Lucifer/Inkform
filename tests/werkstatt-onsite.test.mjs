@@ -17,7 +17,7 @@ import { compareVersions, confirmInstalled, createOnsite, loadedByDevice, setChe
 import { qrMatrix } from "../werkstatt/qr.mjs";
 import { listStudios } from "../werkstatt/status.mjs";
 import { startWerkstatt } from "../werkstatt/server.mjs";
-import { callApi, fakeGit, qrPng } from "./lib/werkstatt.mjs";
+import { callApi, ensureBlankoBuild, fakeGit, qrPng } from "./lib/werkstatt.mjs";
 
 const base = await mkdtemp(path.join(tmpdir(), "inkform-vorort-"));
 const env = {
@@ -37,6 +37,7 @@ const PASSWORD = "testpasswort-nur-fuer-tests";
 // One Blanko export for all on-site tests, made once before them.
 let blanko, exportName;
 test.before(async () => {
+  await ensureBlankoBuild();
   blanko = (await listStudios({ env, stateDir })).find((s) => s.key === "blanko");
   const r = { ok: true, text: "ok", at: new Date().toISOString(), core: { commit: "c0ffee1", clean: true }, profile: null };
   const result = await exportStudio(blanko, { latest: { "blanko:test": r, "blanko:browser": r }, env, git: fakeGit });
@@ -386,4 +387,26 @@ test("certificate: two simultaneous creations never replace a finished root", as
   assert.match(results.find((r) => r.error).error, /nicht ersetzt/);
   const parent = path.dirname(studioCertDir("doppelt", env));
   assert.deepEqual((await readdir(parent)).filter((n) => n.startsWith(".doppelt.")), [], "nothing moved aside, no work folder left");
+});
+
+test("certificate renewal and .webloc replace existing links instead of writing through them", async () => {
+  const { symlink, lstat: ls } = await import("node:fs/promises");
+  const dir = studioCertDir("beispiel", env);
+  const victim = path.join(base, "fremde-datei.txt");
+  await writeFile(victim, "fremd");
+  await rm(path.join(dir, "host.txt"));
+  await symlink(victim, path.join(dir, "host.txt"));
+  const renewed = await renewCert("beispiel", PASSWORD, env);
+  assert.ok(renewed.server, renewed.error);
+  assert.equal(await readFile(victim, "utf8"), "fremd");
+  assert.equal((await ls(path.join(dir, "host.txt"))).isSymbolicLink(), false);
+  assert.deepEqual((await readdir(dir)).filter((n) => n.startsWith(".server-neu-") || n.endsWith(".srl")), []);
+  const { writeWebloc } = await import("../werkstatt/onsite.mjs");
+  const weblocDir = path.join(stateDir, "vor-ort");
+  await mkdir(weblocDir, { recursive: true });
+  await rm(path.join(weblocDir, "Inkform-App.webloc"), { force: true });
+  await symlink(victim, path.join(weblocDir, "Inkform-App.webloc"));
+  await writeWebloc(stateDir);
+  assert.equal(await readFile(victim, "utf8"), "fremd");
+  assert.match(await readFile(path.join(weblocDir, "Inkform-App.webloc"), "utf8"), /inkform-app\.local/);
 });

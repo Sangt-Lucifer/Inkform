@@ -11,6 +11,7 @@
 // a file) and never stored. The existing installation's certificate in .../Inkform/zertifikat/ is
 // not touched by any of this.
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { access, chmod, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -74,28 +75,29 @@ export async function certStatus(id, env = process.env) {
 }
 
 async function serverCert(dir, id, password) {
-  const file = (n) => path.join(dir, n);
-  await writeFile(
-    file("server.cnf"),
-    `[req]\ndistinguished_name = dn\nprompt = no\n[dn]\nCN = ${NEUTRAL_HOST}\n[v3]\nbasicConstraints = critical, CA:FALSE\nkeyUsage = critical, digitalSignature, keyEncipherment\nextendedKeyUsage = serverAuth\nsubjectAltName = DNS:${NEUTRAL_HOST}\n`,
-  );
+  // Everything new is made in a private work folder inside the certificate folder; only the
+  // finished, verified files are renamed into place (a rename replaces a link instead of writing
+  // through it). The serial number is random, so openssl writes no serial file next to the root.
+  const work = await mkdtemp(path.join(dir, ".server-neu-"));
+  const w = (n) => path.join(work, n);
   try {
-    await ssl(["req", "-newkey", "rsa:2048", "-sha256", "-nodes", "-keyout", file("server.key.neu"), "-out", file("server.csr"), "-config", file("server.cnf")]);
-    await chmod(file("server.key.neu"), 0o600);
+    await writeFile(
+      w("server.cnf"),
+      `[req]\ndistinguished_name = dn\nprompt = no\n[dn]\nCN = ${NEUTRAL_HOST}\n[v3]\nbasicConstraints = critical, CA:FALSE\nkeyUsage = critical, digitalSignature, keyEncipherment\nextendedKeyUsage = serverAuth\nsubjectAltName = DNS:${NEUTRAL_HOST}\n`,
+      { flag: "wx" },
+    );
+    await ssl(["req", "-newkey", "rsa:2048", "-sha256", "-nodes", "-keyout", w("server.key"), "-out", w("server.csr"), "-config", w("server.cnf")]);
+    await chmod(w("server.key"), 0o600);
     await ssl(
-      ["x509", "-req", "-in", file("server.csr"), "-CA", file(`${id}.crt`), "-CAkey", file("ca.key"), "-passin", "fd:3", "-CAcreateserial", "-days", "825", "-sha256", "-extfile", file("server.cnf"), "-extensions", "v3", "-out", file("server.crt.neu")],
+      ["x509", "-req", "-in", w("server.csr"), "-CA", path.join(dir, `${id}.crt`), "-CAkey", path.join(dir, "ca.key"), "-passin", "fd:3", "-set_serial", `0x${randomBytes(16).toString("hex")}`, "-days", "825", "-sha256", "-extfile", w("server.cnf"), "-extensions", "v3", "-out", w("server.crt")],
       password,
     );
-    await ssl(["verify", "-CAfile", file(`${id}.crt`), file("server.crt.neu")]);
-  } catch (error) {
-    await rm(file("server.key.neu"), { force: true });
-    await rm(file("server.crt.neu"), { force: true });
-    throw error;
+    await ssl(["verify", "-CAfile", path.join(dir, `${id}.crt`), w("server.crt")]);
+    await writeFile(w("host.txt"), NEUTRAL_HOST + "\n", { flag: "wx" });
+    for (const n of ["server.key", "server.crt", "host.txt"]) await rename(w(n), path.join(dir, n));
+  } finally {
+    await rm(work, { recursive: true, force: true });
   }
-  // Replaced only once the new pair is complete and verified.
-  await rename(file("server.key.neu"), file("server.key"));
-  await rename(file("server.crt.neu"), file("server.crt"));
-  await writeFile(file("host.txt"), NEUTRAL_HOST + "\n");
 }
 
 // New root (10 years, name-constrained to inkform-app.local, key encrypted) plus server certificate.

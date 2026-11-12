@@ -1,10 +1,11 @@
 // Shared helpers for the Werkstatt tests. Everything works in temporary folders only.
+import { execFileSync } from "node:child_process";
 import { request } from "node:http";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
 import { root } from "../../scripts/build.mjs";
-import { gitInfo } from "../../werkstatt/status.mjs";
+import { buildState, gitInfo } from "../../werkstatt/status.mjs";
 
 // ---------- PNG images ----------
 function crc(buf) {
@@ -107,4 +108,11 @@ export function callApi(server, token, method, pathname, body) {
     if (body) req.write(JSON.stringify(body));
     req.end();
   });
+}
+
+// Exporting Blanko needs a current Blanko build in the core (build/beispiel). After a change in src/
+// it is outdated, so tests that export Blanko build it first themselves.
+export async function ensureBlankoBuild() {
+  if ((await buildState(path.join(root, "profiles", "beispiel"))).state !== "aktuell")
+    execFileSync(process.execPath, [path.join(root, "scripts", "build.mjs"), "--profile", "beispiel"], { stdio: "ignore" });
 }

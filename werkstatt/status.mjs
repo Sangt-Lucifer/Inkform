@@ -44,8 +44,10 @@ export async function realLocation(p) {
 // Git variables of the calling shell (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE …) could point git at
 // another repository; they are dropped for every call made here.
 export const cleanEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
-// No hooks and no fsmonitor program: nothing configured in a studio repo runs during these calls.
-export const SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
+// No hooks, no fsmonitor program and no global attributes file. Filter programs that a repository
+// itself sets up through .gitattributes cannot be switched off this way: the Werkstatt therefore
+// refuses to commit in a repository that uses filters (see profile.mjs).
+export const SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.attributesFile=/dev/null"];
 
 // Studios are display-only unless their folder is listed in <state>/freigegeben.json
 // ({"studios": ["/abs/path"]}). Existing installations therefore stay untouched by default;

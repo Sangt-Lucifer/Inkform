@@ -2,9 +2,10 @@
 // processes (the existing tools, unchanged) and turns their output into a readable summary.
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { root } from "../scripts/build.mjs";
+import { studioGuard } from "./profile.mjs";
 import { gitInfo } from "./status.mjs";
 
 const KINDS = {
@@ -143,6 +144,17 @@ export function createRunner({ stateDir, env = process.env, fs = { mkdir, writeF
       let ok = false,
         active = sequence[0];
       try {
+        // Building and the browser checks write into <studio>/build and <studio>/test-results:
+        // the same protection as for editing, and both must be real folders (or not exist yet), so
+        // no link can lead a write into another studio.
+        if (entry.kind === "studio") {
+          const denied = await studioGuard(entry.dir, { env, stateDir });
+          if (denied) throw new Error(denied);
+          for (const sub of ["build", "test-results"]) {
+            const st = await lstat(path.join(entry.dir, sub)).catch(() => null);
+            if (st && (st.isSymbolicLink() || !st.isDirectory())) throw new Error(`${sub}/ im Studio-Ordner ist kein echter Ordner (Verknüpfung?). Es wird nichts geschrieben.`);
+          }
+        }
         const [core, studio] = await Promise.all([gitInfo(root), entry.kind === "studio" ? gitInfo(entry.dir) : null]);
         record.core = { commit: core.commit ?? null, clean: core.clean ?? false };
         record.profile = studio ? { commit: studio.commit ?? null, clean: studio.clean ?? false } : null;

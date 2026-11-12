@@ -598,8 +598,24 @@ async function ownRepo(dir) {
   }
 }
 
+// Git filters (filter=… in .gitattributes) run programs on "git add" and "git status". Studio repos
+// never need them, so a repo that uses them is not touched.
+async function usesGitFilters(dir) {
+  const files = [path.join(dir, ".git", "info", "attributes")];
+  const walk = async (d) => {
+    for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
+      if (e.isDirectory() && ![".git", "build", "test-results", "node_modules"].includes(e.name)) await walk(path.join(d, e.name));
+      else if (e.name === ".gitattributes") files.push(path.join(d, e.name));
+    }
+  };
+  await walk(dir);
+  for (const f of files) if (/\bfilter\s*=/.test(await readFile(f, "utf8").catch(() => ""))) return true;
+  return false;
+}
+
 export async function pendingChanges(dir) {
   if (!(await ownRepo(dir))) return { error: "Der Studio-Ordner ist kein eigenes Git-Repo." };
+  if (await usesGitFilters(dir)) return { error: "Das Studio-Repo nutzt Git-Filter (.gitattributes). Die Werkstatt committet dort nicht." };
   const { stdout } = await run("git", [...SAFE_GIT, "--no-optional-locks", "-C", dir, "status", "--porcelain=v1", "-z", "-uall"], {
     encoding: "utf8",
     env: { ...cleanEnv(), GIT_OPTIONAL_LOCKS: "0" },

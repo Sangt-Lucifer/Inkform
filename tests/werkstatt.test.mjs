@@ -345,3 +345,34 @@ test("a studio whose ID breaks the Werkstatt rule is shown, but only for display
     await rm(odd, { recursive: true, force: true });
   }
 });
+
+// ---------- runs never write through links ----------
+
+test("a run for a released studio whose build/ is a link into a protected studio writes nothing there", async () => {
+  const { mkdir: mk, symlink } = await import("node:fs/promises");
+  const released = path.join(studiosDir, "verlinkt-bau");
+  await cp(path.join(root, "profiles", "beispiel"), released, { recursive: true });
+  const p = JSON.parse(await readFile(path.join(released, "profile.json"), "utf8"));
+  await writeFile(path.join(released, "profile.json"), JSON.stringify({ ...p, id: "verlinkt-bau", name: "Verlinkt" }));
+  const victim = path.join(studioDir, "build");
+  await mk(victim, { recursive: true });
+  await writeFile(path.join(victim, "index.html"), "geschützt");
+  await symlink(victim, path.join(released, "build"));
+  const state = path.join(base, "state-link-bau");
+  await mk(state, { recursive: true });
+  await writeFile(path.join(state, "freigegeben.json"), JSON.stringify({ studios: [released] }));
+  const before = await snapshot(studioDir);
+  try {
+    const runner = createRunner({ stateDir: state, env });
+    const entry = (await listStudios({ env, stateDir: state })).find((s) => s.key === "s-verlinkt-bau");
+    assert.equal(entry.actionable, true);
+    await runner.start(entry, "build");
+    const run = await finished(runner);
+    assert.equal(run.ok, false);
+    assert.match(run.steps[0].text, /build\/ im Studio-Ordner ist kein echter Ordner/);
+    assert.equal(await snapshot(studioDir), before, "protected studio unchanged");
+  } finally {
+    await rm(released, { recursive: true, force: true });
+    await rm(victim, { recursive: true, force: true });
+  }
+});

@@ -12,7 +12,7 @@ import { exportStudio, listExports, nextVersion, publish, readiness } from "../w
 import { commitStudio, createStudio, pendingChanges, readEditable, saveDraft } from "../werkstatt/profile.mjs";
 import { gitInfo, listStudios } from "../werkstatt/status.mjs";
 import { startWerkstatt } from "../werkstatt/server.mjs";
-import { callApi, fakeGit, neutralTexts, solidPng } from "./lib/werkstatt.mjs";
+import { callApi, ensureBlankoBuild, fakeGit, neutralTexts, solidPng } from "./lib/werkstatt.mjs";
 
 const base = await mkdtemp(path.join(tmpdir(), "inkform-export-"));
 const studiosDir = path.join(base, "studios"),
@@ -291,6 +291,7 @@ test("export: an existing ZIP is never replaced or deleted", async () => {
 });
 
 test("export: Blanko's unchanged state is not exported twice", async () => {
+  await ensureBlankoBuild();
   const blanko = (await listStudios({ env, stateDir })).find((s) => s.key === "blanko");
   const r = (text) => ({ ok: true, text, at: NOW.toISOString(), core: { commit: "c0ffee1", clean: true }, profile: null });
   const latest = { "blanko:test": r("ok"), "blanko:browser": r("ok") };
@@ -502,14 +503,13 @@ test("publisher: staged bytes changed before the final rename are never publishe
   assert.deepEqual(await readdir(parent), [], "nothing published, staging removed");
 });
 
-test("publisher: export root that looks like a studio or repo is refused", async () => {
+test("publisher: export root that looks like a studio or repo is refused before anything is created", async () => {
   const root = path.join(base, "pub-root-studio");
-  await mkdir(path.join(root, "x"), { recursive: true });
-  await writeFile(path.join(root, "profile.json"), "{}");
-  const r = await publish(await job(path.join(root, "x")), async () => true);
+  await mkdir(root, { recursive: true });
+  await writeFile(path.join(root, "package.json"), "{}");
+  const r = await publish({ ...(await job(path.join(root, "x"))), root: await (await import("node:fs/promises")).realpath(root) }, async () => true);
   assert.match(r.error, /Studio oder Repo/);
-  assert.deepEqual((await readdir(root)).sort(), ["profile.json", "x"]);
-  assert.deepEqual(await readdir(path.join(root, "x")), []);
+  assert.deepEqual(await readdir(root), ["package.json"], "no studio folder was created");
 });
 
 test("publisher: missing export folders are created by the publisher itself", async () => {

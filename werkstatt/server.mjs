@@ -133,13 +133,23 @@ export async function startWerkstatt({
       b = Buffer.from(token);
     return a.length === b.length && timingSafeEqual(a, b);
   };
+  // Bytes are collected and decoded once at the end: a character split across two network
+  // packets stays intact. The limit counts bytes.
   async function body(req, limit = 10_000) {
-    let text = "";
+    const chunks = [];
+    let size = 0;
     for await (const chunk of req) {
-      text += chunk;
-      if (text.length > limit) throw Object.assign(Error("Anfrage zu groß."), { status: 413 });
+      size += chunk.length;
+      if (size > limit) throw Object.assign(Error("Anfrage zu groß."), { status: 413 });
+      chunks.push(chunk);
     }
-    return text ? JSON.parse(text) : {};
+    const text = Buffer.concat(chunks).toString("utf8");
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw Object.assign(Error("Ungültige Anfrage."), { status: 400 });
+    }
   }
 
   // ---------- on-site mode (only Blanko and released studios) ----------
@@ -261,14 +271,14 @@ export async function startWerkstatt({
             const { errors, probe, warnings } = await checkDraft(args);
             return send(res, 200, { errors, probe, warnings });
           }
-          return exclusive(res, async () => {
+          return await exclusive(res, async () => {
             const result = await saveDraft({ ...args, expectedVersion: version, stateDir });
             return send(res, result.conflict ? 409 : result.errors.length ? 422 : 200, result);
           });
         }
         if (req.method === "POST" && url.pathname === "/api/studio/new") {
           const { id, name } = await body(req);
-          return exclusive(res, async () => {
+          return await exclusive(res, async () => {
             const result = await createStudio({ id, name, env, stateDir });
             return send(res, result.error ? 400 : 201, result.error ? { error: result.error } : { key: result.key, folder: result.dir });
           });
@@ -283,7 +293,7 @@ export async function startWerkstatt({
           const { studio, message, files } = await body(req, 200_000);
           const entry = await editableEntry(res, studio);
           if (!entry) return;
-          return exclusive(res, async () => {
+          return await exclusive(res, async () => {
             const result = await commitStudio({ dir: entry.dir, message, files, env, stateDir });
             return send(res, result.conflict ? 409 : result.error ? 400 : 200, result);
           });
@@ -300,12 +310,12 @@ export async function startWerkstatt({
           const entry = (await studios()).find((e) => e.key === studio);
           if (!entry) return send(res, 404, { error: "Studio nicht gefunden." });
           if (!entry.actionable) return send(res, 403, { error: entry.protectedReason });
-          return exclusive(res, async () => {
+          return await exclusive(res, async () => {
             const result = await exportStudio(entry, { latest: await runner.latest(), env, zip: zip === true, ...(git ? { git } : {}) });
             return send(res, result.error ? 409 : 201, result);
           });
         }
-        if (url.pathname.startsWith("/api/vor-ort")) return onsiteRoute(req, res, url);
+        if (url.pathname.startsWith("/api/vor-ort")) return await onsiteRoute(req, res, url);
         return send(res, 404, { error: "Unbekannt." });
       }
 

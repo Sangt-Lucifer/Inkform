@@ -140,10 +140,14 @@ export async function writeWebloc(stateDir) {
   const dir = path.join(stateDir, "vor-ort");
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const file = path.join(dir, "Inkform-App.webloc");
+  // Written to a new temporary file and renamed: an existing link is replaced, never written through.
+  const tmp = `${file}.${randomBytes(6).toString("hex")}.tmp`;
   await writeFile(
-    file,
+    tmp,
     `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>URL</key>\n\t<string>${ADDRESS}</string>\n</dict>\n</plist>\n`,
+    { flag: "wx" },
   );
+  await rename(tmp, file);
   return file;
 }
 

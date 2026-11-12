@@ -192,26 +192,29 @@ export async function buildProfile(ref) {
     "</body>",
     () => `  <script data-hosted-only>\n${escapeScript(registration)}\n</script>\n</body>`,
   );
-  const hash = createHash("sha256").update(hosted).update(workerTemplate).digest("hex").slice(0, 12);
-  const worker = workerTemplate.replace("__BUILD_HASH__", hash);
+  // Every file the service worker caches goes into its version: a changed manifest or icon alone
+  // also makes a new worker, so installed iPads pick it up.
+  const assets = [
+    ["dist/manifest.webmanifest", await readFile(path.join(profile.dir, "manifest.webmanifest"))],
+    ["dist/licenses/jsPDF.txt", await readFile(path.join(root, "public/vendor/LICENSE-jsPDF.txt"))],
+    ["dist/licenses/Tailwind.txt", await readFile(path.join(root, "public/vendor/LICENSE-Tailwind.txt"))],
+    ["dist/licenses/NotoSans.txt", await readFile(path.join(root, "public/vendor/LICENSE-NotoSans.txt"))],
+  ];
+  for (const icon of (await readdir(path.join(profile.dir, "icons"))).sort()) {
+    if (icon.startsWith(".")) continue;
+    assets.push([`dist/icons/${icon}`, await readFile(path.join(profile.dir, "icons", icon))]);
+  }
+  const versionHash = createHash("sha256").update(hosted).update(workerTemplate);
+  for (const [name, contents] of assets) versionHash.update(name).update(contents);
+  const worker = workerTemplate.replace("__BUILD_HASH__", versionHash.digest("hex").slice(0, 12));
 
   // Map of output path (relative to build/<id>/) -> contents.
   const files = new Map([
     ["index.html", portable],
     ["dist/index.html", hosted],
     ["dist/sw.js", worker],
-    ["dist/manifest.webmanifest", await readFile(path.join(profile.dir, "manifest.webmanifest"))],
-    ["dist/licenses/jsPDF.txt", await readFile(path.join(root, "public/vendor/LICENSE-jsPDF.txt"))],
-    [
-      "dist/licenses/Tailwind.txt",
-      await readFile(path.join(root, "public/vendor/LICENSE-Tailwind.txt")),
-    ],
-    ["dist/licenses/NotoSans.txt", await readFile(path.join(root, "public/vendor/LICENSE-NotoSans.txt"))],
+    ...assets,
   ]);
-  for (const icon of (await readdir(path.join(profile.dir, "icons"))).sort()) {
-    if (icon.startsWith(".")) continue;
-    files.set(`dist/icons/${icon}`, await readFile(path.join(profile.dir, "icons", icon)));
-  }
   return { profile, files, bundledJs };
 }
 

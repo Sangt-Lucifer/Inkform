@@ -453,3 +453,53 @@ test("check: another studio's slow regex marker cannot hang the Werkstatt", asyn
     await rm(slowDir, { recursive: true, force: true });
   }
 });
+
+test("commit: a studio repo that uses Git filters is not touched (no filter program runs)", async () => {
+  await createStudio({ id: "filter-test", name: "Filter Test", env, stateDir });
+  const dir = path.join(studiosDir, "filter-test");
+  const ran = path.join(base, "filter-lief");
+  await writeFile(path.join(dir, ".gitattributes"), "*.md filter=boese\n");
+  execFileSync("git", ["-C", dir, "config", "filter.boese.clean", `touch "${ran}"; cat`]);
+  const changes = await pendingChanges(dir);
+  assert.match(changes.error, /Git-Filter/);
+  assert.match((await commitStudio({ dir, message: "x", files: ["profile.json"] })).error, /Git-Filter/);
+  assert.equal(await stat(ran).then(() => true, () => false), false, "filter program never ran");
+  await rm(dir, { recursive: true, force: true });
+});
+
+test("server: invalid JSON gives 400 and the server keeps running; umlauts split across packets stay intact", async () => {
+  const { request: raw } = await import("node:http");
+  const { server, token } = await startWerkstatt({ port: 0, env, stateDir, certDir: path.join(base, "keine") });
+  const port = server.address().port;
+  const send = (pathname, parts) =>
+    new Promise((resolve, reject) => {
+      const req = raw(
+        { host: "127.0.0.1", port, method: "POST", path: pathname, headers: { host: `127.0.0.1:${port}`, "x-werkstatt-token": token, "content-type": "application/json" } },
+        (res) => {
+          let t = "";
+          res.on("data", (c) => (t += c));
+          res.on("end", () => resolve({ status: res.statusCode, json: JSON.parse(t || "{}") }));
+        },
+      );
+      req.on("error", reject);
+      (async () => {
+        for (const part of parts) {
+          req.write(part);
+          await new Promise((r) => setTimeout(r, 30));
+        }
+        req.end();
+      })();
+    });
+  try {
+    for (const p of ["/api/vor-ort/start", "/api/studio/new", "/api/export", "/api/studio/commit"]) assert.equal((await send(p, ["{kaputt"])).status, 400, p);
+    const json = Buffer.from(JSON.stringify({ id: "atelier-sued", name: "Atelier Süd" }));
+    const cut = json.indexOf(Buffer.from("ü")) + 1; // inside the two bytes of "ü"
+    const created = await send("/api/studio/new", [json.subarray(0, cut), json.subarray(cut)]);
+    assert.equal(created.status, 201, JSON.stringify(created.json));
+    assert.equal(JSON.parse(await readFile(path.join(studiosDir, "atelier-sued", "profile.json"), "utf8")).name, "Atelier Süd");
+    assert.equal((await callApi(server, token, "GET", "/api/overview")).status, 200, "still running");
+  } finally {
+    server.close();
+    await rm(path.join(studiosDir, "atelier-sued"), { recursive: true, force: true });
+  }
+});
