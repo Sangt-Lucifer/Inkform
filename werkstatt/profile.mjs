@@ -12,14 +12,14 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { UNSAFE, buildProfile, discoverStudioProfiles, root } from "../scripts/build.mjs";
 import { compileMarkers, findMarkers, scanText } from "../tests/lib/leaks.mjs";
-import { releasedStudios } from "./status.mjs";
+import { STUDIO_ID, releasedStudios } from "./status.mjs";
 
 const run = promisify(execFile);
 const SAMPLE = path.join(root, "profiles", "beispiel");
 const AUTHOR = { name: "Sven", email: "sven@inkform.invalid" };
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const MAX_LOGO = 2 * 1024 * 1024;
-export const ID_RULE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
+export const ID_RULE = STUDIO_ID;
 const RESERVED = new Set(["beispiel", "blanko", "build", "dist", "profiles"]);
 
 // Files a studio profile consists of; the editor only ever writes these.

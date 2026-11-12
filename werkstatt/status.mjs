@@ -22,6 +22,10 @@ export const defaultStateDir = () =>
 export const defaultCertDir = () =>
   path.join(homedir(), "Library", "Application Support", "Inkform", "zertifikat");
 
+// The one rule for studio IDs in the Werkstatt (folder name, certificate folder, export names):
+// 3 to 40 characters, a–z, 0–9 and hyphen, no hyphen at the start or end.
+export const STUDIO_ID = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
+
 const readJson = (file, fallback) =>
   readFile(file, "utf8").then((t) => JSON.parse(t), () => fallback);
 
@@ -45,7 +49,8 @@ export async function listStudios({ env = process.env, stateDir = defaultStateDi
   for (const dir of await discoverStudioProfiles(env)) {
     const profile = await readJson(path.join(dir, "profile.json"), null);
     if (!profile || !/^[a-z0-9-]+$/.test(profile.id ?? "")) continue;
-    const actionable = released.has(path.resolve(dir));
+    const validId = STUDIO_ID.test(profile.id);
+    const actionable = released.has(path.resolve(dir)) && validId;
     entries.push({
       key: `s-${profile.id}`,
       id: profile.id,
@@ -55,7 +60,9 @@ export async function listStudios({ env = process.env, stateDir = defaultStateDi
       actionable,
       protectedReason: actionable
         ? null
-        : "Nur Anzeige: Dieses Studio ist in der Werkstatt nicht freigegeben. Profil, Repo und Build werden nicht angefasst.",
+        : !validId
+          ? `Nur Anzeige: Die Kennung „${profile.id}“ passt nicht zur Regel der Werkstatt (3 bis 40 Zeichen, a–z, 0–9, Bindestrich nicht am Rand).`
+          : "Nur Anzeige: Dieses Studio ist in der Werkstatt nicht freigegeben. Profil, Repo und Build werden nicht angefasst.",
     });
   }
   return entries;

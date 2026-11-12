@@ -323,3 +323,32 @@ test("a failed save leaves no temporary file behind", async () => {
   assert.equal(run.ok, false);
   assert.deepEqual(await real.readdir(path.join(state, "laeufe")), []);
 });
+
+// ---------- one ID rule for the whole Werkstatt ----------
+
+test("a studio whose ID breaks the Werkstatt rule is shown, but only for display; no server error", async () => {
+  const odd = path.join(studiosDir, "ab");
+  await cp(path.join(root, "profiles", "beispiel"), odd, { recursive: true });
+  const p = JSON.parse(await readFile(path.join(odd, "profile.json"), "utf8"));
+  await writeFile(path.join(odd, "profile.json"), JSON.stringify({ ...p, id: "ab", name: "AB" }));
+  const state = path.join(base, "state-kennung");
+  const { mkdir: mk } = await import("node:fs/promises");
+  await mk(state, { recursive: true });
+  await writeFile(path.join(state, "freigegeben.json"), JSON.stringify({ studios: [odd] }));
+  try {
+    const entry = (await listStudios({ env, stateDir: state })).find((s) => s.key === "s-ab");
+    assert.equal(entry.actionable, false);
+    assert.match(entry.protectedReason, /Kennung „ab“ passt nicht zur Regel/);
+    const { server, token } = await startWerkstatt({ port: 0, env, stateDir: state, certDir: path.join(base, "keine-zertifikate") });
+    const port = server.address().port;
+    try {
+      const res = await http(port, { pathname: "/api/vor-ort?key=s-ab", headers: { "x-werkstatt-token": token } });
+      assert.equal(res.status, 403);
+      assert.match(JSON.parse(res.text).error, /passt nicht zur Regel/);
+    } finally {
+      server.close();
+    }
+  } finally {
+    await rm(odd, { recursive: true, force: true });
+  }
+});

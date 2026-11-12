@@ -14,11 +14,12 @@ import { spawn } from "node:child_process";
 import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { STUDIO_ID } from "./status.mjs";
 
 export const NEUTRAL_HOST = "inkform-app.local";
 export const certsRoot = (env = process.env) =>
   path.resolve(env.INKFORM_ZERTIFIKATE || path.join(homedir(), "Library", "Application Support", "Inkform", "zertifikate"));
-const ID = /^[a-z0-9-]{3,40}$/;
+const ID = STUDIO_ID;
 const exists = (p) => access(p).then(() => true, () => false);
 
 // Runs openssl; a password goes in through file descriptor 3 ("fd:3"), nothing else sees it.
