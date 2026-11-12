@@ -13,6 +13,7 @@ import {
   daysBetween,
   dueForPdfDeletion,
   readRetention,
+  validateRetention,
   writeRetention,
 } from "./retention.js";
 
@@ -1584,22 +1585,37 @@ backupPicker.addEventListener("change", async () => {
     toast("Wiederherstellen nicht möglich: " + error.message);
   }
 });
+const SETUP_FIELDS = ["name", "contact", "address", "location"];
+// The neutral edition is set up once all four studio details are saved.
 function needsSetup() {
-  return BLANK_EDITION && !settings.studio.name.trim();
+  return BLANK_EDITION && SETUP_FIELDS.some((key) => !settings.studio[key].trim());
+}
+// Deadlines typed in the assistant; kept across re-renders until the setup is finished.
+let setupYears = null;
+function setupYearsShown() {
+  if (setupYears) return setupYears;
+  const { pdfYears, incomeYears } = readRetention(localStorage);
+  return { pdfYears: pdfYears ?? "", incomeYears: incomeYears ?? "" };
 }
 function finishSetup() {
-  const missing = ["name", "contact", "address", "location"].filter((key) => !adminDraft.studio[key].trim());
-  if (missing.length) {
+  if (SETUP_FIELDS.some((key) => !adminDraft.studio[key].trim())) {
     configError("Bitte Studio, Datenschutzkontakt, Anschrift und Ort der Unterschrift ausfüllen.");
     return;
   }
+  let years;
   try {
-    writeRetention(localStorage, { pdfYears: $("setup-pdf-years").value, incomeYears: $("setup-income-years").value });
+    years = validateRetention(setupYearsShown());
   } catch (error) {
     configError(error.message);
     return;
   }
   if (!saveAdmin()) return;
+  if (!storageWorking) {
+    configError("Der Browser-Speicher ist nicht verfügbar. Die Einrichtung gilt nur bis zum Schließen der App.");
+    return;
+  }
+  writeRetention(localStorage, years);
+  setupYears = null;
   adminPage = "overview";
   renderAdminSection();
   toast("Einrichtung abgeschlossen. Alles ist nur auf diesem Gerät gespeichert.");
@@ -1635,14 +1651,19 @@ function samplePdf(record) {
 async function loadSamples() {
   if (!libraryAvailable()) return toast("Die eingebettete PDF-Funktion ist nicht verfügbar.");
   if (incomeFeature.list().some(isSample)) return;
+  // All or nothing: after a failure every sample entry and PDF written so far is removed again.
+  const records = sampleRecords(localDate());
   try {
-    for (const record of sampleRecords(localDate())) {
-      incomeFeature.book(record);
-      await exportFeature.keep(record.id, samplePdf(record));
-    }
+    const pdfs = records.map(samplePdf);
+    for (const record of records) incomeFeature.book(record);
+    for (const [i, record] of records.entries()) await exportFeature.keep(record.id, pdfs[i]);
     toast("Beispieldaten geladen.");
   } catch (error) {
-    toast("Beispieldaten nicht vollständig geladen: " + error.message);
+    try {
+      incomeFeature.removeMany(records.map((r) => r.id));
+      await exportFeature.sync();
+    } catch (_) {}
+    toast("Beispieldaten nicht geladen: " + error.message);
   }
   renderAdminSection();
 }
@@ -1697,8 +1718,8 @@ function renderAdminSection() {
       "Willkommen bei Inkform",
       `<p class="ad-section-copy">Diese Angaben stehen im Kundenformular, in den Datenschutzhinweisen und auf jedem PDF. Sie werden nur auf diesem Gerät gespeichert.</p>
       <div class="ad-fields">${adminField("studio.name", "Studio / verantwortliche Person", { placeholder: "Studio und vollständiger Name / Firma", max: 160 })}${adminField("studio.contact", "Datenschutzkontakt / E-Mail", { type: "email", placeholder: "kontakt@dein-studio.de", max: 160 })}${adminField("studio.address", "Vollständige Anschrift", { area: true, rows: 2, placeholder: "Straße, Hausnummer, Postleitzahl und Ort", max: 300 })}${adminField("studio.location", "Ort der Unterschrift", { placeholder: "%%locationPlaceholder%%", max: 100 })}
-      <div class="ad-field"><label for="setup-pdf-years">Aufbewahrung der PDFs in Jahren, optional</label><input id="setup-pdf-years" inputmode="numeric" maxlength="2"></div>
-      <div class="ad-field"><label for="setup-income-years">Namen in der Einnahmenliste in Jahren, optional</label><input id="setup-income-years" inputmode="numeric" maxlength="2"></div></div>
+      <div class="ad-field"><label for="setup-pdf-years">Aufbewahrung der PDFs in Jahren, optional</label><input id="setup-pdf-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().pdfYears))}"></div>
+      <div class="ad-field"><label for="setup-income-years">Namen in der Einnahmenliste in Jahren, optional</label><input id="setup-income-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().incomeYears))}"></div></div>
       <p class="ad-preview-note">Formulartexte, Gesundheitsfragen und Datenschutzhinweise sind neutral vorbereitet und vor dem Einsatz zu prüfen. Fristen lassen sich später unter „Aufbewahrung“ eintragen.</p>
       <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="setup-finish">${adminIcon("check")}Einrichtung abschließen</button></div>`,
     )}${samplePanel()}`;
@@ -2402,6 +2423,8 @@ $("admin-app").addEventListener("change", (event) => {
   renderAdminSection();
 });
 $("admin-app").addEventListener("input", (event) => {
+  if (["setup-pdf-years", "setup-income-years"].includes(event.target.id))
+    setupYears = { pdfYears: $("setup-pdf-years").value, incomeYears: $("setup-income-years").value };
   const path = event.target.dataset.configPath;
   if (!path) return;
   const keys = path.split("."),
@@ -2427,7 +2450,7 @@ $("admin-app").addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
   if (button.dataset.adminPage) {
-    adminPage = button.dataset.adminPage;
+    adminPage = needsSetup() ? "setup" : button.dataset.adminPage;
     renderAdminSection();
     window.scrollTo(0, 0);
   }

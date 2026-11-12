@@ -46,6 +46,24 @@ await ev(`openAdminAuthorized('export')`);
 check("Vor der Einrichtung führt jede Admin-Seite zum Assistenten", await ev(`adminPage==='setup'`));
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
 check("Ohne Angaben: klare Meldung, nichts gespeichert", await ev(`!document.getElementById('admin-error').hidden&&document.getElementById('admin-error').textContent.includes('Bitte Studio')&&!localStorage.getItem(SETTINGS_KEY)`));
+await type("admin-studio-name", "Atelier Probe · Kim Test");
+await ev(`document.getElementById('admin-save').click()`);
+await ev(`document.querySelector('#admin-nav [data-admin-page="overview"]').click()`);
+check("Nur ein Name gespeichert: Navigation führt weiter zum Assistenten", await ev(`adminPage==='setup'&&needsSetup()&&JSON.parse(localStorage.getItem(SETTINGS_KEY)).studio.name==='Atelier Probe · Kim Test'`));
+await type("setup-pdf-years", "abc");
+await ev(`document.querySelector('[data-admin-action="sample-load"]').click()`);
+await until(`!!document.querySelector('[data-admin-action="sample-remove"]')`);
+check("Neu gezeichneter Assistent behält eingetippte Fristen", await ev(`document.getElementById('setup-pdf-years').value==='abc'`));
+await ev(`document.querySelector('[data-admin-action="sample-remove"]').click()`);
+await until(`!!document.querySelector('[data-admin-action="sample-load"]') && incomeRecords().length===0`);
+for (const [id, value] of [
+  ["admin-studio-contact", "kontakt@atelier-probe.example"],
+  ["admin-studio-address", "Probeweg 2, 54321 Teststadt"],
+  ["admin-studio-location", "Teststadt"],
+])
+  await type(id, value);
+await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
+check("Ungültige Frist: Meldung, Einrichtung und Fristen nicht gespeichert", await ev(`!document.getElementById('admin-error').hidden&&adminPage==='setup'&&needsSetup()&&!localStorage.getItem(RETENTION_KEY)`));
 for (const [id, value] of [
   ["admin-studio-name", "Atelier Probe · Kim Test"],
   ["admin-studio-contact", "kontakt@atelier-probe.example"],
@@ -77,6 +95,11 @@ check("Angaben später unter „Studio & Kontakt“ änderbar", await ev(`docume
 // Sample data --------------------------------------------------------------------------------
 await ev(`openAdminAuthorized('overview')`);
 check("Standard ist leer", await ev(`incomeRecords().length===0&&!!document.querySelector('[data-admin-action="sample-load"]')`));
+await ev(`window.__keep=exportFeature.keep;let n=0;exportFeature.keep=(id,blob)=>++n===3?Promise.reject(Error('Speicher voll (Test)')):window.__keep(id,blob);document.querySelector('[data-admin-action="sample-load"]').click()`);
+await until(`document.getElementById('toast').textContent.includes('Beispieldaten nicht geladen')`);
+await until(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length===0)`);
+check("Fehler beim Laden: ganz oder gar nicht, keine Einträge und keine PDFs übrig", await ev(`incomeRecords().length===0&&!!document.querySelector('[data-admin-action="sample-load"]')`));
+await ev(`exportFeature.keep=window.__keep`);
 await ev(`document.querySelector('[data-admin-action="sample-load"]').click()`);
 await until(`!!document.querySelector('[data-admin-action="sample-remove"]')`);
 check("Beispieldaten: 6 erfundene Einträge mit PDFs", (await ev(`incomeRecords().length===6&&incomeRecords().every(r=>r.id.startsWith('beispiel-'))`)) && (await ev(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length)`)) === 6);

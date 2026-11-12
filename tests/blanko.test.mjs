@@ -2,12 +2,12 @@
 // The check runs against a throwaway studio and a throwaway certificate folder; every kind of
 // private content is injected once and must be found.
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildProfile, root } from "../scripts/build.mjs";
-import { BLANKO_FILES, checkBlanko, collectPrivate } from "../scripts/blanko-pruefen.mjs";
+import { BLANKO_FILES, checkBlanko, checksums, collectPrivate, pngChunks, readBuildDir } from "../scripts/blanko-pruefen.mjs";
 import { solidPng } from "./lib/werkstatt.mjs";
 
 const base = await mkdtemp(path.join(tmpdir(), "inkform-blanko-"));
@@ -18,13 +18,21 @@ await cp(path.join(root, "profiles", "beispiel"), studio, { recursive: true });
 const studioProfile = JSON.parse(await readFile(path.join(studio, "profile.json"), "utf8"));
 await writeFile(
   path.join(studio, "profile.json"),
-  JSON.stringify({ ...studioProfile, id: "nordlicht", markers: ["Testatelier Nordlicht", { regex: "nordlicht-tattoo\\.example" }] }),
+  JSON.stringify({
+    ...studioProfile,
+    id: "nordlicht",
+    markers: ["Testatelier Nordlicht", { regex: "nordlicht-tattoo\\.example" }],
+    text: { ...studioProfile.text, studioAddress: "Fjordweg 7, 99999 Nordhafen", studioName: "Testatelier Nordlicht · Rune Sample" },
+  }),
 );
 const logo = solidPng(64, 64, 0x5a);
 await writeFile(path.join(studio, "logo.png"), logo);
 await mkdir(path.join(studio, "Fotos"));
 const photo = solidPng(32, 32, 0x77);
 await writeFile(path.join(studio, "Fotos", "studio.png"), photo);
+const der = Buffer.from(Array.from({ length: 300 }, (_, i) => (i * 37 + 11) % 256));
+await mkdir(path.join(home, "Library", "Application Support", "Inkform", "zertifikate", "nordlicht"), { recursive: true });
+await writeFile(path.join(home, "Library", "Application Support", "Inkform", "zertifikate", "nordlicht", "ca.der"), der);
 const certBody = Buffer.from("Testzertifikat für die Blanko-Prüfung ".repeat(8)).toString("base64");
 await mkdir(path.join(home, "Library", "Application Support", "Inkform", "zertifikat"), { recursive: true });
 await writeFile(
@@ -35,11 +43,12 @@ await writeFile(
 const profile = JSON.parse(await readFile(path.join(root, "profiles", "blanko", "profile.json"), "utf8"));
 const { files } = await buildProfile("blanko");
 const priv = await collectPrivate({ env: { INKFORM_STUDIOS: path.join(base, "studios") }, home });
-const check = (change = () => {}, p = profile) => {
+const check = (change = () => {}, p = profile, options) => {
   const copy = new Map(files);
   change(copy);
-  return checkBlanko(copy, p, priv);
+  return checkBlanko(copy, p, priv, options);
 };
+const withChunk = (png, type) => Buffer.concat([png.subarray(0, 33), Buffer.from([0, 0, 0, 4]), Buffer.from(type), Buffer.from("Kim!"), Buffer.alloc(4), png.subarray(33)]);
 const inject = (text, name = "dist/index.html") => (copy) => copy.set(name, String(copy.get(name)).replace("</body>", `${text}</body>`));
 
 test("blanko profile: neutral edition without studio details and without guide", () => {
@@ -57,11 +66,46 @@ test("blanko build: flag set, no guide embedded, sample build unchanged", async 
   assert.doesNotMatch(String(sample.files.get("dist/index.html")), /const OWNER_GUIDE_BASE64 = "";/);
 });
 
-test("the private data used by the check comes from the studios and this Mac", () => {
-  assert.equal(priv.studios, 1);
+test("the private data used by the check comes from the studios and this Mac", async () => {
+  assert.deepEqual(priv.studios, ["nordlicht"]);
   assert.deepEqual(priv.profiles.map((p) => p.id), ["beispiel", "nordlicht"]);
   assert.ok(priv.profiles[1].prints.some((p) => p.label === path.join("Fotos", "studio.png")));
-  assert.equal(priv.certs.length, 1);
+  assert.deepEqual([...new Set(priv.certs.map((c) => c.label))].sort(), ["zertifikat/test.crt", "zertifikate/nordlicht/ca.der"]);
+  await assert.rejects(collectPrivate({ env: { INKFORM_STUDIOS: path.join(base, "fehlt") }, home }), /Studio-Ordner nicht lesbar/);
+});
+
+test("blanko images carry no metadata", () => {
+  for (const name of ["dist/icons/icon-192.png", "dist/icons/icon-512.png"]) assert.deepEqual(pngChunks(files.get(name)), ["IHDR", "IDAT", "IEND"]);
+});
+
+test("origin: every file must equal the build from the core", async () => {
+  assert.deepEqual(await check(undefined, profile, { reference: files }), []);
+  const changed = await check((c) => c.set("dist/sw.js", String(c.get("dist/sw.js")) + "\n// x"), profile, { reference: files });
+  assert.ok(changed.includes("dist/sw.js: weicht vom Build aus dem committeten Kern ab"));
+});
+
+test("a written build folder: only the expected files, no hidden entries, folders or links", async () => {
+  const dir = path.join(base, "ausgabe");
+  for (const [name, contents] of files) {
+    await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
+    await writeFile(path.join(dir, name), contents);
+  }
+  const clean = await readBuildDir(dir);
+  assert.deepEqual(clean.problems, []);
+  assert.equal(clean.files.size, BLANKO_FILES.length);
+  await mkdir(path.join(dir, ".git"));
+  await writeFile(path.join(dir, ".git", "HEAD"), "x");
+  await writeFile(path.join(dir, "dist", ".DS_Store"), "x");
+  await mkdir(path.join(dir, "dist", "extra"));
+  await symlink(path.join(studio, "logo.png"), path.join(dir, "dist", "icons", "logo.png"));
+  const { problems } = await readBuildDir(dir);
+  assert.deepEqual(problems.sort(), [".git/: Ordner gehört nicht zum Build", "dist/.DS_Store: gehört nicht zum Build", "dist/extra/: Ordner gehört nicht zum Build", "dist/icons/logo.png: Verknüpfung"]);
+});
+
+test("checksums list every checked file", () => {
+  const lines = checksums(files).trim().split("\n");
+  assert.equal(lines.length, BLANKO_FILES.length);
+  assert.ok(lines.every((l) => /^[0-9a-f]{64}  \S/.test(l)));
 });
 
 test("the clean blanko build passes", async () => {
@@ -74,6 +118,18 @@ test("counter-tests: every kind of private content is found", async () => {
     [inject("www.nordlicht-tattoo.example"), /Kennzeichen von nordlicht/],
     [inject(Buffer.from("x".repeat(160) + " Testatelier Nordlicht " + "y".repeat(160)).toString("base64")), /Kennzeichen von nordlicht/],
     [inject("Musterstudio"), /Kennzeichen von beispiel: Musterstudio/],
+    [inject("Fjordweg 7, 99999 Nordhafen"), /Kennzeichen von nordlicht: Fjordweg 7/],
+    [inject("Rune Sample"), /Kennzeichen von nordlicht: Rune Sample/],
+    [inject("Testatelier%20Nordlicht"), /Kennzeichen von nordlicht/],
+    [inject("Testatelier&#32;Nordlich&#x74;"), /Kennzeichen von nordlicht/],
+    [inject("Testatelier\\u0020Nordlicht"), /Kennzeichen von nordlicht/],
+    [inject("Test\u200batelier Nord\u200dlicht"), /Kennzeichen von nordlicht/],
+    [inject(Buffer.from("Testatelier Nordlicht").toString("base64")), /Kennzeichen von nordlicht/],
+    [(c) => c.set("dist/licenses/jsPDF.txt", Buffer.from("Lizenz Testatelier Nordlicht", "utf16le")), /jsPDF\.txt: Kennzeichen von nordlicht/],
+    [(c) => c.set("dist/licenses/jsPDF.txt", Buffer.from("Lizenz Testatelier Nordlicht", "utf16le").swap16()), /jsPDF\.txt: Kennzeichen von nordlicht/],
+    [(c) => c.set("dist/icons/icon-512.png", withChunk(c.get("dist/icons/icon-512.png"), "tEXt")), /icon-512\.png: Bild-Metadaten \(tEXt\)/],
+    [(c) => c.set("dist/icons/icon-512.png", withChunk(c.get("dist/icons/icon-512.png"), "eXIf")), /Bild-Metadaten \(eXIf\)/],
+    [inject(der.toString("base64")), /Zertifikat oder Schlüssel zertifikate\/nordlicht\/ca\.der/],
     [(c) => c.set("dist/icons/icon-192.png", logo), /Datei von nordlicht: logo\.png/],
     [inject(`<img src="data:image/png;base64,${photo.toString("base64")}">`), /Datei von nordlicht: Fotos\/studio\.png/],
     [inject("-----BEGIN PRIVATE KEY-----"), /PEM-Block/],
