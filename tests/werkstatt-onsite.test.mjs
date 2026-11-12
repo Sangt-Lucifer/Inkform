@@ -433,3 +433,11 @@ test("approval needs a real load: index and service worker via GET with status 2
   assert.equal(loadedByDevice([{ at, method: "GET", status: 404, path: "/" }, { at, method: "GET", status: 200, path: "/sw.js" }]), false);
   assert.equal(loadedByDevice([{ at, method: "GET", status: 200, path: "/" }, { at, method: "GET", status: 200, path: "/sw.js" }]), true);
 });
+
+test("certificate: two simultaneous creations never replace a finished root", async () => {
+  const results = await Promise.all([createCert("doppelt", PASSWORD, env), createCert("doppelt", PASSWORD, env)]);
+  assert.equal(results.filter((r) => r.exists).length, 1);
+  assert.match(results.find((r) => r.error).error, /nicht ersetzt/);
+  const parent = path.dirname(studioCertDir("doppelt", env));
+  assert.deepEqual((await readdir(parent)).filter((n) => n.startsWith(".doppelt.")), [], "nothing moved aside, no work folder left");
+});

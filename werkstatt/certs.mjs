@@ -98,7 +98,23 @@ async function serverCert(dir, id, password) {
 }
 
 // New root (10 years, name-constrained to inkform-app.local, key encrypted) plus server certificate.
-export async function createCert(id, password, env = process.env) {
+// One certificate operation per studio at a time (create and renew wait for each other).
+const busy = new Map();
+function exclusive(key, work) {
+  const previous = busy.get(key) ?? Promise.resolve();
+  const next = previous.then(work, work);
+  busy.set(key, next.catch(() => {}));
+  return next;
+}
+
+export function createCert(id, password, env = process.env) {
+  return exclusive(studioCertDir(id, env), () => createCertNow(id, password, env));
+}
+export function renewCert(id, password, env = process.env) {
+  return exclusive(studioCertDir(id, env), () => renewCertNow(id, password, env));
+}
+
+async function createCertNow(id, password, env) {
   const bad = passwordError(password);
   if (bad) return { error: bad };
   const dir = studioCertDir(id, env);
@@ -121,6 +137,8 @@ export async function createCert(id, password, env = process.env) {
     await chmod(file("ca.key"), 0o600);
     await ssl(["req", "-x509", "-new", "-key", file("ca.key"), "-passin", "fd:3", "-sha256", "-days", "3650", "-out", file(`${id}.crt`), "-config", file("ca.cnf")], password);
     await serverCert(work, id, password);
+    // Checked again right before: a complete root that exists by now is never replaced.
+    if ((await certStatus(id, env)).exists) throw new Error("Für dieses Studio gibt es inzwischen ein Stammzertifikat. Es wird nicht ersetzt.");
     if (await exists(dir)) await rename(dir, path.join(parent, `.${id}.unvollstaendig-${Date.now()}`));
     await rename(work, dir);
   } catch (error) {
@@ -131,7 +149,7 @@ export async function createCert(id, password, env = process.env) {
 }
 
 // New server certificate with the same root: nothing to do on the iPad.
-export async function renewCert(id, password, env = process.env) {
+async function renewCertNow(id, password, env) {
   const bad = passwordError(password);
   if (bad) return { error: bad };
   const dir = studioCertDir(id, env);
