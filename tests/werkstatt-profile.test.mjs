@@ -122,7 +122,7 @@ test("editor: save writes the profile files, refuses a stale version, and the st
   assert.equal(profile.text.customerStudioName, "Atelier Nord");
   const manifest = JSON.parse(await readFile(path.join(dir, "manifest.webmanifest"), "utf8"));
   assert.equal(manifest.theme_color, "#224466");
-  assert.equal(manifest.start_url, "/", "fixed fields stay");
+  assert.equal(manifest.start_url, "./", "fixed fields stay as in the sample");
   assert.equal(manifest.display, "standalone");
   assert.equal(await readFile(path.join(dir, "Dokumente", "Anleitung.md"), "utf8"), "# Anleitung Atelier Nord\n");
   for (const size of [192, 512]) {

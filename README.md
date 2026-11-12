@@ -65,6 +65,16 @@ Je Profil entstehen `index.html` (Einzeldatei, ohne Server nutzbar) und `dist/` 
 
 Die gesuchten Namen liest das Skript zur Laufzeit; im Kern stehen sie nicht. Ein nicht lesbarer Studio-Ordner bricht ab, ebenso das Fehlen jedes Studio-Profils (bewusst ohne: `--ohne-studios`). Nicht erkennbar sind ein neu kodiertes oder skaliertes Studio-Logo und Kundendaten ohne Kennzeichen; beides kann nur über committete Kerndateien hineinkommen.
 
+## Build-Repo für GitHub
+
+`node scripts/blanko-uebergeben.mjs` legt bei Bedarf `../Inkform-GitHub/` als eigenes lokales Git-Repo (Zweig `main`) an, prüft den Blanko-Build wie `blanko-pruefen.mjs` samt `profiles/blanko/README.md`, schreibt genau diese Bytes (Inhalt von `dist/` auf oberster Ebene und die README), vergleicht sie danach über ihre Prüfsummen und committet lokal als `Sven <sven@inkform.invalid>`, ohne Hooks. Das Ziel darf außer `.git`, README und den App-Dateien nichts enthalten; sonst wird nichts geschrieben. Das Skript legt kein Remote an und pusht nie. Alle Pfade sind relativ; die App läuft auch unter einem Unterpfad (`/inkform/`, geprüft in `tests/browser/unterpfad.mjs`).
+
+Lokaler Test auf dem iPad, getrennt von bestehenden Studio-Installationen (eigener Port, also eigene Adresse und eigener Speicher):
+
+```sh
+node scripts/serve.mjs --dir ../Inkform-GitHub --lan --port 8444   # https://<mac>.local:8444/
+```
+
 ## Leak-Tests
 
 `npm test` findet Studios über `INKFORM_STUDIOS` (Ordner, getrennt durch `:`) oder in `../Inkform-Studios/`.

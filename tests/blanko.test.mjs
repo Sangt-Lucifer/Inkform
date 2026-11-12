@@ -154,3 +154,11 @@ test("counter-tests: every kind of private content is found", async () => {
   assert.ok(named.some((p) => /text\.studioName muss leer sein/.test(p)));
   assert.ok((await check(undefined, { ...profile, blank: false })).some((p) => /"blank": true fehlt/.test(p)));
 });
+
+test("the README of the build repository is searched like the build and must be named as extra", async () => {
+  const readme = await readFile(path.join(root, "profiles", "blanko", "README.md"));
+  assert.deepEqual(await check((c) => c.set("README.md", readme), profile, { extra: ["README.md"] }), []);
+  assert.ok((await check((c) => c.set("README.md", readme))).includes("README.md: gehört nicht zum Build"));
+  const leaked = await check((c) => c.set("README.md", Buffer.concat([readme, Buffer.from("\nTestatelier Nordlicht\n")])), profile, { extra: ["README.md"] });
+  assert.ok(leaked.some((p) => /^README\.md: Kennzeichen von nordlicht/.test(p)));
+});

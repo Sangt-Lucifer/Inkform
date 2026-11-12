@@ -209,13 +209,14 @@ async function allowedEmails() {
 }
 
 // files: Map of build path -> contents; profile: the blanko profile.json; reference: the files
-// build.mjs makes (null skips the origin check, only for tests of the search layer).
-export async function checkBlanko(files, profile, priv, { reference = null } = {}) {
+// build.mjs makes (null skips the origin check, only for tests of the search layer); extra: further
+// file names allowed besides the build (e.g. the README of the build repository), searched alike.
+export async function checkBlanko(files, profile, priv, { reference = null, extra = [] } = {}) {
   const problems = [];
   if (profile.blank !== true) problems.push('profile.json: "blank": true fehlt');
   if (profile.guide) problems.push("profile.json: Blanko hat keine Anleitung");
   for (const key of STUDIO_FIELDS) if (profile.text?.[key]) problems.push(`profile.json: text.${key} muss leer sein`);
-  for (const name of files.keys()) if (!BLANKO_FILES.includes(name)) problems.push(`${name}: gehört nicht zum Build`);
+  for (const name of files.keys()) if (!BLANKO_FILES.includes(name) && !extra.includes(name)) problems.push(`${name}: gehört nicht zum Build`);
   for (const name of BLANKO_FILES) if (!files.has(name)) problems.push(`${name}: fehlt`);
   if (reference)
     for (const [name, contents] of files)
@@ -246,6 +247,13 @@ export async function checkBlanko(files, profile, priv, { reference = null } = {
   return [...new Set(problems)];
 }
 
+export function assertCleanCore() {
+  const changes = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: root, encoding: "utf8" });
+  if (changes.trim()) throw new Error(`Der Kern hat nicht committete Änderungen; geprüft wird nur ein committeter Stand:\n${changes}`);
+}
+
+export const studiosText = (studios) => `${studios.length} ${studios.length === 1 ? "Studio" : "Studios"} (${studios.join(", ") || "keine"})`;
+
 export const checksums = (files) =>
   [...files].sort(([a], [b]) => a.localeCompare(b)).map(([name, contents]) => `${sha256(Buffer.from(contents))}  ${name}`).join("\n") + "\n";
 
@@ -253,8 +261,7 @@ async function main(argv) {
   const arg = (name) => (argv.includes(name) ? path.resolve(argv[argv.indexOf(name) + 1]) : null);
   const dir = arg("--dir"),
     sums = arg("--sha256");
-  const changes = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: root, encoding: "utf8" });
-  if (changes.trim()) throw new Error(`Der Kern hat nicht committete Änderungen; geprüft wird nur ein committeter Stand:\n${changes}`);
+  assertCleanCore();
   const profile = JSON.parse(await readFile(path.join(resolveProfileDir("blanko"), "profile.json"), "utf8")),
     reference = (await buildProfile("blanko")).files;
   const { files, problems: layout } = dir ? await readBuildDir(dir) : { files: reference, problems: [] };
@@ -268,7 +275,7 @@ async function main(argv) {
   }
   if (sums) await writeFile(sums, checksums(files), { flag: "wx" });
   console.log(
-    `Blanko-Prüfung bestanden: ${files.size} Dateien, identisch mit dem Build aus dem committeten Kern, geprüft gegen das Beispiel und ${priv.studios.length} Studios (${priv.studios.join(", ") || "keine"}), ${priv.certs.length} Zertifikats- und Schlüsselblöcke und ${priv.local.length} Kennungen dieses Macs.`,
+    `Blanko-Prüfung bestanden: ${files.size} Dateien, identisch mit dem Build aus dem committeten Kern, geprüft gegen das Beispiel und ${studiosText(priv.studios)}, ${priv.certs.length} Zertifikats- und Schlüsselblöcke und ${priv.local.length} Kennungen dieses Macs.`,
   );
 }
 

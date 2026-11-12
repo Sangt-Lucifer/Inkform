@@ -1,28 +1,30 @@
 // Cache only the static app; customer input and generated PDFs never enter this cache.
+// Paths are relative to this worker, so the app also runs below a sub path (e.g. /inkform/);
+// served at "/" they are the same addresses as before.
 const CACHE = "inkform-app-__BUILD_HASH__";
-const PATHS = [
-  "/index.html",
-  "/manifest.webmanifest",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/licenses/jsPDF.txt",
-  "/licenses/Tailwind.txt",
-  "/licenses/NotoSans.txt",
-];
+const BASE = new URL("./", self.location).href;
+const INDEX = new URL("index.html", BASE).href;
+const URLS = [
+  "index.html",
+  "manifest.webmanifest",
+  "icons/icon-192.png",
+  "icons/icon-512.png",
+  "licenses/jsPDF.txt",
+  "licenses/Tailwind.txt",
+  "licenses/NotoSans.txt",
+].map((path) => new URL(path, BASE).href);
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE);
-      for (const path of PATHS) {
-        const response = await fetch(path, { credentials: "same-origin", cache: "reload" });
-        if (!response.ok || response.redirected)
-          throw new Error("App-Asset nicht verfügbar: " + path);
-        if (path === "/" || path === "/index.html") {
+      for (const url of URLS) {
+        const response = await fetch(url, { credentials: "same-origin", cache: "reload" });
+        if (!response.ok || response.redirected) throw new Error("App-Asset nicht verfügbar: " + url);
+        if (url === INDEX) {
           const html = await response.clone().text();
-          if (!html.includes('id="customer-app"'))
-            throw new Error("Kein App-Dokument; Anmeldung erforderlich.");
+          if (!html.includes('id="customer-app"')) throw new Error("Kein App-Dokument; Anmeldung erforderlich.");
         }
-        await cache.put(path, response);
+        await cache.put(url, response);
       }
     })(),
   );
@@ -45,19 +47,16 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request,
     url = new URL(request.url);
-  if (
-    request.method !== "GET" ||
-    url.origin !== self.location.origin ||
-    !(PATHS.includes(url.pathname) || url.pathname === "/")
-  )
-    return;
+  url.search = "";
+  url.hash = "";
+  if (request.method !== "GET" || !(URLS.includes(url.href) || url.href === BASE)) return;
   if (request.mode === "navigate") {
     event.respondWith(
       (async () => {
         try {
           return await fetch(request);
         } catch (error) {
-          const cached = await caches.match("/index.html", { cacheName: CACHE });
+          const cached = await caches.match(INDEX, { cacheName: CACHE });
           if (cached) return cached;
           throw error;
         }
@@ -66,7 +65,7 @@ self.addEventListener("fetch", (event) => {
   } else
     event.respondWith(
       (async () => {
-        return (await caches.match(url.pathname, { cacheName: CACHE })) || fetch(request);
+        return (await caches.match(url.href, { cacheName: CACHE })) || fetch(request);
       })(),
     );
 });
@@ -77,7 +76,7 @@ self.addEventListener("message", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE);
-      const entries = await Promise.all(PATHS.map((path) => cache.match(path)));
+      const entries = await Promise.all(URLS.map((url) => cache.match(url)));
       if (entries.every(Boolean)) event.source?.postMessage({ type: "INKFORM_OFFLINE_READY" });
     })(),
   );

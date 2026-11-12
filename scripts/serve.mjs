@@ -60,7 +60,8 @@ const handler = async (request, response) => {
       root,
       `.${pathname.endsWith("/") ? `${pathname}index.html` : pathname}`,
     );
-    if (!filename.startsWith(root) || !(await stat(filename)).isFile()) {
+    // Hidden entries (.git, .DS_Store …) are never served, e.g. when --dir is a repository.
+    if (!filename.startsWith(root) || pathname.split("/").some((part) => part.startsWith(".")) || !(await stat(filename)).isFile()) {
       response.writeHead(404).end();
       return;
     }
