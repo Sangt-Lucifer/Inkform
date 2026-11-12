@@ -1,138 +1,95 @@
 # INKFORM
 
-Lokale Tattoo-Einwilligung mit Unterschrift, PDF-Ablage und Einnahmenübersicht je Artist. Die App läuft vollständig auf dem Gerät und funktioniert offline. Kundendaten verlassen das Gerät nie: keine Cloud, kein Tracking, keine Bibliotheken oder Schriften aus dem Netz.
+Lokale Tattoo-Einwilligung mit Unterschrift, PDF-Ablage und Einnahmenliste je Artist. Die App läuft vollständig auf dem Gerät und offline. Kundendaten verlassen das Gerät nie: keine Cloud, kein Tracking, keine Bibliotheken oder Schriften aus dem Netz.
 
-Dieses Repository ist der **neutrale Kern**. Er enthält keine Daten eines echten Studios, weder im Code noch in der Git-Historie. Echte Studios liegen als eigene Profile außerhalb, standardmäßig in `../Inkform-Studios/<studio>/`, jedes mit eigenem lokalen Git-Repo. Wie ein neues Studio entsteht, steht in [NEUES-STUDIO.md](NEUES-STUDIO.md).
-
-Bedienung, Kundenablauf und Sicherungen stehen in `profiles/beispiel/README.md` und in der eingebetteten Anleitung (`profiles/beispiel/Dokumente/Anleitung.md`).
+Dieses Repository ist der **neutrale Kern**. Er enthält keine Daten eines echten Studios, weder im Code noch in der Git-Historie. Studios liegen außerhalb, standardmäßig in `../Inkform-Studios/<studio>/`, jedes mit eigenem lokalen Git-Repo. Ein neues Studio legt die Werkstatt an, siehe [NEUES-STUDIO.md](NEUES-STUDIO.md). Bedienung und Kundenablauf beschreibt die eingebettete Anleitung (`profiles/beispiel/Dokumente/Anleitung.md`).
 
 ## Aufbau
 
 | Ordner | Inhalt |
 |---|---|
-| `src/` | Gemeinsamer Code für alle Studios: Formular, Admin, PIN-Schutz, Einnahmen, PDF |
-| `public/vendor/` | Gebündelte Bibliotheken (jsPDF 4.2.1, Tailwind CSS Browser 4.3.4) und die PDF-Schrift Noto Sans 2.015 (SIL OFL 1.1) samt Lizenzen |
-| `profiles/beispiel/` | Eingebautes Beispielprofil mit einem **erfundenen Musterstudio** (Vorlage für neue Studios und neutrale Demo-Version) |
-| `scripts/` | Build, lokale Vorschau, Anleitung als PDF |
-| `tests/` | Unit-, Profil- und Leak-Tests; `tests/browser/` Browser-Prüfungen; `tests/lib/` Scan-Hilfen |
-| `build/` | Erzeugte Beispiel-App (nicht in Git) |
+| `src/` | App-Code für alle Studios: Formular, Admin mit PIN, Einnahmen, Aufbewahrung, PDF, Service Worker |
+| `public/vendor/` | jsPDF 4.2.1, Tailwind CSS Browser 4.3.4, Schrift Noto Sans 2.015 (SIL OFL 1.1), jeweils mit Lizenz |
+| `profiles/beispiel/` | „Blanko“: Beispielprofil mit einem erfundenen Musterstudio, Vorlage für neue Studios |
+| `scripts/` | Build, Vorschau und Auslieferung (`serve.mjs`), lokales Zertifikat, Anleitung als PDF |
+| `werkstatt/` | Lokale Oberfläche zum Anlegen, Bearbeiten, Prüfen, Exportieren und Ausliefern |
+| `tests/` | Unit-, Profil-, Leak- und Werkstatt-Tests; `tests/browser/` Browser-Prüfungen |
+| `docs/` | Frühere Pläne und Vorschläge (nicht der Ist-Stand) |
+| `build/` | Erzeugte Blanko-App (nicht in Git) |
 
-Ein Profil besteht aus `profile.json`, `logo.png`, `icons/`, `manifest.webmanifest`, `Anleitung-iPad-und-Admin.pdf` und `Dokumente/`. `profile.json` enthält:
+Ein Profil besteht aus `profile.json`, `logo.png`, `icons/`, `manifest.webmanifest`, `Anleitung-iPad-und-Admin.pdf` und `Dokumente/`. In `profile.json` stehen:
 
-- `text`: alle studiospezifischen Texte. Im Code stehen dafür Platzhalter wie `%%studioName%%`. Der Build bricht ab, wenn ein Platzhalter fehlt, ein Text ungenutzt ist oder Zeichen enthält, die aus JavaScript oder HTML ausbrechen könnten (`"`, `` ` ``, `\`, `<`, `>`, `${`, Zeilenumbruch). Alle Profile müssen dieselben Texte definieren.
-- `markers`: die **eigenen Kennzeichen** des Studios (Name, Inhaber, Adresse, E-Mail, Domains, Social-Media-Namen …) als Text oder `{"regex": "…"}`. Die Leak-Tests lesen sie aus dem Profil; im Kern steht keine Liste echter Studios.
+- `text`: alle studiospezifischen Texte für die Platzhalter `%%name%%` im Code. Der Build bricht ab bei fehlenden oder ungenutzten Texten und bei Zeichen, die aus JavaScript oder HTML ausbrechen könnten (`"`, `` ` ``, `\`, `<`, `>`, `${`, Zeilenumbruch). Alle Profile haben dieselben Texte.
+- `markers`: die eigenen Kennzeichen des Studios (Name, Inhaber, Adresse, Domains …) als Text oder `{"regex": "…"}`. Die Leak-Tests lesen sie von dort; im Kern steht keine Liste echter Studios.
 - `guide`: Kopfzeile, Datum und Autor der PDF-Anleitung.
 
 ## Bauen und prüfen
 
-Node.js ab Version 22, keine Paketinstallation:
+Node.js ab Version 22, keine Paketinstallation.
 
 ```sh
-npm run build                                              # Beispiel nach build/beispiel/
-node scripts/build.mjs --profile ../Inkform-Studios/<studio>   # nach ../Inkform-Studios/<studio>/build/
-node scripts/build.mjs --profile ../Inkform-Studios/<studio> --out <ziel>
-npm run check                                              # Syntax und Aktualität des Beispiel-Builds
-npm test                                                   # Unit-, Profil- und Leak-Tests
-npm run test:browser                                       # Browser-Prüfungen, Beispiel
-npm run test:browser -- --profile ../Inkform-Studios/<studio>
-npm run preview                                            # Vorschau Beispiel auf http://127.0.0.1:8080
-node scripts/serve.mjs --profile ../Inkform-Studios/<studio>
+npm run build                                                 # Blanko nach build/beispiel/
+node scripts/build.mjs --profile ../Inkform-Studios/<studio>  # nach <studio>/build/
+npm run check                                                 # Syntax und Aktualität des Blanko-Builds
+npm test                                                      # alle Tests, nacheinander (~35 s)
+npm run test:browser                                          # Browser-Prüfungen mit Blanko
+npm run preview                                               # Vorschau auf http://127.0.0.1:8080
+npm run werkstatt                                             # Werkstatt auf http://127.0.0.1:8090
 ```
 
-Je Profil entstehen `index.html` (Einzeldatei, alles eingebettet, ohne Server nutzbar) und `dist/` (Web-App mit Service Worker für den Offline-Betrieb auf dem iPad). Ein Studio-Build darf nicht im Kern landen: Der Build verweigert ein `--out` innerhalb dieses Repos. Er überschreibt nur einen vorhandenen Build (`index.html`, `dist/`) und bricht ab, wenn der Zielordner andere Dateien enthält.
+Je Profil entstehen `index.html` (Einzeldatei, ohne Server nutzbar) und `dist/` (Web-App mit Service Worker für den Offline-Betrieb). Ein Studio-Build landet nie im Kern. Der Build ersetzt nur einen vorhandenen Build und bricht ab, wenn der Zielordner andere Dateien enthält. Die Version des Service Workers hängt von allen Dateien ab, die er speichert; jede Änderung erreicht so auch installierte Geräte.
 
-## PDF-Schrift, Abschluss und PIN-Sperre
+## Verhalten der App
 
-- **Schrift:** PDFs werden mit der eingebetteten Noto Sans (Normal und Fett) gesetzt, deshalb funktionieren Namen wie Gül Şahin, Łukasz Ćwik oder Ayşe Yıldız. jsPDF übernimmt nur die benutzten Zeichen ins PDF. Zeichen, die die Schrift nicht darstellen kann (z. B. ✓, Emojis, Arabisch, Devanagari), meldet die App vor dem Erstellen, statt sie stillschweigend wegzulassen.
-- **Abschluss:** Die Einnahme wird erst gebucht, wenn der Inhaber die Ablage des PDFs bestätigt, und zwar genau einmal je Einwilligung. Bis dahin bleibt die offene Einwilligung auf dem Gerät: Metadaten ohne Gesundheitsdaten in `inkform.pending.v1`, das PDF in IndexedDB (`inkform-pending`). Nach der Bestätigung wird beides gelöscht. Ein Neuladen auf „Vielen Dank“ verliert nichts. Ist das PDF nicht mehr lesbar, kann der Inhaber die Einnahme als „PDF fehlt“ buchen; der Vermerk steht in Liste, CSV und Einnahmen-PDF und lässt sich im Eintrag wieder entfernen.
-- **PIN-Sperre:** Nach 5 Fehlversuchen 30 Sekunden Sperre, gespeichert in `inkform.admin.lock.v1`, also auch nach einem Neuladen wirksam. Eine zurückgestellte Uhr verlängert die Sperre nicht. Ist der Speicher vorübergehend nicht beschreibbar (z. B. voll), zählt die App im Arbeitsspeicher weiter und speichert nach, sobald es wieder geht.
-  - *Bekannte Grenzen (bewusst akzeptiert):* Nur wenn die App in **zwei Fenstern gleichzeitig** offen ist, kann (1) bei gleichzeitig scheiterndem Speichern ein Fenster die eben gesetzte Sperre des anderen überschreiben und (2) bei zurückgestellter Uhr eine laufende Sperre bis zu 30 Sekunden länger dauern. Auf dem iPad läuft die Home-Bildschirm-App in einem Fenster. Die Sperre ist nur eine Bremse gegen Durchprobieren; Schutz des Geräts bieten Gerätecode und Geführter Zugriff.
-- **Aufbewahrung (Admin):** Zwei Fristen in Jahren (Einwilligungs-PDFs, Namen in der Einnahmenliste), gespeichert in `inkform.retention.v1`, ohne Vorgabe. Die Löschliste zeigt fällige PDFs zum Löschen in der Dateien-App und Abhaken (`pdfDeletedAt`); Anonymisieren entfernt Name und PDF-Dateiname, Beträge bleiben (`anonymizedAt`). Die Übersicht erinnert an eine seit 7 Tagen offene Einwilligung und zeigt eine Sicherheits-Checkliste mit dem Datum der letzten Einnahmen-Sicherung (`inkform.backup.v1`). Logik in `src/retention.js`.
-- **App-Updates:** Der Service Worker einer neuen Version übernimmt erst, wenn die App leer ist (kein Formular in Arbeit, keine offene Einwilligung, keine ungespeicherten Admin-Änderungen, kein offener Dialog), und löscht dann die alte Version aus dem Offline-Speicher. So startet nach einem Update keine ältere Version mehr auf neueren Daten. Ältere Versionen lesen die seit Phase 3/4 möglichen Felder (`pdfMissing`, `pdfDeletedAt`, `anonymizedAt`) nicht; alle Geräte gemeinsam aktualisieren.
-- **Anonymisierung:** Nur für Einträge, deren PDF als gelöscht markiert ist oder die als „PDF fehlt“ gebucht wurden. Auch ohne Dateinamen gilt ein PDF bis dahin als möglicherweise vorhanden. Anonymisieren ist endgültig: Kein Weg (Bearbeiten, Import, veraltete Bestätigung aus einem zweiten Fenster) bringt Namen oder Dateinamen zurück.
-- **Schriftgrößen:** Im Kundenbereich sind Eingaben, Beschriftungen und Fließtext mindestens 16 px groß, nichts ist kleiner als 14 px. Die Browser-Prüfung `schriftgroessen` misst das auf mehreren iPad-Größen.
+- **PDF-Schrift:** Noto Sans ist eingebettet, Namen wie Gül Şahin oder Łukasz Ćwik funktionieren. Zeichen, die die Schrift nicht kann (Emojis, Arabisch, Devanagari …), meldet die App vor dem Erstellen.
+- **Abschluss:** Die Einnahme wird erst gebucht, wenn der Inhaber die Ablage des PDFs bestätigt, genau einmal je Einwilligung. Bis dahin bleiben Metadaten (`inkform.pending.v1`) und PDF (IndexedDB `inkform-pending`) auf dem Gerät; danach werden sie gelöscht. Ist das PDF nicht mehr lesbar, lässt sich die Einnahme als „PDF fehlt“ buchen.
+- **PIN-Sperre:** Nach 5 Fehlversuchen 30 Sekunden, gespeichert in `inkform.admin.lock.v1` und damit auch nach einem Neuladen wirksam. Eine zurückgestellte Uhr verlängert die Sperre nicht. Bekannte Grenze: Mit zwei gleichzeitig offenen Fenstern kann eine Sperre überschrieben werden oder bis zu 30 Sekunden länger dauern; auf dem iPad läuft die App in einem Fenster.
+- **Aufbewahrung:** Zwei Fristen in Jahren (`inkform.retention.v1`). Die Löschliste zeigt fällige PDFs; Anonymisieren entfernt Name und Dateiname, Beträge bleiben. Anonymisiert wird nur, wenn das PDF als gelöscht markiert oder als „PDF fehlt“ gebucht ist, und es ist endgültig. Die Übersicht erinnert an offene Einwilligungen und an die letzte Sicherung (`inkform.backup.v1`).
+- **Updates:** Eine neue Version übernimmt erst, wenn die App leer ist (kein Formular in Arbeit, keine offene Einwilligung, keine ungespeicherten Änderungen), und löscht dann die alte aus dem Offline-Speicher. Ältere Versionen kennen die Felder `pdfMissing`, `pdfDeletedAt` und `anonymizedAt` nicht: alle Geräte gemeinsam aktualisieren.
+- **Schriftgrößen:** Im Kundenbereich mindestens 16 px für Eingaben und Fließtext, nichts unter 14 px.
 
 ## Leak-Tests
 
-`npm test` findet Studio-Profile über `INKFORM_STUDIOS` (Liste von Ordnern, getrennt durch `:`) oder in `../Inkform-Studios/`. Geprüft wird:
+`npm test` findet Studios über `INKFORM_STUDIOS` (Ordner, getrennt durch `:`) oder in `../Inkform-Studios/`.
 
-- **Über Kreuz** (`tests/profiles.test.mjs`): Kein Build und kein Profilordner enthält Kennzeichen eines anderen Profils oder dessen Logo, Icons oder Anleitung, auch nicht als eingebettetes Base64.
-- **Kern-Repo** (`tests/core-leaks.test.mjs`): Alle Dateien des Arbeitsordners und die komplette Git-Datenbank (alle Commits, Bäume, Dateien und Tags, auch nicht mehr erreichbare) sowie Refs und Reflogs enthalten keine Kennzeichen und keine Logo-, Icon- oder Anleitungsdateien eines Studios.
-- **Gegentests**: Eigene Kennzeichen und Logos werden im eigenen Build gefunden. Eine absichtlich eingeschleuste und wieder gelöschte Datei wird in einem Wegwerf-Repo erkannt. Ein eingeschleustes Kennzeichen samt Logo wird in einem fremden Build erkannt.
+- **Über Kreuz:** Kein Build und kein Profilordner enthält Kennzeichen, Logo, Icons oder Anleitung eines anderen Profils, auch nicht als eingebettetes Base64.
+- **Kern:** Arbeitsordner und die komplette Git-Datenbank (auch nicht mehr erreichbare Objekte, Refs, Reflogs) enthalten nichts von einem Studio.
+- **Gegentests:** Eingeschleuste Kennzeichen und Dateien werden erkannt.
 
-Durchsucht werden Text, dekodierte Base64-Blöcke, PNG-Textfelder und der Text von PDFs, einschließlich Teil-Schriften über ihre ToUnicode-Tabellen. Pixel- und Schriftdaten werden nur per Dateivergleich geprüft. Ohne Studio-Profile neben dem Kern werden die Kern-Prüfungen sichtbar übersprungen.
+Durchsucht werden Text, Base64-Blöcke, PNG-Textfelder und der Text von PDFs. Die Browser-Prüfungen nutzen ein leeres Wegwerf-Profil von Chrome und nur erfundene Daten; Details in `tests/browser/README.md`.
 
-Die **Browser-Prüfungen** starten Google Chrome headless mit leerem Wegwerf-Profil, die Vorschau nur auf `127.0.0.1`, und verwenden ausschließlich erfundene Testdaten. Ihre Ausgaben landen im `test-results/` des jeweiligen Profils (Kern oder Studio-Ordner). Details stehen in `tests/browser/README.md`.
+## Werkstatt
 
-## Werkstatt (lokal, Phase 1 bis 4)
+`npm run werkstatt` startet eine Oberfläche nur auf `127.0.0.1`. Jede Anfrage braucht den richtigen Host und ein Sitzungs-Token, dazu gilt eine strenge CSP. Kundendaten liest oder speichert die Werkstatt nicht. Ihr Zustand liegt außerhalb der Repos unter `~/Library/Application Support/Inkform/` (`werkstatt/`, `zertifikate/`).
 
-```sh
-npm run werkstatt          # http://127.0.0.1:8090, nur auf diesem Mac
-```
+**Schutz:** Studios sind nur Anzeige, bis ihr Ordner in `werkstatt/freigegeben.json` steht (`{"studios": ["/pfad"]}`); neu angelegte Studios werden automatisch eingetragen. Blanko kann immer gebaut und geprüft, aber nicht bearbeitet werden. Vor jedem Schreiben prüft die Werkstatt, dass der Ordner genau so freigegeben ist, keine Verknüpfung ist und in Wirklichkeit kein geschütztes Studio. Die Studio-Kennung muss 3 bis 40 Zeichen aus `a–z`, `0–9` und `-` haben.
 
-**Übersicht:** Blanko (`profiles/beispiel`) und alle Studios neben dem Kern. Jede Karte zeigt Git-Stand, ob der Build aktuell ist, die letzten Ergebnisse von Tests und Browser-Prüfungen sowie Warnungen: noch Musterstudio-Texte im Studio, Anleitungs-PDF älter als `Anleitung.md`. Dazu Restlaufzeit des Vor-Ort-Zertifikats.
+**Funktionen:**
 
-**Knöpfe:** Bauen (`build.mjs`), Unit- und Leak-Tests über Kreuz (`npm test`) und Browser-Prüfungen (`tests/browser/run.mjs`). Das Ergebnis wird verständlich zusammengefasst, das ausführliche Protokoll ist aufklappbar. Es läuft immer nur eine Prüfung gleichzeitig.
+- **Bauen und Prüfen:** Build, `npm test` und Browser-Prüfungen, mit kurzer Zusammenfassung und aufklappbarem Protokoll. Es läuft immer nur ein Lauf.
+- **Neues Studio:** kopiert Blanko nach `../Inkform-Studios/<kennung>/`, legt `.gitignore` und ein Git-Repo ohne Remote an. Ein vorhandener Ordner wird nie angefasst.
+- **Profil-Editor:** Texte, Kennzeichen (mit Probe im eigenen Build), Anleitung, Logo (quadratisches PNG; die Icons erzeugt `sips`) und die änderbaren Manifest-Felder. Gespeichert wird nur ohne Fehler, ganz oder gar nicht, und nur wenn sich die Dateien seit dem Laden nicht geändert haben.
+- **Commit:** genau die angezeigten Dateien, lokal als `Sven <sven@inkform.invalid>`, ohne Hooks. Nicht committet werden Build-Ordner, Zertifikate, Schlüssel und Kundendaten-Exporte, ebenso wenig in Repos mit Git-Filtern.
+- **Export:** nur bei sauber committetem Kern und Studio, grünen Tests für genau diese Commits und aktuellem Build. Das Paket (`index.html`, `dist/`, `PRUEFBERICHT.txt`, `SHA256SUMS`) entsteht unter `../Inkform-Exporte/<studio>/inkform-<studio>-<version>-<datum>/`, ist schreibgeschützt und wird nie überschrieben. Vorher läuft die Leak-Prüfung gegen alle anderen Profile. Geschrieben wird das Paket von `werkstatt/publish.py` (python3 der Command Line Tools), das keine Verknüpfungen verfolgt und exklusiv umbenennt.
+- **Vor Ort:** liefert einen gültigen Export im WLAN unter `https://inkform-app.local:8443/` aus, nur solange er läuft. Er nutzt ein Zertifikat je Studio, dessen Schlüssel mit einem Passwort verschlüsselt ist, das nirgends gespeichert wird. Vorher prüft die Werkstatt Zertifikat, WLAN, freien Namen, keinen Rückschritt der Version und FileVault. Die Anzeige bietet Adresse mit QR-Code, `.webloc` und Zertifikat zum AirDrop sowie eine Checkliste. Nach 30 Minuten ohne Anfrage endet der Modus.
 
-**Schutz:** Studios sind standardmäßig **nur Anzeige**. Aktionen gibt es für Blanko und für Studios, deren Ordner in `~/Library/Application Support/Inkform/werkstatt/freigegeben.json` steht (`{"studios": ["/pfad/zum/studio"]}`). Bestehende Installationen werden so nie aus Versehen neu gebaut.
+**Noch nicht geprüft:** ob ein echtes iPad `inkform-app.local` findet und das Zertifikat annimmt. Bis das mit Blanko an einem Test-iPad bestätigt ist, bleibt der Vor-Ort-Modus für Studios gesperrt.
 
-**Neues Studio:** Knopf „Neues Studio“, Kennung (`a-z0-9-`) und Name eingeben. Die Werkstatt kopiert die Beispiel-Fassung nach `../Inkform-Studios/<kennung>/` (ohne deren README und Prüfbericht), setzt die Kennung, legt `.gitignore` an und führt `git init` aus, ohne Remote und ohne Commit. Das neue Studio wird automatisch freigegeben. Einen vorhandenen Ordner fasst sie nie an.
+## Bestehende Installation ohne Werkstatt
 
-**Profil-Editor** (nur freigegebene Studios, nicht Blanko): Name, Kennzeichen mit Live-Probe, alle Texte, Anleitung (Kopfzeile, Datum, Autor, `Anleitung.md`), Logo und Manifest. Gespeichert wird erst, wenn die Prüfung keinen Fehler mehr findet:
-- dieselben Zeichenregeln und dieselben Textfelder wie `build.mjs`; der Entwurf wird zur Probe in einem temporären Ordner gebaut;
-- keine Texte oder Kennzeichen des Musterstudios und keine Kennzeichen anderer Studios (die nur gelesen werden);
-- jedes Kennzeichen darf weder in der neutralen Beispiel-Fassung noch in einem anderen Studio vorkommen, und mindestens eines muss im eigenen Build stehen;
-- Logo nur als quadratisches PNG (512 bis 4096 Pixel, höchstens 2 MB); die Icons in 192 und 512 Pixeln erzeugt `sips`;
-- im Manifest sind nur Name, Kurzname, Beschreibung und die beiden Farben änderbar. `id`, `start_url`, `scope` und `display` bleiben fest.
-
-Hat sich eine Profildatei geändert, seit der Editor sie geladen hat, wird nicht gespeichert; geprüft wird vor und direkt nach der Probe. Gespeichert wird ganz oder gar nicht: Scheitert eine Datei, kommen die alten zurück. Verknüpfungen (Symlinks) im Studio-Ordner werden nicht beschrieben. Regex-Kennzeichen ohne wiederholte Gruppen und Rückverweise, Wiederholungen höchstens {0,50}; die Probe läuft in einem eigenen Thread mit Zeitlimit, zu langsame werden abgelehnt. Bearbeitet wird nur ein Studio, das genau unter diesem Pfad freigegeben ist und in Wirklichkeit kein geschütztes Studio ist; committet nur in sein eigenes `.git`. Noch übernommenes Logo oder Anleitungs-PDF der Beispiel-Fassung zeigt der Editor als Warnung an; der Leak-Test bleibt dann rot.
-
-**Commit:** „Änderungen committen …“ zeigt die geänderten Dateien. Committet wird genau diese Liste (über einen eigenen temporären Index, später entstandene Dateien bleiben draußen), lokal, als `Sven <sven@inkform.invalid>`. Build-Ordner, Zertifikate, Schlüssel und Kundendaten-Exporte werden verweigert, auch wenn `.gitignore` sie nicht abfangen würde.
-
-**Export** („Exportieren …“, für Blanko und freigegebene Studios): nur wenn Kern und Studio sauber committet sind, Tests und Browser-Prüfungen für genau diese Commits grün sind und der Build aktuell ist; sonst nennt der Dialog, was fehlt. Das Paket entsteht aus der Dateiliste von `buildProfile()` (`index.html` und `dist/`), dazu `PRUEFBERICHT.txt` (Commits, Testergebnisse, Leak-Prüfung) und `SHA256SUMS` (`shasum -a 256 -c SHA256SUMS`). Vorher prüft die Werkstatt jede Datei auf Kennzeichen, Logos, Icons und Anleitungen aller anderen Profile; ein Fund stoppt den Export.
-- Ablage: `../Inkform-Exporte/<studio>/inkform-<studio>-<version>-<JJJJ-MM-TT>/` (Ordner per `INKFORM_EXPORTE` änderbar, nie im Kern oder in einem Studio). Auf Wunsch zusätzlich als ZIP (`ditto`).
-- Version: Kernversion aus `package.json` plus `-p<n>`; n zählt die verschiedenen exportierten Stände dieser Kernversion. Derselbe Stand wird nicht zweimal exportiert.
-- Exporte sind schreibgeschützt und werden nie überschrieben. Sie entstehen in einem temporären Ordner und werden erst vollständig umbenannt.
-- Ins Paket kommen nur die Dateien, aus denen ein Build besteht (`index.html`, `dist/index.html`, `sw.js`, Manifest, Lizenzen, `icons/icon-<größe>.png`), und nur, wenn sie Byte für Byte dem geprüften Build entsprechen. Eine fremde Datei, etwa in `icons/`, stoppt den Export. Kern- und Studio-Commit sowie der Exportordner werden bis zum Umbenennen mehrfach nachgeprüft.
-- Geschrieben wird das Paket von `werkstatt/publish.py` (python3 der Command Line Tools, nur Standardbibliothek): Jeder Ordner wird ohne Verfolgen von Verknüpfungen geöffnet, jede Datei exklusiv relativ zu diesem Ordner angelegt, und der fertige Ordner bekommt seinen Namen mit `renameatx_np(RENAME_EXCL)`, das nie etwas ersetzt. Geschrieben wird nur in einen echten Exportordner ohne fremde Einträge. Direkt vor dem Umbenennen werden Stand und Bytes noch einmal geprüft. Bei jedem Fehler entfernt die Werkstatt nur, was sie selbst angelegt hat.
-- Gültig ist ein Paket nur, wenn `SHA256SUMS` genau die vorhandenen Dateien auflistet und jede Prüfsumme stimmt; das prüft auch die Übersicht. Ein unvollständiges oder verändertes Paket sperrt weitere Exporte dieses Studios, bis es weggeräumt ist. Ein vorhandenes ZIP wird nie ersetzt.
-
-**Vor Ort** („Vor Ort …“, für Blanko und freigegebene Studios): liefert einen gültigen Export im Studio-WLAN unter `https://inkform-app.local:8443/` an das iPad aus, nur solange er läuft.
-- Zertifikat je Studio unter `~/Library/Application Support/Inkform/zertifikate/<studio>/`: Stammzertifikat (10 Jahre, nur für `inkform-app.local` gültig), Schlüssel mit Passwort verschlüsselt (AES-256; das Passwort wird nie gespeichert, es gehört in den Passwortmanager), Serverzertifikat 825 Tage. Erneuern mit demselben Passwort; am iPad ist dann nichts zu tun. Warnung ab 60 Tagen vor Ablauf.
-- Vor dem Start geprüft: gültiger Export, Zertifikat, WLAN-Adresse, `inkform-app.local` im Netz noch frei (sonst Abbruch, nie ein anderer Name), kein Rückschritt gegenüber der installierten Version, FileVault an. Für Studios zusätzlich: der neutrale Name wurde vorher mit Blanko an einem Test-iPad geprüft und freigegeben.
-- Start: `dns-sd -P` kündigt den Namen für die WLAN-Adresse an (der Mac wird nicht umbenannt), `scripts/serve.mjs --lan` liefert den Export mit dem Studio-Zertifikat aus, gebunden nur an die WLAN-Adresse. Ende nach 30 Minuten ohne Anfrage, per Knopf oder mit der Werkstatt.
-- Anzeige: Adresse groß mit QR-Code (eigener Encoder, mit dem QR-Leser von macOS geprüft), `.webloc` und Stammzertifikat zum AirDrop im Finder (nie der Schlüssel), Checkliste fürs iPad (gespeichert nur Datum), Anfragen nur mit Uhrzeit und Pfad.
-- `serve.mjs` hat dafür drei zusätzliche Schalter (`--cert-dir`, `--bind`, `--log-requests`); ohne sie verhält es sich wie bisher, das prüft ein eigener Test.
-- Nicht geprüft: ob ein echtes iPad `inkform-app.local` findet und das Zertifikat annimmt. Das ist der erste Test mit einem Test-iPad (nicht dem iPad des Bestandsstudios). Time Machine-Verschlüsselung prüft die Werkstatt nicht automatisch.
-
-**Zugriff:** Die Oberfläche lauscht nur auf `127.0.0.1`. Jede Anfrage muss den richtigen Host und ein Sitzungs-Token tragen; dazu kommt eine strenge CSP. So kann keine andere Webseite im Browser die Werkstatt auslesen oder Aktionen starten.
-
-**Ablage:** Laufprotokolle liegen unter `~/Library/Application Support/Inkform/werkstatt/laeufe/`. Kundendaten liest oder speichert die Werkstatt nicht. Der Plan für die weiteren Phasen steht in [docs/Plan-Studio-Werkstatt.md](docs/Plan-Studio-Werkstatt.md).
-
-## Aufs iPad bringen, ohne Cloud
-
-Die Web-App braucht für den Offline-Betrieb einmalig HTTPS. Statt eines Hosters liefert der Mac sie im eigenen WLAN aus, nur solange der Befehl läuft:
+Für eine bereits installierte App liefert der Mac den Build im WLAN unter seinem eigenen Bonjour-Namen aus, solange der Befehl läuft:
 
 ```sh
-node scripts/lokales-zertifikat.mjs                               # einmalig: lokales Zertifikat
+node scripts/lokales-zertifikat.mjs                                  # einmalig
 node scripts/serve.mjs --profile ../Inkform-Studios/<studio> --lan   # https://<mac>.local:8443/
 ```
 
-- **Zertifikat:** Das Stammzertifikat ist per Namensbeschränkung nur für den Bonjour-Namen dieses Macs gültig. Es kommt einmal aufs iPad: AirDrop, Profil installieren, dann unter Allgemein → Info → Zertifikatsvertrauenseinstellungen vertrauen.
-- **Schlüssel:** Sie liegen unter `~/Library/Application Support/Inkform/zertifikat/`, außerhalb aller Repos und nur für den eigenen Benutzer lesbar.
-- **Server:** Er liefert nur den statischen App-Ordner aus; Kundendaten laufen nie über ihn.
-- **Adresse:** Rechnername und Port nicht ändern. Das iPad speichert die App-Daten pro Adresse.
-- **Studio-Anleitung:** Die Schritt-für-Schritt-Anleitung, auch für den Umzug von einer alten Adresse per JSON, gehört ins jeweilige Studio-Repo.
+Das Stammzertifikat gilt nur für den Namen dieses Macs; die Schlüssel liegen in `~/Library/Application Support/Inkform/zertifikat/`. Rechnername und Port nicht ändern: Das iPad speichert die App-Daten pro Adresse.
 
 ## Anleitung als PDF
 
-Sie wird aus `<profil>/Dokumente/Anleitung.md` erzeugt (ReportLab und Arial nötig). Danach muss neu gebaut werden:
-
-```sh
-python3 scripts/anleitung.py beispiel
-python3 scripts/anleitung.py ../Inkform-Studios/<studio>
-```
+`python3 scripts/anleitung.py <profil>` erzeugt das PDF aus `Dokumente/Anleitung.md`. Dafür sind ReportLab und Arial nötig; ReportLab ist derzeit nicht installiert. Ohne neues PDF bleibt der Leak-Test für ein neues Studio rot, weil es noch das PDF der Beispiel-Fassung enthält.
 
 ## Git und Daten
 
-Git ist rein lokal (keine Remotes), gesichert wird über Time Machine. `.gitignore` schließt alle App-Exporte (Einwilligungs-PDFs, Einnahmen-CSV/JSON, Einstellungen) sowie grundsätzlich PDF-, CSV-, JSON-, Tabellen-, Foto- und ZIP-Dateien aus; erlaubt sind nur ausdrücklich freigegebene Projektdateien. Echte Kundendaten gehören nie in diesen Ordner.
+Git ist rein lokal, ohne Remotes; gesichert wird über Time Machine. `.gitignore` schließt App-Exporte sowie PDF-, CSV-, JSON-, Tabellen-, Foto- und ZIP-Dateien aus; erlaubt sind nur ausdrücklich freigegebene Projektdateien. Kundendaten gehören nie in diese Ordner.

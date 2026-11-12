@@ -1,5 +1,7 @@
 # Plan: Studio-Werkstatt
 
+> Historisches Dokument: der damalige Plan bzw. Vorschlag. Der umgesetzte Stand steht in der README.
+
 Stand: 12.11.2026 · Phase 1 bis 4 umgesetzt · offen: erster Test mit einem echten Test-iPad
 
 Die Werkstatt ist eine lokale Oberfläche auf dem Mac. Mit ihr bereitest du die iPad-App für jedes Studio einzeln vor, prüfst sie, exportierst sie und installierst sie vor Ort.

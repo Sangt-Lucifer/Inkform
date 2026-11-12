@@ -1,5 +1,7 @@
 # Phase 4 – Datenschutz: Vorschlag
 
+> Historisches Dokument: der damalige Plan bzw. Vorschlag. Der umgesetzte Stand steht in der README.
+
 Stand: 11.11.2026 · nur Vorschlag, noch kein Code · Grundsatz: alles bleibt lokal auf dem iPad, keine Cloud, kein Tracking.
 
 Keine Rechtsberatung. Fristen und Texte muss das Studio selbst festlegen, im Zweifel mit Datenschutz- oder Steuerberatung.

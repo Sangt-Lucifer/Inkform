@@ -1,61 +1,42 @@
 # Neues Studio anlegen
 
-Kurzanleitung für ein weiteres Studio. Der Kern (`Inkform/`) bleibt dabei unverändert. Alle Studiodaten liegen nur im Studio-Ordner.
+Ein Studio entsteht in der Werkstatt. Der Kern bleibt dabei unverändert; alle Studiodaten liegen nur im Studio-Ordner.
 
-## 1. Beispiel kopieren
-
-```sh
-cd "<Projekte>"
-cp -R Inkform/profiles/beispiel Inkform-Studios/<studio>
-```
-
-`<studio>` ist ein kurzer Name aus Kleinbuchstaben, Ziffern und Bindestrich, zum Beispiel `atelier-nord`.
-
-## 2. Eigenes Git-Repo für das Studio
+## 1. Anlegen
 
 ```sh
-cd Inkform-Studios/<studio>
-git init -b main
-git config user.name "Sven"
-git config user.email "sven@inkform.invalid"
+npm run werkstatt        # http://127.0.0.1:8090
 ```
 
-Eine `.gitignore` anlegen. Vorlage: die `.gitignore` des Kerns. Zusätzlich müssen `build/` und `test-results/` ausgeschlossen werden. Kein Remote einrichten.
+Knopf „Neues Studio“, dann Kennung und Name eingeben. Die Kennung hat 3 bis 40 Zeichen aus `a–z`, `0–9` und `-`, zum Beispiel `atelier-nord`. Die Werkstatt:
 
-## 3. Felder anpassen
+- kopiert Blanko nach `../Inkform-Studios/<kennung>/`, ohne dessen README und Prüfbericht;
+- legt eine `.gitignore` an, die Builds, Testausgaben, Zertifikate und Kundendaten ausschließt;
+- richtet ein Git-Repo ohne Remote ein, noch ohne Commit;
+- trägt das Studio in die Freigaben ein.
 
-In `profile.json`:
+## 2. Profil bearbeiten
 
-- `id`: genau der Ordnername `<studio>`.
-- `name`, `description`.
-- `markers`: **alle** Kennzeichen des Studios: Studioname in allen Schreibweisen, Inhaber, Straße, PLZ und Ort, E-Mail, Website, Social-Media-Namen. Damit wird geprüft, dass nichts davon in den Kern oder in andere Studios gerät. Allgemeine Wörter wie `gmail` oder eine Stadt, die auch ein anderes Studio nutzt, nur aufnehmen, wenn sie wirklich eindeutig sind.
-- `text`: alle Texte ersetzen. Kein Text darf auf das Musterstudio verweisen (`Musterstudio`, `Max Mustermann`, `musterstudio.example`). Die Leak-Tests prüfen das. Aufbewahrung, Zugriff und Aufsichtsbehörde müssen dem echten Ablauf entsprechen und rechtlich geprüft sein.
-- `guide`: Kopfzeile, Datum, Autor der Anleitung.
+„Profil bearbeiten“ auf der Karte des Studios:
 
-Außerdem ersetzen: `logo.png`, `icons/icon-192.png` und `icon-512.png`, `manifest.webmanifest` (Name, Farben, `display` bleibt `standalone`), `README.md` und `Dokumente/`. Die Anleitung anpassen und neu erzeugen mit `python3 scripts/anleitung.py ../Inkform-Studios/<studio>`, das braucht ReportLab.
+- **Kennzeichen:** alles, woran man das Studio erkennt, also Name in allen Schreibweisen, Inhaber, Adresse, E-Mail, Website und Social-Media-Namen. Die Probe zeigt, wo ein Kennzeichen im Build steht. Zu allgemeine Wörter, die auch in Blanko oder einem anderen Studio vorkommen, werden abgelehnt.
+- **Texte:** Alle Texte ersetzen; keiner darf noch auf das Musterstudio verweisen. Aufbewahrung, Zugriff und Aufsichtsbehörde müssen dem echten Ablauf entsprechen und rechtlich geprüft sein.
+- **Anleitung, Logo, Manifest:** Das Logo ist ein quadratisches PNG; die Icons entstehen daraus.
+
+Gespeichert wird erst, wenn die Prüfung keinen Fehler mehr meldet. Das Anleitungs-PDF erzeugt der Editor nicht. Bis es neu erzeugt ist (siehe README, „Anleitung als PDF“), bleibt der Leak-Test für das Studio rot.
+
+## 3. Committen
+
+„Änderungen committen …“ zeigt die geänderten Dateien und committet genau diese, lokal als Sven. Kundendaten, Exporte, Builds und Schlüssel lehnt die Werkstatt ab.
 
 ## 4. Bauen und prüfen
 
-Im Kern:
+„Bauen & alles prüfen“ führt Build, alle Tests über Kreuz und die Browser-Prüfungen aus. Alles muss grün sein. Besonders wichtig sind die Leak-Tests: Der Build darf nichts aus anderen Studios oder dem Musterstudio enthalten, und der Kern nichts aus dem neuen Studio.
 
-```sh
-cd Inkform
-node scripts/build.mjs --profile ../Inkform-Studios/<studio>
-npm test
-npm run test:browser -- --profile ../Inkform-Studios/<studio>
-```
+## 5. Exportieren und ausliefern
 
-`npm test` muss grün sein. Besonders wichtig sind die Leak-Tests: Der neue Build darf nichts aus anderen Studios oder dem Musterstudio enthalten, und der Kern nichts aus dem neuen Studio.
+„Exportieren …“ ist erst möglich, wenn Kern und Studio committet sind und die Prüfungen für genau diesen Stand grün sind. Das Paket landet in `../Inkform-Exporte/<kennung>/`.
 
-## 5. Ausliefern
+Aufs iPad kommt es mit „Vor Ort …“ im Studio-WLAN. Für Studios ist der Vor-Ort-Modus erst möglich, nachdem `inkform-app.local` einmal mit Blanko an einem Test-iPad geprüft und freigegeben wurde.
 
-Ausgeliefert wird **nur** `Inkform-Studios/<studio>/build/`:
-
-- `dist/` für die Installation auf dem iPad (Home-Bildschirm, offline),
-- `index.html` als Einzeldatei.
-
-Nie ausliefern: andere Studio-Ordner, `test-results/`, Exporte oder Sicherungen. Soll das Studio auch den Quelltext bekommen, dann nur den Kern `Inkform/` (enthält kein echtes Studio) plus seinen eigenen Studio-Ordner, ohne `build/` und `test-results/` anderer Studios.
-
-## 6. Committen
-
-Im Studio-Ordner `git add -A` und `git commit`. Vorher mit `git status` prüfen, dass keine Exporte, PDFs von Kunden oder Sicherungen dabei sind.
+Nie weitergeben: andere Studio-Ordner, `test-results/`, Sicherungen oder Zertifikatsschlüssel. Soll ein Studio den Quelltext bekommen, dann nur den Kern und seinen eigenen Studio-Ordner, ohne `build/` und `test-results/`.
