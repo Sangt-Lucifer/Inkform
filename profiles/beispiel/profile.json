@@ -11,7 +11,7 @@
   "logo": "logo.png",
   "guide": {
     "header": "INKFORM",
-    "date": "07.11.2026",
+    "date": "12.11.2026",
     "author": "INKFORM"
   },
   "text": {
@@ -30,7 +30,7 @@
     "photoChannels": "auf www.musterstudio.example sowie auf dem eigenen Instagram-Profil @musterstudio.example",
     "photoStudio": "dem Musterstudio (Beispiel)",
     "reportStudio": "Musterstudio (Beispiel)",
-    "retentionText": "Beispieltext, vor dem Einsatz vom Studio anzupassen: Die Dokumentation wird während der Terminvorbereitung und Durchführung und anschließend nur so lange aufbewahrt, wie sie zum Nachweis der Einwilligung oder zur Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen erforderlich ist. Maßgeblich sind die jeweils einschlägigen Verjährungsfristen und die Erforderlichkeit im Einzelfall. Bei Ansprüchen wegen Körper- oder Gesundheitsschäden kann die Verjährungshöchstfrist nach § 199 Abs. 2 BGB 30 Jahre betragen; daraus folgt keine pauschale Aufbewahrungspflicht von 30 Jahren. Entfallen die Zwecke und besteht keine weitere Rechtsgrundlage, löscht der Inhaber die Unterlagen einschließlich der lokalen Sicherungskopien. Bei einem konkreten Rechtsstreit bleiben die hierfür erforderlichen Unterlagen bis zu dessen Abschluss und dem Wegfall weiterer Aufbewahrungsgründe erhalten.",
+    "retentionText": "Beispieltext, vor dem Einsatz vom Studio anzupassen: Die Dokumentation wird während der Terminvorbereitung und Durchführung und anschließend nur so lange aufbewahrt, wie sie zum Nachweis der Einwilligung oder zur Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen erforderlich ist. Maßgeblich sind die jeweils einschlägigen Verjährungsfristen und die Erforderlichkeit im Einzelfall. Bei Ansprüchen wegen Körper- oder Gesundheitsschäden kann die Verjährungshöchstfrist nach § 199 Abs. 2 BGB 30 Jahre betragen; daraus folgt keine pauschale Aufbewahrungspflicht von 30 Jahren. Entfallen die Zwecke und besteht keine weitere Rechtsgrundlage, löscht der Inhaber die Unterlagen einschließlich der Kopien im Speicher der App und der lokalen Sicherungskopien. Bei einem konkreten Rechtsstreit bleiben die hierfür erforderlichen Unterlagen bis zu dessen Abschluss und dem Wegfall weiterer Aufbewahrungsgründe erhalten.",
     "revocationContact": "per E-Mail an datenschutz@musterstudio.example",
     "studioAddress": "Musterstraße 1, 12345 Musterstadt",
     "studioContact": "datenschutz@musterstudio.example",

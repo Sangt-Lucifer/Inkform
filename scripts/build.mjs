@@ -189,11 +189,14 @@ export async function buildProfile(ref) {
       /<script\s+type="module"\s+src="\.\/app\.js"\s*><\/script>/,
       () => `<script>\n${escapeScript(bundledJs)}\n</script>`,
     );
-  portable = portable.replaceAll("__OWNER_GUIDE__", guide.toString("base64"));
+  portable = portable
+    .replaceAll("__OWNER_GUIDE__", guide.toString("base64"))
+    .replace("__OWNER_GUIDE_PAGES__", String((guide.toString("latin1").match(/\/Type\s*\/Page(?![s\w])/g) ?? []).length));
   if (
     /<script\b[^>]*\bsrc\s*=/i.test(portable) ||
     portable.includes("__STUDIO_LOGO__") ||
     portable.includes("__OWNER_GUIDE__") ||
+    portable.includes("__OWNER_GUIDE_PAGES__") ||
     portable.includes('href="./styles.css"') ||
     /%%\w+%%/.test(portable)
   ) {

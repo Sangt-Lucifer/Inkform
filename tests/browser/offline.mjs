@@ -26,7 +26,7 @@ check('Cache contains one HTML, the licenses and no duplicated vendor libraries'
 await ev(`document.getElementById('admin-pin').value='839274';document.getElementById('admin-pin-repeat').value='839274';document.getElementById('admin-pin-form').requestSubmit()`);
 await until(`adminAccess.isUnlocked()`);
 await ev(`document.querySelector('[data-admin-action="guide"]').click()`);
-check('Embedded guide opens with no network download',await ev(`pdfArtifact.isReport&&pdfArtifact.reportTitle.includes('Anleitung')&&pdfArtifact.pages===7&&pdfArtifact.blob.size>80000`));
+check('Embedded guide opens with no network download',await ev(`pdfArtifact.isReport&&pdfArtifact.reportTitle.includes('Anleitung')&&pdfArtifact.pages===OWNER_GUIDE_PAGES&&OWNER_GUIDE_PAGES>=7&&pdfArtifact.blob.size>80000`));
 await ev(`document.getElementById('pdf-dialog').close();finishAdminLeave()`);
 await until(`!!navigator.serviceWorker.controller`);
 await cmd('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});

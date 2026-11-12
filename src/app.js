@@ -48,6 +48,7 @@ const MEDICAL = clone(DEFAULT_SETTINGS.medical);
 const LEGAL = clone(DEFAULT_SETTINGS.legal);
 const SETTINGS_KEY = "inkform.settings.v1";
 const OWNER_GUIDE_BASE64 = "__OWNER_GUIDE__";
+const OWNER_GUIDE_PAGES = Number("__OWNER_GUIDE_PAGES__");
 // Neutral edition without a studio: setup assistant, sample data, no owner guide.
 const BLANK_EDITION = "__BLANK_EDITION__" === "true";
 const THEME_KEY = "inkform.theme.v1";
@@ -2570,7 +2571,7 @@ $("admin-app").addEventListener("click", (event) => {
       presentPdfArtifact(
         new Blob([bytes], { type: "application/pdf" }),
         "Inkform-Anleitung-iPad-und-Admin.pdf",
-        7,
+        OWNER_GUIDE_PAGES,
         { isReport: true, reportTitle: "Anleitung für iPad und Admin" },
       );
       break;
