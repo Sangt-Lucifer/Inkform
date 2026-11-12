@@ -96,7 +96,7 @@ test("corrupt metadata fails loudly instead of silently dropping the consent", a
   assert.notEqual(storage.getItem(PENDING_KEY), null);
 });
 
-// ---------- Review findings ----------
+// ---------- races between saving, confirming and cleanup ----------
 const delayed = () => {
   const store = fileStore(),
     gates = [];
@@ -164,7 +164,7 @@ test("a PDF whose deletion failed is removed by the sweep at the next start", as
   assert.equal(files.map.size, 0);
 });
 
-test("sweep never deletes a consent saved while it is running (re-review)", async () => {
+test("sweep never deletes a consent saved while it is running", async () => {
   const storage = memory(),
     files = fileStore(),
     store = createPendingStore({ storage, files });

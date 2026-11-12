@@ -1,4 +1,4 @@
-// Werkstatt, part 5: one root certificate per studio for the on-site mode, only valid for the
+// One root certificate per studio for the on-site mode, only valid for the
 // neutral address inkform-app.local. Uses the system's openssl, nothing is downloaded.
 //
 //   ~/Library/Application Support/Inkform/zertifikate/<studio>/
@@ -11,13 +11,13 @@
 // a file) and never stored. The existing installation's certificate in .../Inkform/zertifikat/ is
 // not touched by any of this.
 import { spawn } from "node:child_process";
-import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { STUDIO_ID } from "./status.mjs";
 
 export const NEUTRAL_HOST = "inkform-app.local";
-export const certsRoot = (env = process.env) =>
+const certsRoot = (env = process.env) =>
   path.resolve(env.INKFORM_ZERTIFIKATE || path.join(homedir(), "Library", "Application Support", "Inkform", "zertifikate"));
 const ID = STUDIO_ID;
 const exists = (p) => access(p).then(() => true, () => false);
@@ -42,7 +42,7 @@ function ssl(args, password = null) {
   });
 }
 
-export function passwordError(password) {
+function passwordError(password) {
   if (typeof password !== "string" || password.length < 12) return "Passwort: mindestens 12 Zeichen.";
   if (password.length > 200 || /[\r\n\u0000]/.test(password)) return "Passwort: höchstens 200 Zeichen, eine Zeile.";
   return null;
@@ -162,10 +162,4 @@ async function renewCertNow(id, password, env) {
     return { error: /decrypt|wrong password|bad password|could not (read|decode|find).*key|unable to load.*key/i.test(text) ? "Passwort falsch." : `Erneuern fehlgeschlagen: ${error.message}` };
   }
   return certStatus(id, env);
-}
-
-export async function readServerCert(id, env = process.env) {
-  const dir = studioCertDir(id, env);
-  const [key, cert] = await Promise.all([readFile(path.join(dir, "server.key")), readFile(path.join(dir, "server.crt"))]);
-  return { key, cert, dir };
 }

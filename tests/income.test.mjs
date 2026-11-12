@@ -179,7 +179,7 @@ test("literal artist names cannot collide with unassigned filter", () => {
   assert.equal(selectIncome(rows, { unassigned: true })[0].id, "empty");
 });
 
-// ---------- "PDF fehlt" and single booking (Phase 3) ----------
+// ---------- "PDF fehlt" and single booking ----------
 import { incomeCsv as csvPhase3, validateIncomeRecord as validatePhase3, createIncomeStore as storePhase3 } from "../src/income.js";
 test("pdfMissing is optional, boolean only, and stored only when true", () => {
   const base = { id: "p1", date: "2026-11-10", artist: "Alex", customer: "Ayşe Yıldız", totalCents: 1000, depositCents: null, source: "", updatedAt: "2026-11-10T10:00:00.000Z" };

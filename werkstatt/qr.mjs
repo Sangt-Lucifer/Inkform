@@ -37,7 +37,7 @@ function generator(degree) {
   }
   return poly;
 }
-export function reedSolomon(data, degree) {
+function reedSolomon(data, degree) {
   const gen = generator(degree);
   const rem = new Array(degree).fill(0);
   for (const byte of data) {

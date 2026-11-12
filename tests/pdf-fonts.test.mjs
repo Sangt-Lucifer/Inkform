@@ -60,7 +60,7 @@ test("a jsPDF document with Noto Sans prints the test names correctly in both st
   assert.ok(pdf.length < 200_000, `PDF zu groß: ${pdf.length} Bytes`);
 });
 
-// ---------- Review findings ----------
+// ---------- characters jsPDF cannot render ----------
 test("characters above U+FFFF are rejected (jsPDF would drop them)", () => {
   assert.deepEqual(unsupportedPdfChars("Before \u{10780} After", ranges), ["\u{10780}"]);
   assert.ok(ranges.every(([, end]) => end <= 0xffff));

@@ -41,7 +41,7 @@ test("blocked storage and malformed PIN configuration fail closed", async () => 
   await assert.rejects(broken.verify("839274"));
 });
 
-// ---------- persistent lockout (Phase 3) ----------
+// ---------- persistent lockout ----------
 import { createPinLockout, ADMIN_LOCK_KEY, MAX_PIN_FAILURES, PIN_LOCK_MS } from "../src/access.js";
 
 test("five failures lock for 30 seconds, and a reload (new instance) keeps the lock", () => {
@@ -94,7 +94,7 @@ test("lockout still works in memory when storage is blocked or corrupt", () => {
   assert.equal(lock.remainingMs(), PIN_LOCK_MS);
 });
 
-// ---------- Review findings ----------
+// ---------- lockout with unwritable storage and clock changes ----------
 test("readable but unwritable storage (e.g. full) still locks after five failures", () => {
   const map = new Map([[ADMIN_LOCK_KEY, JSON.stringify({ failures: 0, blockedUntil: 0 })]]);
   const storage = { getItem: (k) => map.get(k) ?? null, setItem: () => { throw Error("QuotaExceededError"); } };
@@ -119,7 +119,7 @@ test("after the clock is set back, the lock still ends one period later (checked
   assert.equal(createPinLockout(storage, () => clock).remainingMs(), 0, "nor by a reload");
 });
 
-test("a window whose write failed does not ignore or overwrite another window's lock (re-review)", () => {
+test("a window whose write failed does not ignore or overwrite another window's lock", () => {
   const map = new Map();
   let broken = true;
   const storage = {
@@ -141,7 +141,7 @@ test("a window whose write failed does not ignore or overwrite another window's 
   assert.equal(second.remainingMs(), PIN_LOCK_MS, "lock not overwritten");
 });
 
-// ---------- Third review ----------
+// ---------- stale records after failed writes ----------
 const switchable = (initial) => {
   const map = new Map(initial ? [[ADMIN_LOCK_KEY, JSON.stringify(initial)]] : []);
   const s = { writable: true, getItem: (k) => map.get(k) ?? null };
@@ -176,7 +176,7 @@ test("a reset that could not be stored is not undone by the old record", () => {
   assert.equal(JSON.parse(storage.getItem(ADMIN_LOCK_KEY)).failures, 1);
 });
 
-// ---------- Fourth review ----------
+// ---------- recovery once storage works again ----------
 test("state kept in memory is persisted once storage works again (lock, reset, clock correction)", () => {
   // Lock reached while storage is unwritable, then storage recovers: a reload keeps the lock.
   let clock = 1_000_000;

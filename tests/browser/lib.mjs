@@ -1,12 +1,9 @@
 // Small Chrome DevTools Protocol client shared by the browser checks (run via tests/browser/run.mjs).
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 
 export const OUT = process.env.INKFORM_OUT;
 export const ORIGIN = process.env.INKFORM_HTTP_ORIGIN;
-export const FILE_URL = process.env.INKFORM_FILE_URL;
-export const PROFILE = JSON.parse(readFileSync(process.env.INKFORM_PROFILE, "utf8"));
 
 export async function connect() {
   const pages = await (await fetch(process.env.INKFORM_CDP + "/json/list")).json();

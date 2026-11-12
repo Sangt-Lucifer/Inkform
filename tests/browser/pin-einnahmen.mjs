@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 // Ported from the website archive (Pruefungen-Inkform-*, 2026-11-06). Synthetic test data only.
-// Phase 3: income is booked when the owner confirms the filing, not when the PDF is created.
+// Income is booked when the owner confirms the filing, not when the PDF is created.
 // Run via: npm run test:browser  (tests/browser/run.mjs sets the INKFORM_* variables).
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';

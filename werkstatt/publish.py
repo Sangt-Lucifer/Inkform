@@ -27,8 +27,6 @@ DIR = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 NEW_FILE = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
 RENAME_EXCL = 0x00000004
 libc = ctypes.CDLL(None, use_errno=True)
-# Entries an export folder may hold: packages, their ZIPs, hidden work names of this tool.
-ALLOWED_IN_PARENT = re.compile(r"^(inkform-[a-z0-9-]+-\d+\.\d+\.\d+-p\d+-\d{4}-\d{2}-\d{2}(\.zip)?|\.inkform-[0-9a-f]{32}\.(tmp|zip\.tmp)|\.DS_Store)$")
 
 
 def say(obj):
@@ -93,10 +91,14 @@ def main():
 
     parent_fd = walk(True)
     root_fd = os.open("..", DIR, dir_fd=parent_fd)
+    # Deliberately a second, independent check besides export.mjs (which compares with the known
+    # studios): here the folder itself must not look like a studio or a repository.
     studio_like = {"profile.json", "manifest.webmanifest", ".git", "package.json"}
     if studio_like & set(os.listdir(root_fd)):
         return say({"error": "Der Exportordner sieht aus wie ein Studio oder Repo. Dort wird nichts geschrieben."})
-    foreign = [n for n in os.listdir(parent_fd) if not ALLOWED_IN_PARENT.match(n)]
+    # Entries an export folder may hold (pattern from export.mjs, the single source of these names).
+    allowed = re.compile(job["allowed"])
+    foreign = [n for n in os.listdir(parent_fd) if not allowed.match(n)]
     if foreign:
         return say({"error": "Der Exportordner enthält fremde Einträge (" + ", ".join(sorted(foreign)[:5]) + "). Dort wird nichts geschrieben."})
 
@@ -191,7 +193,7 @@ def main():
     if not still_there() or not same_entry(parent_fd, job["final"], pkg_ino) or not staged_matches(dirs):
         try:
             os.fchmod(pkg_fd, 0o755)
-            mfd = os.open(".unvollstaendig", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o444, dir_fd=pkg_fd)
+            mfd = os.open(job["marker"], os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o444, dir_fd=pkg_fd)
             os.write(mfd, b"Nach dem Schreiben veraendert. Dieses Paket nicht verwenden.\n")
             os.close(mfd)
             os.fchmod(pkg_fd, 0o555)

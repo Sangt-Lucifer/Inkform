@@ -1,4 +1,4 @@
-// Werkstatt, part 4: export a tested build as an immutable package.
+// Export a tested build as an immutable package.
 //
 //   ../Inkform-Exporte/<studio>/inkform-<studio>-<version>-<JJJJ-MM-TT>/
 //     index.html, dist/…         exactly the files buildProfile() produces
@@ -12,14 +12,14 @@
 // Exports never contain test results, backups, certificates or customer data.
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { lstat, readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { buildProfile, defaultOut, discoverStudioProfiles, listBuiltinProfiles, root } from "../scripts/build.mjs";
 import { findFingerprints, fingerprints, scanText } from "../tests/lib/leaks.mjs";
-import { matchInWorker, realLocation } from "./profile.mjs";
-import { buildState, gitInfo } from "./status.mjs";
+import { matchInWorker } from "./markers.mjs";
+import { buildState, gitInfo, inside, realLocation } from "./status.mjs";
 
 const run = promisify(execFile);
 const REPORT = "PRUEFBERICHT.txt";
@@ -28,8 +28,11 @@ const SUMS = "SHA256SUMS";
 // The only files a package may consist of (what build.mjs produces).
 const PACKAGE_FILE = /^(index\.html|dist\/index\.html|dist\/sw\.js|dist\/manifest\.webmanifest|dist\/licenses\/[A-Za-z]+\.txt|dist\/icons\/icon-\d{2,4}\.png)$/;
 const NAME = /^inkform-([a-z0-9-]+)-(\d+\.\d+\.\d+-p\d+)-(\d{4}-\d{2}-\d{2})$/;
+// Everything an export folder may contain: packages, their ZIPs, hidden work names of publish.py.
+// Handed to publish.py with every job, so both sides use the same rule.
+const ALLOWED_IN_EXPORT_FOLDER = /^(inkform-[a-z0-9-]+-\d+\.\d+\.\d+-p\d+-\d{4}-\d{2}-\d{2}(\.zip)?|\.inkform-[0-9a-f]{32}\.(tmp|zip\.tmp)|\.DS_Store)$/;
 
-export function exportsRoot(env = process.env) {
+function exportsRoot(env = process.env) {
   return env.INKFORM_EXPORTE ? path.resolve(env.INKFORM_EXPORTE) : path.resolve(root, "..", "Inkform-Exporte");
 }
 const coreVersion = async () => JSON.parse(await readFile(path.join(root, "package.json"), "utf8")).version;
@@ -71,7 +74,7 @@ async function packageFiles(folder) {
   await walk(folder);
   return out.sort((a, b) => a.rel.localeCompare(b.rel));
 }
-export async function verifyPackage(folder) {
+async function verifyPackage(folder) {
   try {
     const top = await lstat(folder);
     if (top.isSymbolicLink() || !top.isDirectory()) return { valid: false, reason: "kein echter Ordner" };
@@ -179,7 +182,7 @@ async function otherProfiles(entry, env) {
   return out;
 }
 
-export async function leakScan(entry, files, env) {
+async function leakScan(entry, files, env) {
   const others = await otherProfiles(entry, env);
   const names = [...files.keys()];
   const texts = names.map((n) => scanText(files.get(n)) + "\n" + n);
@@ -199,7 +202,6 @@ export async function leakScan(entry, files, env) {
 // Where exports may go: outside the core and outside every studio folder.
 async function placeError(target, env) {
   const real = await realLocation(target);
-  const inside = (p, q) => p === q || p.startsWith(q + path.sep);
   if (inside(real, await realpath(root))) return "Der Exportordner liegt im Kern. Exporte gehören daneben (../Inkform-Exporte).";
   for (const d of await discoverStudioProfiles(env)) {
     const r = await realpath(d).catch(() => null);
@@ -209,7 +211,7 @@ async function placeError(target, env) {
 }
 
 
-export async function exportStudio(entry, { latest, env = process.env, git = gitInfo, zip = false, now = new Date(), hook = null } = {}) {
+export async function exportStudio(entry, { latest, env = process.env, git = gitInfo, zip = false, now = new Date() } = {}) {
   if (!entry?.actionable) return { error: entry?.protectedReason ?? "Dieses Studio wird nicht exportiert." };
   const ready = await readiness(entry, { latest, git });
   if (!ready.ok) return { error: "Export noch nicht möglich.", reasons: ready.reasons };
@@ -285,7 +287,7 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
   // Writing happens in werkstatt/publish.py: Python can create folders and files relative to an
   // open folder without following links, and rename exclusively (see there). Node hands over the
   // exact bytes; between "written" and the final rename, the state and the bytes are checked once
-  // more (hook is only used by the tests to simulate interference at exactly that moment).
+  // more.
   const job = {
     root: rootReal,
     id: entry.id,
@@ -296,10 +298,7 @@ export async function exportStudio(entry, { latest, env = process.env, git = git
     started: Date.now() / 1000,
     files: [...all].map(([n, c]) => [n, Buffer.from(c).toString("base64")]),
   };
-  const result = await publish(job, async () => {
-    if (hook) await hook();
-    return unchanged();
-  });
+  const result = await publish(job, unchanged);
   if (result.error) return { error: `Export fehlgeschlagen: ${result.error}` };
   // Read back under its final name: valid and byte for byte what was handed over.
   const final = await verifyPackage(target);
@@ -322,7 +321,7 @@ export function publish(job, beforeRename) {
       answered = false;
     const done = (r) => {
       if (answered === true) return;
-      if (answered === "abort" && !r.error?.startsWith("Der Stand")) return;
+      if (answered === "abort" && !r.final) return;
       answered = true;
       resolve(r);
     };
@@ -345,13 +344,16 @@ export function publish(job, beforeRename) {
         }
         buffer = buffer.slice(nl + 1);
         if (line.written) {
-          let ok = false;
+          let ok = false,
+            reason = "Der Stand hat sich während des Exports geändert. Nichts exportiert.";
           try {
             ok = await beforeRename();
-          } catch {}
+          } catch (error) {
+            reason = `Die letzte Prüfung ist fehlgeschlagen (${error.message}). Nichts exportiert.`;
+          }
           if (!ok) {
             // Python removes everything it wrote; the answer waits until that is finished.
-            child.once("close", () => done({ error: "Der Stand hat sich während des Exports geändert. Nichts exportiert." }));
+            child.once("close", () => done({ error: reason, final: true }));
             answered = "abort";
           }
           if (child.stdin.writable) child.stdin.end(ok ? "go\n" : "abbrechen\n");
@@ -359,7 +361,7 @@ export function publish(job, beforeRename) {
         else if (line.ok) done(line);
       }
     });
-    if (child.stdin.writable) child.stdin.write(JSON.stringify(job) + "\n");
+    if (child.stdin.writable) child.stdin.write(JSON.stringify({ ...job, allowed: ALLOWED_IN_EXPORT_FOLDER.source, marker: MARKER }) + "\n");
   });
 }
 

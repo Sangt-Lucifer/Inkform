@@ -2,12 +2,13 @@
 // without buttons, Blanko can be built, a new studio is created, edited, saved and committed,
 // and the page runs under its strict CSP without errors. Everything happens in a temporary folder.
 import { execFileSync } from "node:child_process";
-import { cp, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { root } from "../../scripts/build.mjs";
 import { startWerkstatt } from "../../werkstatt/server.mjs";
 import { connect } from "./lib.mjs";
+import { snapshot } from "../lib/werkstatt.mjs";
 
 const base = await mkdtemp(path.join(tmpdir(), "inkform-werkstatt-ui-"));
 const studioDir = path.join(base, "studios", "testatelier");
@@ -35,9 +36,7 @@ try {
   check("Bauen über die Oberfläche: Ergebnis verständlich angezeigt", await ev(`document.getElementById('run-steps').textContent.includes('Gebaut')`));
   await screenshot("werkstatt");
 
-  // Phase 2: new studio -> editor -> check -> save -> commit.
-  const snapshot = async (dir) =>
-    (await Promise.all((await readdir(dir, { recursive: true })).sort().map(async (n) => `${n}:${(await stat(path.join(dir, n))).mtimeMs}`))).join("\n");
+  // New studio -> editor -> check -> save -> commit.
   const protectedBefore = await snapshot(studioDir);
   check("Geschütztes Studio: kein Bearbeiten-Knopf", await ev(`!document.querySelector('.card[data-key="s-testatelier"] [data-edit]')`));
   check("Blanko wird nicht im Editor bearbeitet", await ev(`!document.querySelector('.card[data-key="blanko"] [data-edit]')`));
@@ -72,7 +71,7 @@ try {
   check("Geschütztes Studio blieb unverändert", (await snapshot(studioDir)) === protectedBefore);
   await screenshot("werkstatt-editor");
 
-  // Phase 3: the export dialog names what is still missing and does not export.
+  // The export dialog names what is still missing and does not export.
   check("Geschütztes Studio: kein Export-Knopf", await ev(`!document.querySelector('.card[data-key="s-testatelier"] [data-export]')`));
   await ev(`document.querySelector('.card[data-key="s-atelier-nord"] [data-export]').click()`);
   await until(`document.getElementById('export-dialog').open && document.getElementById('export-reasons').textContent.length > 0`);
@@ -82,7 +81,7 @@ try {
   );
   await ev(`document.getElementById('export-cancel').click()`);
 
-  // Phase 4: the on-site panel opens, shows the QR code and starts nothing by itself.
+  // The on-site panel opens, shows the QR code and starts nothing by itself.
   check("Geschütztes Studio: kein Vor-Ort-Knopf", await ev(`!document.querySelector('.card[data-key="s-testatelier"] [data-onsite]')`));
   await ev(`document.querySelector('.card[data-key="blanko"] [data-onsite]').click()`);
   await until(`!document.getElementById('onsite').hidden && document.querySelector('#onsite-qr path')`);

@@ -1,4 +1,4 @@
-// Werkstatt, part 6: on-site mode. Serves one exported, tested package to the studio's iPad over
+// On-site mode. Serves one exported, tested package to the studio's iPad over
 // the studio Wi-Fi, under the neutral address https://inkform-app.local:8443/, and only while it
 // runs. Uses the existing scripts/serve.mjs (HTTPS, only GET/HEAD, static files) bound to the
 // Wi-Fi address alone, and macOS's dns-sd to announce the name. Nothing is received from the iPad;
@@ -15,9 +15,9 @@ import { certStatus, NEUTRAL_HOST, studioCertDir } from "./certs.mjs";
 import { listExports } from "./export.mjs";
 
 const run = promisify(execFile);
-export const PORT = 8443;
+const PORT = 8443;
 export const ADDRESS = `https://${NEUTRAL_HOST}:${PORT}/`;
-export const IDLE_MS = 30 * 60 * 1000;
+const IDLE_MS = 30 * 60 * 1000;
 export const CHECKLIST = [
   ["zertifikat", "Zertifikat installiert und unter Einstellungen → Allgemein → Info → Zertifikatsvertrauen aktiviert"],
   ["safari", "Adresse in Safari geöffnet"],
@@ -37,7 +37,7 @@ export function compareVersions(a, b) {
 }
 
 // The Wi-Fi interface and its current address (the interface of the default route, if it is Wi-Fi).
-export async function wifiAddress() {
+async function wifiAddress() {
   try {
     const ports = (await run("networksetup", ["-listallhardwareports"], { encoding: "utf8" })).stdout;
     const device = ports.match(/Hardware Port: Wi-Fi\s*\nDevice: (\S+)/)?.[1];
@@ -50,13 +50,13 @@ export async function wifiAddress() {
   }
 }
 
-export async function fileVault() {
+async function fileVault() {
   const out = (await run("fdesetup", ["status"], { encoding: "utf8" }).catch(() => ({ stdout: "" }))).stdout;
   return /FileVault is On/.test(out);
 }
 
 // Does anything in the network already answer to the name? (mDNS lookup, at most ~6 s)
-export async function nameTaken(lookup = dnsLookup, ms = 6000) {
+async function nameTaken(lookup = dnsLookup, ms = 6000) {
   const timeout = new Promise((resolve) => setTimeout(() => resolve(null), ms).unref());
   const found = await Promise.race([lookup(NEUTRAL_HOST, { family: 4 }).then((r) => r.address, () => null), timeout]);
   return found;
@@ -198,6 +198,22 @@ export function createOnsite({
     return { ok: list.every((c) => c.ok), checks: list, exp, net, cert, state };
   }
 
+  const view = (s) =>
+    s && {
+      studio: s.studio,
+      id: s.id,
+      exportName: s.exportName,
+      version: s.version,
+      address: s.address,
+      ip: s.ip,
+      startedAt: s.startedAt,
+      lastRequest: s.lastRequest,
+      endedAt: s.endedAt,
+      reason: s.reason,
+      requests: s.requests.slice(-50),
+      idleMinutes: Math.round(idleMs / 60000),
+    };
+
   let starting = null;
   function stopSession(session, reason) {
     if (!session || session.endedAt) return session;
@@ -294,22 +310,6 @@ export function createOnsite({
     idle();
     return { session: view(session) };
   }
-
-  const view = (s) =>
-    s && {
-      studio: s.studio,
-      id: s.id,
-      exportName: s.exportName,
-      version: s.version,
-      address: s.address,
-      ip: s.ip,
-      startedAt: s.startedAt,
-      lastRequest: s.lastRequest,
-      endedAt: s.endedAt,
-      reason: s.reason,
-      requests: s.requests.slice(-50),
-      idleMinutes: Math.round(idleMs / 60000),
-    };
 
   // Everything ends with the Werkstatt.
   const cleanup = () => stop("Werkstatt beendet");

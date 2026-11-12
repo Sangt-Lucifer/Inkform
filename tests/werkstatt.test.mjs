@@ -1,4 +1,4 @@
-// Werkstatt (Phase 1): studio list, protection, summaries and access control. Uses a throw-away
+// Werkstatt: studio list, protection, summaries and access control. Uses a throw-away
 // studio in a temporary folder and a temporary state folder; never ../Inkform-Studios.
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -10,6 +10,7 @@ import { root } from "../scripts/build.mjs";
 import { summarizeBrowser, summarizeBuild, summarizeTests, testFileArgs } from "../werkstatt/runs.mjs";
 import { listStudios } from "../werkstatt/status.mjs";
 import { startWerkstatt } from "../werkstatt/server.mjs";
+import { snapshot } from "./lib/werkstatt.mjs";
 
 const base = await mkdtemp(path.join(tmpdir(), "inkform-werkstatt-"));
 const studiosDir = path.join(base, "studios"),
@@ -21,14 +22,6 @@ await writeFile(path.join(studioDir, "profile.json"), JSON.stringify({ ...profil
 const env = { ...process.env, INKFORM_STUDIOS: studiosDir };
 test.after(() => rm(base, { recursive: true, force: true }));
 
-async function snapshot(dir) {
-  const out = [];
-  for (const name of (await readdir(dir, { recursive: true })).sort()) {
-    const s = await stat(path.join(dir, name));
-    out.push(`${name}:${s.size}:${s.mtimeMs}`);
-  }
-  return out.join("\n");
-}
 function http(port, { method = "GET", pathname = "/", headers = {}, body } = {}) {
   return new Promise((resolve, reject) => {
     const req = request({ host: "127.0.0.1", port, method, path: pathname, headers: { host: `127.0.0.1:${port}`, ...headers } }, (res) => {
@@ -171,7 +164,7 @@ test("test files are passed relative to the core (folder names with [brackets] a
   assert.ok(args.every((a) => /^tests\/[\w.-]+\.test\.mjs$/.test(a)), args.join());
 });
 
-// ---------- Review Phase 1 ----------
+// ---------- concurrent runs and read-only Git ----------
 import { execFileSync } from "node:child_process";
 import { utimes } from "node:fs/promises";
 
@@ -223,7 +216,7 @@ test("showing a protected studio with its own Git repo writes nothing, not even 
   }
 });
 
-// ---------- Re-review: failures are never shown as green ----------
+// ---------- failures are never shown as green ----------
 import { createRunner } from "../werkstatt/runs.mjs";
 const finished = async (runner) => {
   for (let i = 0; i < 300 && !runner.current()?.endedAt; i++) await new Promise((r) => setTimeout(r, 50));

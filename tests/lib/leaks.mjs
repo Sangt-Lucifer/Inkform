@@ -177,7 +177,7 @@ export function pdfText(buffer) {
 
 // ---------- PNG ----------
 
-export function pngText(buffer) {
+function pngText(buffer) {
   // Only text chunks are meaningful; pixel data is compressed noise.
   let text = "",
     offset = 8;

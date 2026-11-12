@@ -188,7 +188,7 @@ export function createIncomeStore(storage) {
     },
   };
 }
-export function normalizeArtist(value) {
+function normalizeArtist(value) {
   return value.normalize("NFC").trim().toLocaleLowerCase("de");
 }
 export function selectIncome(

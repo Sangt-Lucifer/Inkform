@@ -7,7 +7,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-export const PDF_FONT_FILES = { normal: "NotoSans-Regular.ttf", bold: "NotoSans-Bold.ttf" };
+const PDF_FONT_FILES = { normal: "NotoSans-Regular.ttf", bold: "NotoSans-Bold.ttf" };
 
 function tables(buffer) {
   const count = buffer.readUInt16BE(4),
@@ -20,7 +20,7 @@ function tables(buffer) {
 }
 
 // Code points with a real glyph (not .notdef), from a Windows Unicode cmap (format 12 or 4).
-export function fontCodepoints(buffer) {
+function fontCodepoints(buffer) {
   const cmap = tables(buffer).cmap;
   if (cmap === undefined) throw new Error("Schrift ohne cmap-Tabelle.");
   const subtables = [];
@@ -73,7 +73,7 @@ export function fontCodepoints(buffer) {
 }
 
 // Compact "start-end" hex ranges, e.g. "20-7e,a0-17f".
-export function encodeRanges(points) {
+function encodeRanges(points) {
   const sorted = [...points].sort((a, b) => a - b),
     out = [];
   for (let i = 0; i < sorted.length; i++) {

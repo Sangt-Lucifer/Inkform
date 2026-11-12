@@ -4,15 +4,20 @@ const $ = (id) => document.getElementById(id);
 let running = null,
   offset = 0;
 
-async function api(path, options = {}) {
+// The full answer, also for errors (some carry a list of reasons or checks).
+async function request(path, options = {}) {
   const response = await fetch(path, {
     ...options,
     headers: { "X-Werkstatt-Token": token, "Content-Type": "application/json", ...(options.headers ?? {}) },
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Fehler ${response.status}`);
+  return { ok: response.ok, status: response.status, data: await response.json().catch(() => ({})) };
+}
+async function api(path, options = {}) {
+  const { ok, status, data } = await request(path, options);
+  if (!ok) throw new Error(data.error || `Fehler ${status}`);
   return data;
 }
+const postJson = (body) => ({ method: "POST", body: JSON.stringify(body) });
 function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
@@ -186,9 +191,7 @@ async function follow(id) {
   }
 }
 
-$("studios").addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-kind]");
-  if (!button) return;
+async function startRun(button) {
   showError("");
   try {
     const { id } = await api("/api/run", {
@@ -200,7 +203,7 @@ $("studios").addEventListener("click", async (event) => {
   } catch (error) {
     showError(error.message);
   }
-});
+}
 $("refresh").addEventListener("click", () => load(true));
 
 // ---------- profile editor ----------
@@ -325,15 +328,13 @@ async function submitDraft(save) {
   buttons.forEach((b) => (b.disabled = true));
   $("editor-result").replaceChildren(el("p", { class: "badge busy" }, save ? "Speichert und prüft …" : "Prüft …"));
   try {
-    const response = await fetch(save ? "/api/studio/save" : "/api/studio/check", {
-      method: "POST",
-      headers: { "X-Werkstatt-Token": token, "Content-Type": "application/json" },
-      body: JSON.stringify({ studio: editing.key, draft: collect(), logo: editing.logo, version: editing.version }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok && !data.errors) throw new Error(data.error || `Fehler ${response.status}`);
+    const { ok, status, data } = await request(
+      save ? "/api/studio/save" : "/api/studio/check",
+      postJson({ studio: editing.key, draft: collect(), logo: editing.logo, version: editing.version }),
+    );
+    if (!ok && !data.errors) throw new Error(data.error || `Fehler ${status}`);
     showResult(data, save ? "Gespeichert und geprüft. Jetzt neu bauen und prüfen." : "Keine Fehler. Kann gespeichert werden.");
-    if (save && response.ok) {
+    if (save && ok) {
       editing.version = data.version;
       editing.dirty = false;
       if (editing.logo) {
@@ -428,14 +429,11 @@ $("commit-form").addEventListener("submit", async (event) => {
   }
 });
 
-$("studios").addEventListener("click", async (event) => {
-  const edit = event.target.closest("button[data-edit]");
-  if (edit) {
-    if (editing?.dirty && editing.key !== edit.dataset.edit && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
-    return openEditor(edit.dataset.edit);
-  }
-  const button = event.target.closest("button[data-commit]");
-  if (!button) return;
+function startEdit(button) {
+  if (editing?.dirty && editing.key !== button.dataset.edit && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+  openEditor(button.dataset.edit);
+}
+async function openCommit(button) {
   showError("");
   try {
     const { files, forbidden } = await api(`/api/studio/changes?key=${encodeURIComponent(button.dataset.commit)}`);
@@ -451,7 +449,7 @@ $("studios").addEventListener("click", async (event) => {
   } catch (error) {
     showError(error.message);
   }
-});
+}
 // ---------- export ----------
 let exporting = null;
 $("export-cancel").addEventListener("click", () => $("export-dialog").close());
@@ -460,15 +458,10 @@ $("export-form").addEventListener("submit", async (event) => {
   $("export-ok").disabled = true;
   $("export-result").replaceChildren(el("p", { class: "badge busy" }, "Exportiert und prüft …"));
   try {
-    const response = await fetch("/api/export", {
-      method: "POST",
-      headers: { "X-Werkstatt-Token": token, "Content-Type": "application/json" },
-      body: JSON.stringify({ studio: exporting, zip: $("export-zip").checked }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
+    const { ok, status, data } = await request("/api/export", postJson({ studio: exporting, zip: $("export-zip").checked }));
+    if (!ok) {
       $("export-result").replaceChildren(
-        el("div", { class: "error" }, data.error || `Fehler ${response.status}`, ...(data.reasons?.length ? [el("ul", { class: "result-list" }, ...data.reasons.map((r) => el("li", {}, r)))] : [])),
+        el("div", { class: "error" }, data.error || `Fehler ${status}`, ...(data.reasons?.length ? [el("ul", { class: "result-list" }, ...data.reasons.map((r) => el("li", {}, r)))] : [])),
       );
       return;
     }
@@ -483,9 +476,7 @@ $("export-form").addEventListener("submit", async (event) => {
     $("export-result").replaceChildren(el("p", { class: "error" }, error.message));
   }
 });
-$("studios").addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-export]");
-  if (!button) return;
+async function openExport(button) {
   showError("");
   try {
     const ready = await api(`/api/export?key=${encodeURIComponent(button.dataset.export)}`);
@@ -503,7 +494,7 @@ $("studios").addEventListener("click", async (event) => {
   } catch (error) {
     showError(error.message);
   }
-});
+}
 
 // ---------- on-site mode ----------
 let onsiteKey = null,
@@ -617,16 +608,11 @@ $("onsite-cert-show").addEventListener("click", () => onsiteAction($("onsite-cer
 $("onsite-webloc").addEventListener("click", () => onsiteAction($("onsite-webloc"), () => onsitePost("/api/vor-ort/finder", { what: "webloc" })));
 $("onsite-start").addEventListener("click", () =>
   onsiteAction($("onsite-start"), async () => {
-    const response = await fetch("/api/vor-ort/start", {
-      method: "POST",
-      headers: { "X-Werkstatt-Token": token, "Content-Type": "application/json" },
-      body: JSON.stringify({ studio: onsiteKey, export: $("onsite-export").value }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
+    const { ok, status, data } = await request("/api/vor-ort/start", postJson({ studio: onsiteKey, export: $("onsite-export").value }));
+    if (!ok) {
       if (data.checks)
         $("onsite-checks").replaceChildren(...data.checks.map((c) => el("li", {}, el("span", { class: `badge ${c.ok ? "ok" : "bad"}` }, c.ok ? "ok" : "fehlt"), " ", c.text)));
-      throw new Error(data.error || `Fehler ${response.status}`);
+      throw new Error(data.error || `Fehler ${status}`);
     }
   }),
 );
@@ -650,9 +636,16 @@ $("onsite-close").addEventListener("click", () => {
   onsiteKey = null;
   $("onsite").hidden = true;
 });
+// One click handler for all buttons on the studio cards.
 $("studios").addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-onsite]");
-  if (button) openOnsite(button.dataset.onsite, button.dataset.name);
+  const button = event.target.closest("button");
+  if (!button) return;
+  const d = button.dataset;
+  if (d.kind) startRun(button);
+  else if (d.edit) startEdit(button);
+  else if (d.commit) openCommit(button);
+  else if (d.export) openExport(button);
+  else if (d.onsite) openOnsite(d.onsite, d.name);
 });
 
 window.addEventListener("beforeunload", (event) => {

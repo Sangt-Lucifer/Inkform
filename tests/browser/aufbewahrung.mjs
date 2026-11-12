@@ -1,4 +1,4 @@
-// Phase 4: retention page, deletion list, anonymization, reminders and security checklist in the
+// Retention page, deletion list, anonymization, reminders and security checklist in the
 // real app (hosted build, offline after the first load). Synthetic test data only.
 import { HELPERS, ORIGIN, connect } from "./lib.mjs";
 
@@ -56,7 +56,7 @@ check("Vorschau: 2 Einträge zur Anonymisierung", await ev(`document.querySelect
 await ev(`document.querySelector('[data-retention-action="anonymize"]').click()`);
 check("Anonymisiert: Name und PDF-Dateiname entfernt, Beträge erhalten", await ev(`(()=>{const r=incomeRecords();const a=r.filter(x=>x.anonymizedAt);return a.length===2&&a.every(x=>x.customer==='anonymisiert'&&x.source===''&&x.totalCents===20000)&&r.find(x=>x.id==='r2').customer==='Alt r2'})()`));
 check("Zweiter Durchlauf findet nichts mehr", await ev(`document.querySelector('[data-retention-action="anonymize"]').disabled`));
-// Review: an entry whose PDF may still exist waits; anonymized entries stay anonymized.
+// An entry whose PDF may still exist waits; anonymized entries stay anonymized.
 await ev(`document.getElementById('retention-income-years').value='4';document.querySelector('[data-retention-action="save"]').click()`);
 check("Eintrag mit noch vorhandenem PDF wird nicht anonymisiert, sondern als wartend angezeigt", await ev(`document.querySelector('[data-retention-action="anonymize"]').disabled&&document.getElementById('retention-content').textContent.includes('1 weitere Einträge warten')&&incomeRecords().find(r=>r.id==='r2').customer==='Alt r2'`));
 await ev(`document.getElementById('retention-income-years').value='10';document.querySelector('[data-retention-action="save"]').click();openAdminAuthorized('income');(()=>{const el=document.getElementById('income-filter-year');el.value='';el.dispatchEvent(new Event('change',{bubbles:true}))})();document.querySelector('[data-income-edit="r1"]').click()`);

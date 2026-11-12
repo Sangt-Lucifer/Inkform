@@ -1404,24 +1404,29 @@ function shortcuts() {
 function privacyReminders() {
   const notes = [],
     buttons = [];
+  // Only the storage reads may fail (blocked or damaged storage); then there is simply no reminder.
+  let pending = null;
   try {
-    const pending = pendingStore?.read();
-    const age = pending ? daysBetween(pending.savedAt) : 0;
-    if (pending && age >= PENDING_REMINDER_DAYS && pendingConsent && !pendingConsent.confirmed) {
-      notes.push(
-        `Eine unterschriebene Einwilligung ist seit ${age} Tagen nicht als abgelegt bestätigt. Das PDF mit Gesundheitsangaben liegt so lange zusätzlich im Browser-Speicher. Bitte ablegen und bestätigen.`,
-      );
-      buttons.push('<button class="ad-button primary" type="button" data-admin-action="pending">Offene Einwilligung ablegen</button>');
-    }
+    pending = pendingStore?.read() ?? null;
   } catch (_) {}
+  const age = pending ? daysBetween(pending.savedAt) : 0;
+  if (pending && age >= PENDING_REMINDER_DAYS && pendingConsent && !pendingConsent.confirmed) {
+    notes.push(
+      `Eine unterschriebene Einwilligung ist seit ${age} Tagen nicht als abgelegt bestätigt. Das PDF mit Gesundheitsangaben liegt so lange zusätzlich im Browser-Speicher. Bitte ablegen und bestätigen.`,
+    );
+    buttons.push('<button class="ad-button primary" type="button" data-admin-action="pending">Offene Einwilligung ablegen</button>');
+  }
+  let pdfYears = null,
+    records = [];
   try {
-    const { pdfYears } = readRetention(localStorage);
-    const open = dueForPdfDeletion(incomeFeature.list(), pdfYears, localDate()).length;
-    if (open) {
-      notes.push(`${open} Einwilligungs-PDFs haben die eingetragene Aufbewahrungsfrist überschritten.`);
-      buttons.push('<button class="ad-button" type="button" data-admin-page="retention">Löschliste öffnen</button>');
-    }
+    ({ pdfYears } = readRetention(localStorage));
+    records = incomeFeature.list();
   } catch (_) {}
+  const open = dueForPdfDeletion(records, pdfYears, localDate()).length;
+  if (open) {
+    notes.push(`${open} Einwilligungs-PDFs haben die eingetragene Aufbewahrungsfrist überschritten.`);
+    buttons.push('<button class="ad-button" type="button" data-admin-page="retention">Löschliste öffnen</button>');
+  }
   return notes.length
     ? `<div class="ad-notice ad-reminder" role="status">${notes.map((n) => `<p>${escapeHtml(n)}</p>`).join("")}<div class="ad-actions-row">${buttons.join("")}</div></div>`
     : "";

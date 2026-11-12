@@ -1,8 +1,8 @@
-// Werkstatt, part 1: which studios exist, what state they are in, and which may be changed.
+// Which studios exist, what state they are in, and which may be changed.
 // Everything here only reads. The Werkstatt contains no studio data; studios are found next to
 // the core (../Inkform-Studios or INKFORM_STUDIOS), exactly like the tests find them.
 import { execFile } from "node:child_process";
-import { mkdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -26,14 +26,32 @@ export const defaultCertDir = () =>
 // 3 to 40 characters, a–z, 0–9 and hyphen, no hyphen at the start or end.
 export const STUDIO_ID = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 
-const readJson = (file, fallback) =>
-  readFile(file, "utf8").then((t) => JSON.parse(t), () => fallback);
+export const readJson = async (file) => JSON.parse(await readFile(file, "utf8"));
+export const inside = (p, q) => p === q || p.startsWith(q + path.sep);
+
+// Real location of a path that may not exist yet: the nearest existing folder with links resolved,
+// plus the missing rest.
+export async function realLocation(p) {
+  const rest = [];
+  for (let cur = path.resolve(p); ; cur = path.dirname(cur)) {
+    const real = await realpath(cur).catch(() => null);
+    if (real) return path.join(real, ...rest.reverse());
+    if (path.dirname(cur) === cur) return path.resolve(p);
+    rest.push(path.basename(cur));
+  }
+}
+
+// Git variables of the calling shell (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE …) could point git at
+// another repository; they are dropped for every call made here.
+export const cleanEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
+// No hooks and no fsmonitor program: nothing configured in a studio repo runs during these calls.
+export const SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
 
 // Studios are display-only unless their folder is listed in <state>/freigegeben.json
 // ({"studios": ["/abs/path"]}). Existing installations therefore stay untouched by default;
 // only the built-in sample ("Blanko") is always available for building and checking.
 export async function releasedStudios(stateDir) {
-  const data = await readJson(path.join(stateDir, "freigegeben.json"), { studios: [] });
+  const data = await readJson(path.join(stateDir, "freigegeben.json")).catch(() => ({ studios: [] }));
   return new Set((Array.isArray(data.studios) ? data.studios : []).map((p) => path.resolve(String(p))));
 }
 
@@ -42,12 +60,12 @@ export async function listStudios({ env = process.env, stateDir = defaultStateDi
   const released = await releasedStudios(stateDir);
   const entries = [];
   for (const dir of await listBuiltinProfiles()) {
-    const profile = await readJson(path.join(dir, "profile.json"), null);
+    const profile = await readJson(path.join(dir, "profile.json")).catch(() => null);
     if (!profile) continue;
     entries.push({ key: "blanko", id: profile.id, name: profile.name, dir, kind: "blanko", actionable: true });
   }
   for (const dir of await discoverStudioProfiles(env)) {
-    const profile = await readJson(path.join(dir, "profile.json"), null);
+    const profile = await readJson(path.join(dir, "profile.json")).catch(() => null);
     if (!profile || !/^[a-z0-9-]+$/.test(profile.id ?? "")) continue;
     const validId = STUDIO_ID.test(profile.id);
     const actionable = released.has(path.resolve(dir)) && validId;
@@ -73,9 +91,9 @@ export async function listStudios({ env = process.env, stateDir = defaultStateDi
 async function git(dir, args) {
   try {
     return (
-      await run("git", ["-c", "core.fsmonitor=false", "--no-optional-locks", "-C", dir, ...args], {
+      await run("git", [...SAFE_GIT, "--no-optional-locks", "-C", dir, ...args], {
         encoding: "utf8",
-        env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+        env: { ...cleanEnv(), GIT_OPTIONAL_LOCKS: "0" },
       })
     ).stdout.trim();
   } catch {
@@ -128,7 +146,7 @@ export async function buildState(dir) {
 // Read-only warnings: sample-studio texts left in a real studio, guide PDF older than its text.
 export async function warnings(entry, blankoMarkers) {
   const list = [];
-  const profile = await readJson(path.join(entry.dir, "profile.json"), {});
+  const profile = await readJson(path.join(entry.dir, "profile.json")).catch(() => ({}));
   if (entry.kind === "studio") {
     const guide = await readFile(path.join(entry.dir, "Dokumente", "Anleitung.md"), "utf8").catch(() => "");
     const hits = findMarkers(JSON.stringify(profile.text ?? {}) + "\n" + guide, blankoMarkers);
@@ -158,6 +176,6 @@ export async function certInfo(certDir = defaultCertDir()) {
 }
 
 export async function blankoMarkers() {
-  const profile = await readJson(path.join(root, "profiles", "beispiel", "profile.json"), { markers: [] });
+  const profile = await readJson(path.join(root, "profiles", "beispiel", "profile.json")).catch(() => ({ markers: [] }));
   return compileMarkers(profile.markers);
 }

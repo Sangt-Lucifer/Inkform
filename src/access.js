@@ -86,7 +86,7 @@ export function createPinLockout(storage, now = () => Date.now()) {
     },
   };
 }
-export async function deriveAdminPinHash(pin, salt) {
+async function deriveAdminPinHash(pin, salt) {
   if (!globalThis.crypto?.subtle)
     throw Error("Bitte einen aktuellen Browser mit lokaler WebCrypto-Unterstützung verwenden.");
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin), "PBKDF2", false, [

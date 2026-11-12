@@ -1,4 +1,4 @@
-// Werkstatt, part 2: runs build.mjs, the unit/leak tests and the browser checks as separate
+// Runs build.mjs, the unit/leak tests and the browser checks as separate
 // processes (the existing tools, unchanged) and turns their output into a readable summary.
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -7,7 +7,7 @@ import path from "node:path";
 import { root } from "../scripts/build.mjs";
 import { gitInfo } from "./status.mjs";
 
-export const KINDS = {
+const KINDS = {
   build: { label: "Bauen" },
   test: { label: "Unit- und Leak-Tests (alle Profile über Kreuz)" },
   browser: { label: "Browser-Prüfungen" },
@@ -132,7 +132,7 @@ export function createRunner({ stateDir, env = process.env, fs = { mkdir, writeF
       ok: null,
       steps: [],
       log: "",
-      // Which sources were checked: Phase 3 exports only if these match the current state.
+      // Which sources were checked: an export is only allowed if these match the current state.
       core: null,
       profile: null,
     };

@@ -1,19 +1,18 @@
-// Werkstatt (Phase 3): export. Everything happens in temporary folders (studios, exports, state);
+// Werkstatt: export. Everything happens in temporary folders (studios, exports, state);
 // never in ../Inkform-Studios or ../Inkform-Exporte. The core's own Git state is replaced by a fake
 // "clean" state, so the tests do not depend on uncommitted work in the core.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { execFileSync } from "node:child_process";
-import { request } from "node:http";
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { deflateSync } from "node:zlib";
 import { buildProfile, defaultOut, root } from "../scripts/build.mjs";
 import { exportStudio, listExports, nextVersion, publish, readiness } from "../werkstatt/export.mjs";
 import { commitStudio, createStudio, pendingChanges, readEditable, saveDraft } from "../werkstatt/profile.mjs";
 import { gitInfo, listStudios } from "../werkstatt/status.mjs";
 import { startWerkstatt } from "../werkstatt/server.mjs";
+import { callApi, fakeGit, neutralTexts, solidPng } from "./lib/werkstatt.mjs";
 
 const base = await mkdtemp(path.join(tmpdir(), "inkform-export-"));
 const studiosDir = path.join(base, "studios"),
@@ -25,51 +24,10 @@ test.after(async () => {
   await rm(base, { recursive: true, force: true });
 });
 const NOW = new Date("2026-11-20T10:00:00Z");
-const fakeGit = async (dir) => (path.resolve(dir) === path.resolve(root) ? { repo: true, commit: "c0ffee1", clean: true, changes: 0, remotes: [] } : gitInfo(dir));
 
-function png(size, shade) {
-  const crc = (buf) => {
-    let c = ~0;
-    for (const b of buf) {
-      c ^= b;
-      for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
-    }
-    return ~c >>> 0;
-  };
-  const chunk = (type, data) => {
-    const len = Buffer.alloc(4);
-    len.writeUInt32BE(data.length);
-    const td = Buffer.concat([Buffer.from(type), data]);
-    const c = Buffer.alloc(4);
-    c.writeUInt32BE(crc(td));
-    return Buffer.concat([len, td, c]);
-  };
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 2;
-  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(size * 3, shade)]);
-  return Buffer.concat([
-    Buffer.from("89504e470d0a1a0a", "hex"),
-    chunk("IHDR", ihdr),
-    chunk("IDAT", deflateSync(Buffer.concat(Array.from({ length: size }, () => row)))),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
-}
-const neutral = (text, name) =>
-  Object.fromEntries(
-    Object.entries(text).map(([k, v]) => [
-      k,
-      v
-        .replace(/musterstudio\.example/gi, "atelier-nord.example")
-        .replace(/12345 Musterstadt/g, "54321 Nordstadt")
-        .replace(/Max Mustermann/g, "Erika Nordmann")
-        .replace(/musterstudio/gi, name),
-    ]),
-  );
 
-// A ready studio: own texts, own logo and guide PDF, committed, built.
+// A ready studio: own texts, own logo and guide PDF, committed, built (made once before the tests).
+// The tests below run in order and build on each other: every export adds a version number.
 const dir = path.join(studiosDir, "atelier-nord");
 async function prepare() {
   await createStudio({ id: "atelier-nord", name: "Atelier Nord", env, stateDir });
@@ -77,8 +35,8 @@ async function prepare() {
   const saved = await saveDraft({
     dir,
     id: "atelier-nord",
-    draft: { ...draft, name: "Atelier Nord", description: "Test", markers: ["Atelier Nord"], text: neutral(draft.text, "Atelier Nord") },
-    logoBase64: png(512, 0x30).toString("base64"),
+    draft: { ...draft, name: "Atelier Nord", description: "Test", markers: ["Atelier Nord"], text: neutralTexts(draft.text, "Atelier Nord") },
+    logoBase64: solidPng(512, 512, 0x30).toString("base64"),
     expectedVersion: version,
     env,
   });
@@ -87,6 +45,7 @@ async function prepare() {
   await commitAll("Erstes Profil");
   await build();
 }
+test.before(prepare);
 async function commitAll(message) {
   const { files } = await pendingChanges(dir);
   const done = await commitStudio({ dir, message, files: files.map((f) => f.path) });
@@ -132,7 +91,6 @@ test("readiness: every missing precondition is named", async () => {
 });
 
 test("export: complete, checked, read-only package from exactly the build files", async () => {
-  await prepare();
   const e = await entry();
   const latest = await greenRuns();
   assert.deepEqual((await readiness(e, { latest, git: fakeGit })).reasons, []);
@@ -226,26 +184,14 @@ test("server: protected studios cannot be exported; Blanko readiness is shown", 
   const p = JSON.parse(await readFile(path.join(protectedDir, "profile.json"), "utf8"));
   await writeFile(path.join(protectedDir, "profile.json"), JSON.stringify({ ...p, id: "bestand", name: "Bestand" }));
   const { server, token } = await startWerkstatt({ port: 0, env, stateDir, certDir: path.join(base, "keine"), git: fakeGit });
-  const port = server.address().port;
-  const call = (method, pathname, body) =>
-    new Promise((resolve, reject) => {
-      const req = request({ host: "127.0.0.1", port, method, path: pathname, headers: { host: `127.0.0.1:${port}`, "x-werkstatt-token": token, "content-type": "application/json" } }, (res) => {
-        let t = "";
-        res.on("data", (c) => (t += c));
-        res.on("end", () => resolve({ status: res.statusCode, json: JSON.parse(t || "{}") }));
-      });
-      req.on("error", reject);
-      if (body) req.write(JSON.stringify(body));
-      req.end();
-    });
   try {
-    assert.equal((await call("GET", "/api/export?key=s-bestand")).status, 403);
-    assert.equal((await call("POST", "/api/export", { studio: "s-bestand" })).status, 403);
+    assert.equal((await callApi(server, token, "GET", "/api/export?key=s-bestand")).status, 403);
+    assert.equal((await callApi(server, token, "POST", "/api/export", { studio: "s-bestand" })).status, 403);
     assert.equal(await stat(path.join(exportsDir, "bestand")).then(() => true, () => false), false);
-    const blanko = await call("GET", "/api/export?key=blanko");
+    const blanko = await callApi(server, token, "GET", "/api/export?key=blanko");
     assert.equal(blanko.status, 200);
     assert.equal(blanko.json.ok, false, "no runs yet");
-    const overview = await call("GET", "/api/overview");
+    const overview = await callApi(server, token, "GET", "/api/overview");
     assert.match(overview.json.studios.find((s) => s.key === "s-atelier-nord").lastExport.name, /-p2-/);
   } finally {
     server.close();
@@ -253,7 +199,7 @@ test("server: protected studios cannot be exported; Blanko readiness is shown", 
   }
 });
 
-// ---------- Review of Phase 3 ----------
+// ---------- stray files, changes and folder swaps during an export ----------
 
 async function bump(text) {
   const current = JSON.parse(await readFile(path.join(dir, "profile.json"), "utf8"));
@@ -354,7 +300,7 @@ test("export: Blanko's unchanged state is not exported twice", async () => {
   assert.match((await exportStudio(blanko, { latest, env, git: fakeGit, now: NOW })).error, /bereits exportiert/);
 });
 
-// ---------- Review of Phase 3, second round ----------
+// ---------- package validity and exclusive publishing ----------
 
 const lastValid = async () => (await listExports("atelier-nord", env)).filter((e) => e.valid).at(-1);
 
@@ -448,7 +394,7 @@ test("a package folder moved away while its files are written is cleaned up wher
   }
 });
 
-// ---------- Review of Phase 3, third round ----------
+// ---------- publisher (publish.py): no links, only export folders ----------
 
 const job = async (parent, extra = {}) => ({
   root: await (await import("node:fs/promises")).realpath(path.dirname(parent)),
@@ -529,14 +475,8 @@ test("server: a relative state folder is fixed at start, the working directory d
     process.chdir(previous);
   }
   try {
-    const port = server.address().port;
     process.chdir(elsewhere);
-    const status = await new Promise((resolve, reject) =>
-      request({ host: "127.0.0.1", port, path: "/api/overview", headers: { host: `127.0.0.1:${port}`, "x-werkstatt-token": token } }, (res) => res.resume().on("end", () => resolve(res.statusCode)))
-        .on("error", reject)
-        .end(),
-    );
-    assert.equal(status, 200);
+    assert.equal((await callApi(server, token, "GET", "/api/overview")).status, 200);
     assert.equal(await stat(path.join(base, "rel-state")).then((s) => s.isDirectory(), () => false), true);
     assert.deepEqual(await readdir(elsewhere), [], "nothing created in the current working directory");
   } finally {
@@ -546,7 +486,7 @@ test("server: a relative state folder is fixed at start, the working directory d
   }
 });
 
-// ---------- Review of Phase 3, fourth round ----------
+// ---------- publisher: bytes and folders ----------
 
 test("publisher: staged bytes changed before the final rename are never published", async () => {
   const parent = path.join(base, "pub-bytes");

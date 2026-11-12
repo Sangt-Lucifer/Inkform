@@ -1,17 +1,18 @@
-// Werkstatt (Phase 2): new studio, profile editor and commit. Everything happens in a temporary
-// studios folder and a temporary state folder; never in ../Inkform-Studios.
+// Werkstatt: new studio, profile editor and commit. Everything happens in a temporary
+// studios folder and a temporary state folder; never in ../Inkform-Studios. The first test creates
+// the studio "atelier-nord" that the following tests edit and commit, so they run in order.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { execFileSync } from "node:child_process";
-import { request } from "node:http";
 import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { deflateSync } from "node:zlib";
 import { buildProfile, root } from "../scripts/build.mjs";
-import { checkDraft, commitStudio, createStudio, editable, forbiddenPath, pendingChanges, probeMarkers, readEditable, saveDraft, studioGuard } from "../werkstatt/profile.mjs";
+import { probeMarkers } from "../werkstatt/markers.mjs";
+import { checkDraft, commitStudio, createStudio, editable, forbiddenPath, pendingChanges, readEditable, saveDraft, studioGuard } from "../werkstatt/profile.mjs";
 import { listStudios } from "../werkstatt/status.mjs";
 import { startWerkstatt } from "../werkstatt/server.mjs";
+import { callApi, neutralTexts, snapshot, solidPng } from "./lib/werkstatt.mjs";
 
 const base = await mkdtemp(path.join(tmpdir(), "inkform-werkstatt-p2-"));
 const studiosDir = path.join(base, "studios"),
@@ -23,80 +24,15 @@ test.after(() => rm(base, { recursive: true, force: true }));
 const protectedDir = path.join(studiosDir, "bestand");
 await cp(path.join(root, "profiles", "beispiel"), protectedDir, { recursive: true });
 const sample = JSON.parse(await readFile(path.join(root, "profiles", "beispiel", "profile.json"), "utf8"));
-const neutral = (text, name) =>
-  Object.fromEntries(
-    Object.entries(text).map(([k, v]) => [
-      k,
-      v
-        .replace(/musterstudio\.example/gi, `${name.toLowerCase().replace(/\s+/g, "-")}.example`)
-        .replace(/12345 Musterstadt/g, "54321 Nordstadt")
-        .replace(/Max Mustermann/g, "Erika Nordmann")
-        .replace(/musterstudio/gi, name),
-    ]),
-  );
 await writeFile(
   path.join(protectedDir, "profile.json"),
-  JSON.stringify({ ...sample, id: "bestand", name: "Bestand Süd", markers: ["Bestand Süd"], text: neutral(sample.text, "Bestand Süd") }, null, 2),
+  JSON.stringify({ ...sample, id: "bestand", name: "Bestand Süd", markers: ["Bestand Süd"], text: neutralTexts(sample.text, "Bestand Süd") }, null, 2),
 );
 execFileSync("git", ["init", "-q", protectedDir]);
 
-async function snapshot(dir) {
-  const out = [];
-  for (const name of (await readdir(dir, { recursive: true })).sort()) {
-    const s = await stat(path.join(dir, name));
-    out.push(`${name}:${s.size}:${s.mtimeMs}`);
-  }
-  return out.join("\n");
-}
-function png(width, height) {
-  const crc = (buf) => {
-    let c = ~0;
-    for (const b of buf) {
-      c ^= b;
-      for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
-    }
-    return ~c >>> 0;
-  };
-  const chunk = (type, data) => {
-    const len = Buffer.alloc(4);
-    len.writeUInt32BE(data.length);
-    const td = Buffer.concat([Buffer.from(type), data]);
-    const c = Buffer.alloc(4);
-    c.writeUInt32BE(crc(td));
-    return Buffer.concat([len, td, c]);
-  };
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 2;
-  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x40)]);
-  const raw = Buffer.concat(Array.from({ length: height }, () => row));
-  return Buffer.concat([
-    Buffer.from("89504e470d0a1a0a", "hex"),
-    chunk("IHDR", ihdr),
-    chunk("IDAT", deflateSync(raw)),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
-}
-function http(port, token, { method = "GET", pathname, body }) {
-  return new Promise((resolve, reject) => {
-    const req = request(
-      { host: "127.0.0.1", port, method, path: pathname, headers: { host: `127.0.0.1:${port}`, "x-werkstatt-token": token, "content-type": "application/json" } },
-      (res) => {
-        let text = "";
-        res.on("data", (c) => (text += c));
-        res.on("end", () => resolve({ status: res.statusCode, json: JSON.parse(text || "{}") }));
-      },
-    );
-    req.on("error", reject);
-    if (body) req.write(JSON.stringify(body));
-    req.end();
-  });
-}
 const cleanDraft = async (dir, name) => {
   const { draft } = await readEditable(dir);
-  return { ...draft, name, description: "Testprofil", markers: [name], text: neutral(draft.text, name) };
+  return { ...draft, name, description: "Testprofil", markers: [name], text: neutralTexts(draft.text, name) };
 };
 
 test("new studio: copy of the sample with its own id, .gitignore, own git repo without commit or remote; released", async () => {
@@ -177,7 +113,7 @@ test("editor: save writes the profile files, refuses a stale version, and the st
   const draft = await cleanDraft(dir, "Atelier Nord");
   draft.manifest.theme_color = "#224466";
   draft.guideMd = "# Anleitung Atelier Nord\n";
-  const logo = png(600, 600).toString("base64");
+  const logo = solidPng(600, 600).toString("base64");
   const saved = await saveDraft({ dir, id: "atelier-nord", draft, logoBase64: logo, expectedVersion: version, env });
   assert.deepEqual(saved.errors, []);
   assert.notEqual(saved.version, version);
@@ -208,8 +144,8 @@ test("editor: only square PNG logos between 512 and 4096 px", async () => {
   const draft = await cleanDraft(dir, "Atelier Nord");
   const errorsOf = async (bytes) => (await checkDraft({ dir, id: "atelier-nord", draft, logoBase64: bytes.toString("base64"), env })).errors.join("\n");
   assert.match(await errorsOf(Buffer.from("GIF89a nicht png")), /nur PNG/);
-  assert.match(await errorsOf(png(600, 512)), /quadratisch/);
-  assert.match(await errorsOf(png(256, 256)), /512 bis 4096/);
+  assert.match(await errorsOf(solidPng(600, 512)), /quadratisch/);
+  assert.match(await errorsOf(solidPng(256, 256)), /512 bis 4096/);
 });
 
 test("commit: shows the changes, commits exactly the confirmed list as Sven, refuses forbidden files", async () => {
@@ -233,21 +169,20 @@ test("commit: shows the changes, commits exactly the confirmed list as Sven, ref
 
 test("server: editor routes refuse the protected studio and leave its folder (and .git) unchanged", async () => {
   const { server, token } = await startWerkstatt({ port: 0, env, stateDir, certDir: path.join(base, "keine") });
-  const port = server.address().port;
   const before = await snapshot(protectedDir);
   try {
-    assert.equal((await http(port, token, { pathname: "/api/studio?key=s-bestand" })).status, 403);
-    assert.equal((await http(port, token, { pathname: "/api/studio?key=blanko" })).status, 403);
+    assert.equal((await callApi(server, token, "GET", "/api/studio?key=s-bestand")).status, 403);
+    assert.equal((await callApi(server, token, "GET", "/api/studio?key=blanko")).status, 403);
     const draft = await cleanDraft(protectedDir, "Bestand Süd");
     for (const p of ["/api/studio/check", "/api/studio/save"])
-      assert.equal((await http(port, token, { method: "POST", pathname: p, body: { studio: "s-bestand", draft, version: "x" } })).status, 403, p);
-    assert.equal((await http(port, token, { pathname: "/api/studio/changes?key=s-bestand" })).status, 403);
-    assert.equal((await http(port, token, { method: "POST", pathname: "/api/studio/commit", body: { studio: "s-bestand", message: "x", files: [] } })).status, 403);
-    assert.equal((await http(port, token, { method: "POST", pathname: "/api/studio/new", body: { id: "bestand", name: "X" } })).status, 400);
-    const ok = await http(port, token, { pathname: "/api/studio?key=s-atelier-nord" });
+      assert.equal((await callApi(server, token, "POST", p, { studio: "s-bestand", draft, version: "x" })).status, 403, p);
+    assert.equal((await callApi(server, token, "GET", "/api/studio/changes?key=s-bestand")).status, 403);
+    assert.equal((await callApi(server, token, "POST", "/api/studio/commit", { studio: "s-bestand", message: "x", files: [] })).status, 403);
+    assert.equal((await callApi(server, token, "POST", "/api/studio/new", { id: "bestand", name: "X" })).status, 400);
+    const ok = await callApi(server, token, "GET", "/api/studio?key=s-atelier-nord");
     assert.equal(ok.status, 200);
     assert.ok(ok.json.textKeys.includes("studioName"));
-    const check = await http(port, token, { method: "POST", pathname: "/api/studio/check", body: { studio: "s-atelier-nord", draft: ok.json.draft } });
+    const check = await callApi(server, token, "POST", "/api/studio/check", { studio: "s-atelier-nord", draft: ok.json.draft });
     assert.deepEqual(check.json.errors, []);
   } finally {
     server.close();
@@ -255,7 +190,7 @@ test("server: editor routes refuse the protected studio and leave its folder (an
   assert.equal(await snapshot(protectedDir), before);
 });
 
-// ---------- Review of Phase 2 ----------
+// ---------- writes never leave the released studio ----------
 
 test("logo path in profile.json can never lead a write out of the studio", async () => {
   await createStudio({ id: "logo-weg", name: "Logo Weg", env, stateDir });
@@ -263,7 +198,7 @@ test("logo path in profile.json can never lead a write out of the studio", async
   const profile = JSON.parse(await readFile(path.join(dir, "profile.json"), "utf8"));
   await writeFile(path.join(dir, "profile.json"), JSON.stringify({ ...profile, logo: "../../ausbruch.png" }));
   const draft = await cleanDraft(dir, "Logo Weg");
-  const result = await checkDraft({ dir, id: "logo-weg", draft, logoBase64: png(512, 512).toString("base64"), env });
+  const result = await checkDraft({ dir, id: "logo-weg", draft, logoBase64: solidPng(512, 512).toString("base64"), env });
   assert.match(result.errors.join("\n"), /"logo" muss "logo.png" sein/);
   const escaped = await readdir(tmpdir()).then((names) => names.includes("ausbruch.png"));
   assert.equal(escaped, false);
@@ -308,7 +243,7 @@ test("a failing write restores the files already written (all or nothing)", asyn
   draft.guideMd = "# neu\n";
   await chmod(path.join(dir, "icons"), 0o555);
   try {
-    const result = await saveDraft({ dir, id: "halb-fertig", draft, logoBase64: png(512, 512).toString("base64"), expectedVersion: version, env });
+    const result = await saveDraft({ dir, id: "halb-fertig", draft, logoBase64: solidPng(512, 512).toString("base64"), expectedVersion: version, env });
     assert.match(result.errors.join("\n"), /Speichern fehlgeschlagen, nichts geändert/);
   } finally {
     await chmod(path.join(dir, "icons"), 0o755);
@@ -361,7 +296,7 @@ test("new studio: a folder that appears is never used; commit leaves the real in
   await rm(dir, { recursive: true, force: true });
 });
 
-// ---------- Re-review of the fixes ----------
+// ---------- links further up, foreign .git, index ----------
 
 test("a link further up cannot turn a released path into a protected studio", async () => {
   const a = path.join(base, "wurzel-a"),
@@ -415,7 +350,7 @@ test("commit: a real index that cannot be updated is reported, not hidden", asyn
   await writeFile(path.join(dir, ".git", "index.lock"), "");
   const done = await commitStudio({ dir, message: "Erstes Profil", files: files.map((f) => f.path) });
   assert.ok(done.commit, done.error);
-  assert.match(done.warning, /Index wurde nicht nachgezogen/);
+  assert.match(done.warning, /Git-Index ist nicht aktuell/);
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -444,7 +379,7 @@ test("save: an unreadable profile file is never overwritten; icon changes count 
   }
   assert.ok((await readFile(path.join(dir, "Dokumente", "Anleitung.md"), "utf8")).length > 0, "guide still there");
   ({ version } = await readEditable(dir));
-  await writeFile(path.join(dir, "icons", "icon-192.png"), png(192, 192));
+  await writeFile(path.join(dir, "icons", "icon-192.png"), solidPng(192, 192));
   assert.equal((await saveDraft({ dir, id: "lesbar", draft, expectedVersion: version, env })).conflict, true);
   await rm(dir, { recursive: true, force: true });
 });
@@ -463,7 +398,7 @@ test("check: a failing probe build leaves no temporary folder; .DS_Store is forb
   await rm(dir, { recursive: true, force: true });
 });
 
-// ---------- Review, third round ----------
+// ---------- .git internals, hooks, studios folder, slow markers ----------
 
 test("commit: links inside .git are refused; repo hooks never run", async () => {
   await createStudio({ id: "git-innen", name: "Git Innen", env, stateDir });

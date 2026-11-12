@@ -14,7 +14,7 @@
 // contains any studio's data. Their builds default to <profil>/build/ and may never be
 // written into this repository.
 import { createHash } from "node:crypto";
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { loadPdfFonts } from "./fonts.mjs";
@@ -79,7 +79,7 @@ export function defaultOut(dir) {
   return isBuiltin(dir) ? path.join(root, "build", path.basename(dir)) : path.join(dir, "build");
 }
 
-export async function loadProfile(ref) {
+async function loadProfile(ref) {
   const dir = resolveProfileDir(ref);
   const id = path.basename(dir);
   const profile = JSON.parse(await readFile(path.join(dir, "profile.json"), "utf8"));
@@ -96,7 +96,7 @@ export async function loadProfile(ref) {
   return { ...profile, dir };
 }
 
-export function fillTokens(source, text, name, used = new Set()) {
+function fillTokens(source, text, name, used = new Set()) {
   return source.replace(TOKEN, (_, key) => {
     if (!Object.hasOwn(text, key)) throw new Error(`Platzhalter %%${key}%% in ${name} fehlt im Profil.`);
     used.add(key);
@@ -215,7 +215,7 @@ export async function buildProfile(ref) {
   return { profile, files, bundledJs };
 }
 
-export function assertOutAllowed(profileDir, out) {
+function assertOutAllowed(profileDir, out) {
   if (!isBuiltin(profileDir) && inside(out, root))
     throw new Error(
       "Ein Studio-Build darf nicht im Kern-Repo landen. Bitte --out außerhalb wählen oder weglassen (Standard: <profil>/build).",

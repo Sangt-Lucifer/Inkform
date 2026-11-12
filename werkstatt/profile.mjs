@@ -1,4 +1,4 @@
-// Werkstatt, part 3: create a new studio and edit its profile. Only studios released in
+// Create a new studio and edit its profile. Only studios released in
 // <state>/freigegeben.json can be edited; Blanko (the sample in the core) and every other studio
 // are never written to. Every save is checked with the same rules as build.mjs plus the
 // cross-studio marker rules, by building the draft in a temporary folder first. Nothing is saved
@@ -6,20 +6,19 @@
 import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { copyFile, cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
-import { Worker } from "node:worker_threads";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { UNSAFE, buildProfile, discoverStudioProfiles, root } from "../scripts/build.mjs";
 import { compileMarkers, findMarkers, scanText } from "../tests/lib/leaks.mjs";
-import { STUDIO_ID, releasedStudios } from "./status.mjs";
+import { matchInWorker, probeMarkers, regexShapeError } from "./markers.mjs";
+import { SAFE_GIT, STUDIO_ID, cleanEnv, inside, readJson, realLocation, releasedStudios } from "./status.mjs";
 
 const run = promisify(execFile);
 const SAMPLE = path.join(root, "profiles", "beispiel");
 const AUTHOR = { name: "Sven", email: "sven@inkform.invalid" };
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const MAX_LOGO = 2 * 1024 * 1024;
-export const ID_RULE = STUDIO_ID;
 const RESERVED = new Set(["beispiel", "blanko", "build", "dist", "profiles"]);
 
 // Files a studio profile consists of; the editor only ever writes these.
@@ -33,10 +32,9 @@ const FILES = {
 // and the behaviour of the installed app on the iPad depend on them.
 const MANIFEST_FIELDS = ["name", "short_name", "description", "theme_color", "background_color"];
 
-const readJson = async (file) => JSON.parse(await readFile(file, "utf8"));
 const sampleProfile = () => readJson(path.join(SAMPLE, FILES.profile));
 
-export function studiosRoot(env = process.env) {
+function studiosRoot(env = process.env) {
   const first = (env.INKFORM_STUDIOS ?? "").split(path.delimiter).find(Boolean);
   return first ? path.resolve(first) : path.resolve(root, "..", "Inkform-Studios");
 }
@@ -91,7 +89,7 @@ function pngSize(bytes) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-export function logoErrors(bytes) {
+function logoErrors(bytes) {
   if (bytes.length > MAX_LOGO) return ["Logo: höchstens 2 MB."];
   const size = pngSize(bytes);
   if (!size) return ["Logo: nur PNG-Dateien."];
@@ -130,7 +128,7 @@ function markerErrors(markers) {
 
 // Rules without building: the same character rules as build.mjs, the same text fields as the
 // sample profile, sensible manifest values.
-export function staticErrors(draft, textKeys) {
+function staticErrors(draft, textKeys) {
   const errors = [];
   const str = (value, label, { max = 200, min = 0, unsafe = false } = {}) => {
     if (typeof value !== "string") return errors.push(`${label}: muss Text sein.`);
@@ -191,11 +189,11 @@ async function otherStudios(dir, env) {
     if (path.resolve(d) === path.resolve(dir)) continue;
     const p = await readJson(path.join(d, FILES.profile)).catch(() => null);
     if (!p || !Array.isArray(p.markers)) continue;
-    let markers = [];
-    try {
-      markers = compileMarkers(p.markers);
-    } catch {}
-    others.push({ id: p.id, markers, raw: p.markers.filter((m) => typeof m === "string" || (m && typeof m.regex === "string")), text: JSON.stringify(p.text ?? {}) + "\n" + (p.name ?? "") });
+    others.push({
+      id: p.id,
+      markers: p.markers.filter((m) => typeof m === "string" || (m && typeof m.regex === "string")),
+      text: JSON.stringify(p.text ?? {}) + "\n" + (p.name ?? ""),
+    });
   }
   return others;
 }
@@ -239,7 +237,7 @@ function manifestJson(current, draft) {
 }
 
 // Logo -> icons with macOS sips, in a temporary folder.
-export async function prepareLogo(base64) {
+async function prepareLogo(base64) {
   if (typeof base64 !== "string" || base64.length > MAX_LOGO * 1.4) return { errors: ["Logo: höchstens 2 MB."] };
   const logo = Buffer.from(base64, "base64");
   const errors = logoErrors(logo);
@@ -273,7 +271,7 @@ const WRITE_TARGETS = [
   path.join("icons", "icon-192.png"),
   path.join("icons", "icon-512.png"),
 ];
-export async function treeErrors(dir) {
+async function treeErrors(dir) {
   const kind = (p) => lstat(p).then((s) => (s.isSymbolicLink() ? "link" : s.isDirectory() ? "dir" : s.isFile() ? "file" : "other"), () => "none");
   if ((await kind(dir)) !== "dir") return ["Der Studio-Ordner ist kein echter Ordner (Verknüpfung?). Es wird nichts gespeichert."];
   const errors = [];
@@ -286,74 +284,6 @@ export async function treeErrors(dir) {
     if (k !== "file" && k !== "none") errors.push(`${rel} ist keine normale Datei (Verknüpfung oder Ordner). Es wird nichts gespeichert.`);
   }
   return errors;
-}
-
-// Regex markers run in the leak test over whole builds. Constructs that can backtrack for ages are
-// refused outright; every marker is then probed in a worker that is stopped after a few seconds,
-// so a slow expression is reported instead of blocking the Werkstatt.
-function regexShapeError(source) {
-  if (/\\[1-9]|\\k</.test(source)) return "keine Rückverweise (\\1, \\k<…>).";
-  if (/\)[*+?{]/.test(source)) return "keine wiederholten Gruppen wie (…)+ oder (…)*.";
-  if ((source.match(/(?<!\\)[*+]|\{\d+,\}/g) ?? []).length > 2) return "höchstens zwei offene Wiederholungen (*, +, {n,}).";
-  if ([...source.matchAll(/\{(\d+)(?:,(\d*))?\}/g)].some((m) => Number(m[1]) > 50 || Number(m[2] || 0) > 50))
-    return "Wiederholungen höchstens {0,50}.";
-  if ((source.match(/(?<!\\)[*+?]|\{\d+(?:,\d*)?\}/g) ?? []).length > 4) return "höchstens vier Wiederholungen insgesamt.";
-  return null;
-}
-const SLOW_INPUTS = ["a".repeat(30_000) + "!", " ".repeat(30_000) + "!", "aA0-. ".repeat(6_000) + "\u0000", "äöü".repeat(10_000) + "!"];
-const MATCH_WORKER = `
-const { parentPort, workerData } = require("node:worker_threads");
-const { markers, slow, texts } = workerData;
-const low = (t) => t.normalize("NFC").toLocaleLowerCase("de");
-markers.forEach((m, index) => {
-  let test;
-  try {
-    test = m.regex === undefined
-      ? ((needle) => (t) => t.includes(needle))(low(m.text))
-      : ((rx) => (t) => rx.test(t))(new RegExp(m.regex, m.flags));
-  } catch {
-    return parentPort.postMessage({ index, hits: [] });
-  }
-  for (const t of slow) test(low(t));
-  parentPort.postMessage({ index, hits: texts.flatMap((t, i) => (test(t) ? [i] : [])) });
-});
-parentPort.postMessage({ done: true });`;
-
-// Runs markers (own or other studios') over texts in a worker that is stopped after ms. Returns,
-// per marker by position, the indexes of the texts it is found in, or null when it had to be
-// stopped. Texts are normalised and lower-cased exactly like findMarkers does. Nothing user- or
-// studio-defined ever runs a regex on the main thread.
-export function matchInWorker(markers, texts, ms = 4000) {
-  const low = (t) => String(t).normalize("NFC").toLocaleLowerCase("de");
-  const list = markers.map((m) => (typeof m === "string" ? { text: m } : { regex: String(m?.regex ?? ""), flags: m?.flags ?? "i" }));
-  const results = new Array(list.length).fill(null);
-  if (!list.length) return Promise.resolve(results);
-  return new Promise((resolve) => {
-    const worker = new Worker(MATCH_WORKER, { eval: true, workerData: { markers: list, slow: SLOW_INPUTS, texts: texts.map(low) } });
-    const finish = () => {
-      clearTimeout(timer);
-      worker.terminate();
-      resolve(results);
-    };
-    const timer = setTimeout(finish, ms);
-    worker.on("message", (m) => (m.done ? finish() : (results[m.index] = m.hits)));
-    worker.on("error", finish);
-  });
-}
-
-export async function probeMarkers(markers, { build = [], sample = "", others = [] } = {}, ms = 4000) {
-  const texts = [...build.map(([, t]) => t), sample, ...others.map(([, t]) => t)];
-  const hits = await matchInWorker(markers, texts, ms);
-  const b = build.length;
-  return hits.map((h) =>
-    h === null
-      ? null
-      : {
-          inBuild: h.filter((i) => i < b).map((i) => build[i][0]),
-          inSample: h.includes(b),
-          inOthers: h.filter((i) => i > b).map((i) => others[i - b - 1][0]),
-        },
-  );
 }
 
 // Full check of a draft. Returns errors (empty = may be saved) and, per marker, where it is found.
@@ -377,13 +307,13 @@ export async function checkDraft({ dir, id, draft, logoBase64, env }) {
   // Sample-studio texts and other studios' markers must not appear anywhere in the draft.
   const sampleMarkers = compileMarkers(sample.markers);
   const others = await otherStudios(dir, env);
-  for (const [label, value] of fields(draft)) {
+  const fieldList = fields(draft);
+  for (const [label, value] of fieldList) {
     const hits = findMarkers(value, sampleMarkers);
     if (hits.length) errors.push(`${label}: enthält noch Text des Musterstudios (${hits.join(", ")}).`);
   }
   // Other studios' markers may be regexes: they run in the timed worker too.
-  const fieldList = fields(draft);
-  const foreign = others.flatMap((o) => o.raw.map((m) => ({ owner: o.id, marker: m })));
+  const foreign = others.flatMap((o) => o.markers.map((m) => ({ owner: o.id, marker: m })));
   const foreignHits = await matchInWorker(foreign.map((f) => f.marker), fieldList.map(([, v]) => v));
   foreignHits.forEach((h, i) => {
     const { owner, marker } = foreign[i];
@@ -493,18 +423,6 @@ export async function saveDraft({ dir, id, draft, logoBase64, expectedVersion, e
 
 // ---------- new studio ----------
 
-// Real location of a path that may not exist yet: the nearest existing folder with links resolved,
-// plus the missing rest.
-export async function realLocation(p) {
-  const rest = [];
-  for (let cur = path.resolve(p); ; cur = path.dirname(cur)) {
-    const real = await realpath(cur).catch(() => null);
-    if (real) return path.join(real, ...rest.reverse());
-    if (path.dirname(cur) === cur) return path.resolve(p);
-    rest.push(path.basename(cur));
-  }
-}
-
 const GITIGNORE = `# Erzeugte App und Prüfausgaben dieses Studios
 /build/
 /test-results/
@@ -555,22 +473,10 @@ Einwilligungen/
 secrets/
 `;
 
-// Git variables of the calling shell (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE …) could point git at
-// another repository; they are dropped for every call made here.
-const cleanEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
-const gitEnv = () => ({
-  ...cleanEnv(),
-  GIT_AUTHOR_NAME: AUTHOR.name,
-  GIT_AUTHOR_EMAIL: AUTHOR.email,
-  GIT_COMMITTER_NAME: AUTHOR.name,
-  GIT_COMMITTER_EMAIL: AUTHOR.email,
-});
-// No hooks and no fsmonitor program: nothing configured in a studio repo runs during these calls.
-const SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
 const git = (dir, args, extraEnv = {}) =>
   run("git", [...SAFE_GIT, "-C", dir, "-c", `user.name=${AUTHOR.name}`, "-c", `user.email=${AUTHOR.email}`, "-c", "commit.gpgsign=false", ...args], {
     encoding: "utf8",
-    env: { ...gitEnv(), ...extraEnv },
+    env: { ...cleanEnv(), ...extraEnv },
   });
 
 async function addRelease(stateDir, dir) {
@@ -585,7 +491,7 @@ async function addRelease(stateDir, dir) {
 // Copies the sample into <studios>/<id>/, sets the id, writes .gitignore and runs git init (no
 // remote, no commit). Never touches an existing folder.
 export async function createStudio({ id, name, env, stateDir }) {
-  if (typeof id !== "string" || !ID_RULE.test(id) || RESERVED.has(id))
+  if (typeof id !== "string" || !STUDIO_ID.test(id) || RESERVED.has(id))
     return { error: "Kennung: 3 bis 40 Zeichen, nur a–z, 0–9 und Bindestrich, nicht am Anfang oder Ende." };
   if (typeof name !== "string" || !name.trim() || name.length > 80 || CONTROL.test(name) || UNSAFE.test(name))
     return { error: "Name: 1 bis 80 Zeichen, ohne \" ` \\ < > ${." };
@@ -598,10 +504,8 @@ export async function createStudio({ id, name, env, stateDir }) {
   }
   // The studios folder may be a link, but never into the core or into an existing studio. Checked
   // on the real location of the nearest existing folder, before anything is created.
-  let realParent = await realLocation(parent);
   const core = await realpath(root);
-  const inside = (p, q) => p === q || p.startsWith(q + path.sep);
-  const misplaced = async () => {
+  const misplaced = async (realParent) => {
     if (inside(realParent, core)) return "Der Studios-Ordner liegt in Wirklichkeit im Kern. Dort wird kein Studio angelegt.";
     for (const d of await discoverStudioProfiles(env)) {
       const real = await realpath(d).catch(() => null);
@@ -609,14 +513,12 @@ export async function createStudio({ id, name, env, stateDir }) {
     }
     return null;
   };
-  if (await misplaced()) return { error: await misplaced() };
+  const before = await misplaced(await realLocation(parent));
+  if (before) return { error: before };
   await mkdir(parent, { recursive: true });
-  realParent = await realpath(parent);
-  if (inside(realParent, core)) return { error: "Der Studios-Ordner liegt in Wirklichkeit im Kern. Dort wird kein Studio angelegt." };
-  for (const d of await discoverStudioProfiles(env)) {
-    const real = await realpath(d).catch(() => null);
-    if (real && inside(realParent, real)) return { error: "Der Studios-Ordner liegt in Wirklichkeit in einem bestehenden Studio. Es wird nichts angelegt." };
-  }
+  const realParent = await realpath(parent);
+  const after = await misplaced(realParent);
+  if (after) return { error: after };
   // Created exclusively: mkdir fails if the folder appeared in the meantime, so an existing folder
   // is never used or replaced. profile.json comes last, so a half-made folder is no studio; on
   // failure only the folder created here is removed.
@@ -684,7 +586,7 @@ async function ownRepo(dir) {
     if (dotGit.isSymbolicLink() || !dotGit.isDirectory()) return false;
     const { stdout } = await run(
       "git",
-      ["--no-optional-locks", "-C", dir, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir"],
+      [...SAFE_GIT, "--no-optional-locks", "-C", dir, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir"],
       { encoding: "utf8", env: cleanEnv() },
     );
     const [top, gitDir, common] = stdout.trim().split("\n");
@@ -750,7 +652,7 @@ export async function commitStudio({ dir, message, files, env, stateDir }) {
     const reset = await git(dir, ["reset", "-q", "--", ...confirmed], { GIT_LITERAL_PATHSPECS: "1" }).then(() => null, (e) => e);
     const { stdout } = await run("git", [...SAFE_GIT, "--no-optional-locks", "-C", dir, "log", "-1", "--format=%h"], { encoding: "utf8", env: cleanEnv() });
     return reset
-      ? { commit: stdout.trim(), warning: `Committet, aber der Git-Index wurde nicht nachgezogen (${reset.message.split("\n")[0]}). git status zeigt die Dateien deshalb noch als geändert; „git reset“ im Studio-Ordner behebt das.` }
+      ? { commit: stdout.trim(), warning: "Committet. Der Git-Index ist nicht aktuell; „git reset“ im Studio-Ordner behebt das." }
       : { commit: stdout.trim() };
   } catch (error) {
     return { error: `Commit fehlgeschlagen: ${error.message}` };
@@ -783,7 +685,7 @@ export async function studioGuard(dir, { env = process.env, stateDir }) {
   const realRoot = await realpath(path.dirname(path.resolve(dir))).catch(() => null);
   if (real !== path.join(realRoot ?? "", path.basename(dir))) return "Der Studio-Ordner ist eine Verknüpfung. Es wird nichts verändert.";
   const core = await realpath(root);
-  if (real === core || real.startsWith(core + path.sep)) return "Ordner im Kern werden nicht verändert.";
+  if (inside(real, core)) return "Ordner im Kern werden nicht verändert.";
   for (const other of await discoverStudioProfiles(env)) {
     if (released.has(path.resolve(other))) continue;
     if ((await realpath(other).catch(() => null)) === real) return "Dieser Ordner ist in Wirklichkeit ein geschütztes Studio. Es wird nichts verändert.";

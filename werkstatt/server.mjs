@@ -145,9 +145,10 @@ export async function startWerkstatt({
   // ---------- on-site mode (only Blanko and released studios) ----------
   async function onsiteEntry(res, key) {
     const entry = (await studios()).find((e) => e.key === key);
-    if (!entry) return send(res, 404, { error: "Studio nicht gefunden." }), null;
-    if (!entry.actionable) return send(res, 403, { error: entry.protectedReason }), null;
-    return entry;
+    if (!entry) send(res, 404, { error: "Studio nicht gefunden." });
+    else if (!entry.actionable) send(res, 403, { error: entry.protectedReason });
+    else return entry;
+    return null;
   }
   async function onsiteRoute(req, res, url) {
     const p = url.pathname;

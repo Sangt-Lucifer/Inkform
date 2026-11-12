@@ -105,7 +105,7 @@ test("days between two dates", () => {
   assert.equal(daysBetween("2026-11-01T12:00:00.000Z", new Date("2026-11-08T12:00:00.000Z")), 7);
 });
 
-// ---------- Review Phase 4 ----------
+// ---------- anonymization only when the PDF is gone ----------
 import { pdfMayExist, waitingForPdfDeletion } from "../src/retention.js";
 
 test("an entry whose PDF may still exist is not anonymized, but listed as waiting", () => {
@@ -138,7 +138,7 @@ test("an anonymized entry cannot get a name or PDF reference back (edit, import)
   assert.equal(store.list()[0].customer, ANONYMIZED);
 });
 
-test("a stale confirmation from another window cannot undo an anonymization (second review)", () => {
+test("a stale confirmation from another window cannot undo an anonymization", () => {
   const map = new Map(),
     storage = { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) };
   const windowA = createIncomeStore(storage),
