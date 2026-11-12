@@ -131,3 +131,10 @@ test("restore: a merged list that would be too long stops before anything is wri
   data.removed = Array.from({ length: 60000 }, (_, i) => `b${i}`);
   assert.throws(() => applyRemovals(data, new Set(Array.from({ length: 60000 }, (_, i) => `d${i}`)), [], "2026-05-01"), /Ungültige Liste/);
 });
+
+test("restore: overlapping lists are counted after merging", () => {
+  const data = readFullBackup(backup(), validateSettings),
+    ids = Array.from({ length: 60000 }, (_, i) => `x${i}`);
+  data.removed = ids;
+  assert.equal(applyRemovals(data, new Set(ids), [], "2026-05-01").removed.size, 60000);
+});

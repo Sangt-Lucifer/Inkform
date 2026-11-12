@@ -338,3 +338,37 @@ test("preview: with only deleted copies the empty result still names the mark", 
   change("export-type", "consents");
   assert.match(await preview(), /^Im gewählten Zeitraum gibt es keine Dokumente\. .* 2 Einträge haben den Vermerk „PDF nicht mehr in der App“\./);
 });
+
+test("the permanent list keeps a copy out of the ZIP even if its entry is not marked", async () => {
+  const list = [row("a", "2026-03-05"), row("b", "2026-03-06")];
+  const { change, preview } = feature({ records: () => list, archive: memoryArchive(["a", "b"]), removed: new Set(["a"]) });
+  change("export-month", "2026-03");
+  assert.match(await preview(), /Davon 1 Einwilligung\./);
+});
+
+test("an entry marked while sync or backup run loses its copy in the same run", async () => {
+  let list = [row("a", "2026-03-05"), row("b", "2026-03-06")];
+  const archive = memoryArchive(["a", "b"]),
+    keys = archive.keys;
+  archive.keys = async () => {
+    const found = await keys();
+    list = list.map((r) => (r.id === "a" ? { ...r, pdfRemovedAt: "2026-04-01" } : r));
+    return found;
+  };
+  const { exporter } = feature({ records: () => list, archive });
+  await exporter.sync();
+  assert.deepEqual([...archive.map.keys()], ["b"]);
+  list = [row("a", "2026-03-05"), row("b", "2026-03-06")];
+  archive.map.set("a", new Blob(["%PDF"]));
+  assert.deepEqual((await exporter.pdfs()).map((p) => p.id), ["b"]);
+});
+
+test("hasCopy reads the store itself, not the last sync", async () => {
+  const list = [row("a", "2026-03-05")],
+    archive = memoryArchive([]);
+  const { exporter } = feature({ records: () => list, archive });
+  assert.equal(await exporter.hasCopy("a"), false);
+  archive.map.set("a", new Blob(["%PDF"]));
+  assert.equal(await exporter.hasCopy("a"), true);
+  assert.deepEqual([...exporter.copies()], [], "this window has not synced yet");
+});

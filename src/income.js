@@ -282,6 +282,9 @@ export function createIncomeFeature({
   onChange = () => {},
   copies = () => new Set(),
   removeCopy = () => {},
+  hasCopy = async () => false,
+  recordRemoved = (ids, write) => write(),
+  beforeRemove = () => {},
 }) {
   const store = createIncomeStore(storage);
   const filters = { artist: "", unassigned: false, year: today().slice(0, 4), month: "" };
@@ -350,7 +353,7 @@ export function createIncomeFeature({
     editor.showModal();
     input(record ? "total" : "date").focus();
   }
-  editForm.addEventListener("submit", (event) => {
+  editForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
       if (!isUnlocked()) throw Error("Bitte zuerst die Einnahmenansicht entsperren.");
@@ -371,18 +374,20 @@ export function createIncomeFeature({
         anonymizedAt: editing?.anonymizedAt,
         pdfRemovedAt: editing?.pdfRemovedAt,
       });
+      // "PDF fehlt" for an entry whose copy is in the app deletes that copy: warn, then record it
+      // like any other deletion from the app (mark and permanent list), so no restore brings it back.
+      const removesCopy = !!editing && row.pdfMissing && !editing.pdfMissing && !editing.pdfRemovedAt && (await hasCopy(row.id));
       if (
-        editing &&
-        row.pdfMissing &&
-        !editing.pdfMissing &&
-        copies().has(row.id) &&
+        removesCopy &&
         !window.confirm(
           "Mit „PDF fehlt“ wird die PDF-Kopie dieses Eintrags aus der App gelöscht. Sie ist danach aus der App für immer weg und in keinem ZIP-Export mehr enthalten. Die Datei in der Dateien-App und auf anderen Speichern bleibt unberührt. Trotzdem speichern?",
         )
       )
         return;
-      if (editing) store.update(row, editing.updatedAt);
-      else store.add(row);
+      if (removesCopy) row.pdfRemovedAt = today();
+      const write = () => (editing ? store.update(row, editing.updatedAt) : store.add(row));
+      if (removesCopy) recordRemoved([row.id], write);
+      else write();
       originalForm = snapshot();
       editor.close();
       refresh();
@@ -699,6 +704,7 @@ export function createIncomeFeature({
             `Eintrag für ${row.customer} vom ${row.date} aus der lokalen Übersicht entfernen? Das PDF in der Dateien-App bleibt erhalten, die Kopie für den ZIP-Export wird gelöscht.`,
           )
         ) {
+          beforeRemove([row]);
           store.remove(row.id, row.updatedAt);
           refresh();
         }
@@ -741,6 +747,7 @@ export function createIncomeFeature({
     list: () => store.list(),
     reportPdf: (rows, scope) => reportPdf(rows, scope).blob,
     removeMany(ids) {
+      beforeRemove(store.list().filter((r) => ids.includes(r.id)));
       store.removeMany(ids);
       refresh();
     },

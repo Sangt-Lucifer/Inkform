@@ -146,9 +146,29 @@ await until(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length
 check("Einzeln: kurze Warnung mit Rückfrage, Kopie gelöscht, Eintrag bleibt", (await ev(`window.__question`)).includes("für immer weg") && (await ev(`window.__question`)).includes("Dateien-App") && (await ev(`incomeRecords().length===5&&incomeRecords().every(r=>r.pdfRemovedAt)`)));
 await ev(`window.confirm=window.__confirm`);
 
+// "PDF fehlt" in the editor, confirmed: recorded like any other deletion from the app.
+await ev(`window.confirm=window.__confirm;finishAdminLeave()`);
+await consent("Finn", "Juni", "2026-06-06");
+await ev(`openAdmin('income')`);
+await until(`document.getElementById('admin-pin-dialog').open`);
+await ev(`unlockAdmin()`);
+await until(`adminAccess.isUnlocked() && !!document.getElementById('income-filter-year')`);
+await ev(`(()=>{const el=document.getElementById('income-filter-year');el.value='';el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+const finn = await ev(`incomeRecords().find(r=>r.customer==='Finn Juni').id`);
+await ev(`window.confirm=(m)=>{window.__question=m;return true};document.querySelector('[data-income-edit="${finn}"]').click()`);
+await until(`document.getElementById('income-editor').open`);
+await ev(`document.getElementById('income-pdf-missing').click();document.getElementById('income-edit-form').requestSubmit()`);
+await until(`!document.getElementById('income-editor').open`);
+await until(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length===0)`);
+check(
+  "Editor: „PDF fehlt“ bestätigt, Kopie gelöscht, mit Vermerk und in der dauerhaften Liste",
+  await ev(`(()=>{const r=incomeRecords().find(r=>r.id==='${finn}');return r.pdfMissing===true&&r.pdfRemovedAt===localDate()&&readRemovedIds(localStorage).has('${finn}')})()`),
+);
+await ev(`window.confirm=window.__confirm`);
+
 // Marks are recorded for good even if the id list was lost (e.g. after an income import).
 await ev(`localStorage.setItem(PDF_REMOVED_KEY,'[]');incomeFeature.refresh()`);
-check("Vermerke werden in die dauerhafte Liste übernommen", await ev(`readRemovedIds(localStorage).size===5`));
+check("Vermerke werden in die dauerhafte Liste übernommen", await ev(`readRemovedIds(localStorage).size===6`));
 await ev(`localStorage.setItem(PDF_REMOVED_KEY,'[]')`);
 
 // Restoring the older backup brings nothing back, even without the id list -------------------------
@@ -159,7 +179,7 @@ await ev(HELPERS);
 await until(`exportFeature.copies().size===0`);
 check(
   "Ältere Sicherung wiederhergestellt: gelöschte Kopien kommen nicht zurück, Vermerke bleiben",
-  (await copies()) === 0 && (await ev(`incomeRecords().length===5&&incomeRecords().every(r=>r.pdfRemovedAt)&&readRemovedIds(localStorage).size===5`)),
+  (await copies()) === 0 && (await ev(`incomeRecords().length===5&&incomeRecords().every(r=>r.pdfRemovedAt)&&readRemovedIds(localStorage).size===6`)),
 );
 
 check("Keine Netzwerkzugriffe außer der lokalen Vorschau", requests.every((u) => !/^https?:/.test(u) || u.startsWith(ORIGIN)));

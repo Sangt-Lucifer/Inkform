@@ -1527,16 +1527,18 @@ async function createBackup() {
   document.querySelector('[data-admin-action="backup-save"]').hidden = true;
   note.textContent = "Sicherung wird erstellt …";
   try {
-    const backup = createFullBackup({
-      settings,
-      theme: document.documentElement.dataset.theme,
-      retention: readRetention(localStorage),
-      backupDays: readBackupDays(localStorage),
-      exports: readExportLog(localStorage),
-      records: incomeFeature.list(),
-      removed: readRemovedIds(localStorage),
-      pdfs: await exportFeature.pdfs(),
-    });
+    // PDFs first: entries and the list are read afterwards, so a copy deleted meanwhile is marked.
+    const pdfs = await exportFeature.pdfs(),
+      backup = createFullBackup({
+        settings,
+        theme: document.documentElement.dataset.theme,
+        retention: readRetention(localStorage),
+        backupDays: readBackupDays(localStorage),
+        exports: readExportLog(localStorage),
+        pdfs,
+        records: incomeFeature.list(),
+        removed: readRemovedIds(localStorage),
+      });
     preparedBackup = new File([JSON.stringify(backup)], `Inkform_Sicherung_${localDate()}.json`, { type: "application/json" });
     note.textContent = `Sicherung bereit: ${backup.income.records.length} Einträge, ${backup.pdfs.length} PDFs, ${formatSize(preparedBackup.size)}. Jetzt „In Dateien sichern“ tippen.`;
     document.querySelector('[data-admin-action="backup-save"]').hidden = false;
@@ -1610,17 +1612,24 @@ const SETUP_FIELDS = ["name", "contact", "address", "location"];
 // good and the entries marked, both synchronously; if marking fails, the list is put back and
 // nothing is deleted. Only then does the sync remove the PDFs (also at the next start if it fails).
 async function removePdfCopies(entries) {
+  recordRemoved(
+    entries.map((e) => e.id),
+    () => incomeFeature.markCopiesRemoved(entries, localDate()),
+  );
+  incomeFeature.refresh();
+  await exportFeature.sync();
+}
+// Adds the ids to the permanent list, then runs write(); if write fails, the list is put back.
+function recordRemoved(ids, write) {
   const before = localStorage.getItem(PDF_REMOVED_KEY);
-  addRemovedIds(localStorage, entries.map((e) => e.id));
+  addRemovedIds(localStorage, ids);
   try {
-    incomeFeature.markCopiesRemoved(entries, localDate());
+    write();
   } catch (error) {
     if (before === null) localStorage.removeItem(PDF_REMOVED_KEY);
     else localStorage.setItem(PDF_REMOVED_KEY, before);
     throw error;
   }
-  incomeFeature.refresh();
-  await exportFeature.sync();
 }
 // Entries marked "PDF nicht mehr in der App", also from an income import, are recorded for good.
 function rememberRemoved() {
@@ -2660,11 +2669,18 @@ incomeFeature = createIncomeFeature({
     try {
       rememberRemoved();
     } catch (error) {
-      console.error("Gelöschte PDF-Kopien nicht vermerkt:", error);
+      toast("Gelöschte PDF-Kopien konnten nicht dauerhaft vermerkt werden (Speicher voll?): " + error.message);
     }
     exportFeature?.sync().catch((error) => console.error("Export-Archiv nicht abgeglichen:", error));
   },
   copies: () => exportFeature?.copies() ?? new Set(),
+  hasCopy: (id) => exportFeature.hasCopy(id),
+  recordRemoved,
+  // An entry marked "PDF nicht mehr in der App" is removed only once its id is in the permanent list.
+  beforeRemove: (rows) => {
+    const marked = rows.filter((r) => r.pdfRemovedAt).map((r) => r.id);
+    if (marked.length) addRemovedIds(localStorage, marked);
+  },
   removeCopy: (row) => {
     if (
       window.confirm(

@@ -89,7 +89,7 @@ export function readFullBackup(value, validateSettings) {
 export function applyRemovals(data, deviceRemoved, deviceRecords, today) {
   const marked = new Map(deviceRecords.filter((r) => r.pdfRemovedAt).map((r) => [r.id, r.pdfRemovedAt])),
     removed = new Set(
-      validateRemovedIds([...deviceRemoved, ...data.removed, ...marked.keys(), ...data.records.filter((r) => r.pdfRemovedAt).map((r) => r.id)]),
+      validateRemovedIds([...new Set([...deviceRemoved, ...data.removed, ...marked.keys(), ...data.records.filter((r) => r.pdfRemovedAt).map((r) => r.id)])]),
     );
   return {
     removed,

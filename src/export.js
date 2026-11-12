@@ -177,7 +177,8 @@ export function createExportFeature({
   async function prepare() {
     const period = exportPeriod(state),
       all = records(),
-      plan = exportPlan(all, new Set(state.type === "income" ? [] : await archive.keys()), period, state.type),
+      ok = allowedIds(),
+      plan = exportPlan(all, new Set(state.type === "income" ? [] : (await archive.keys()).filter((id) => ok.has(id))), period, state.type),
       files = [];
     for (const { id, path } of plan.consents) {
       const blob = await archive.get(id);
@@ -437,6 +438,8 @@ export function createExportFeature({
     preview,
     usage,
     // Copies in the app, from the last sync; the income list reads it synchronously.
+    // Read from the store itself, not from this window's last sync.
+    hasCopy: async (id) => allowed(id) && (await archive.keys()).includes(id),
     copies: () => {
       const ok = allowedIds();
       return new Set([...archived].filter((id) => ok.has(id)));
@@ -459,6 +462,13 @@ export function createExportFeature({
           await archive.delete(key);
           archived.delete(key);
         }
+      // Entries marked while the keys were read lose their copy in the same run.
+      const now = allowedIds();
+      for (const key of [...archived])
+        if (!now.has(key) && !allowed(key)) {
+          await archive.delete(key);
+          archived.delete(key);
+        }
       if ($("export-preview")) preview();
       usage();
     },
@@ -471,7 +481,9 @@ export function createExportFeature({
         const blob = ok.has(id) ? await archive.get(id) : null;
         if (blob) out.push({ id, bytes: new Uint8Array(await blob.arrayBuffer()) });
       }
-      return out;
+      // Checked again at the end: an entry marked meanwhile must not end up in a backup.
+      const now = allowedIds();
+      return out.filter((p) => now.has(p.id));
     },
     // Restore writes the PDFs before the entries exist; the sync after the restore removes the rest.
     async restore(pdfs) {
