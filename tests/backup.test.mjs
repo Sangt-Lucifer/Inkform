@@ -114,3 +114,20 @@ test("restore never brings back a copy this device deleted from the app", () => 
   const nothing = applyRemovals(data, new Set(), [], "2026-05-01");
   assert.deepEqual([nothing.pdfs.length, nothing.skipped, "pdfRemovedAt" in nothing.records[0]], [1, 0, false]);
 });
+
+test("restore: marks on either side block a copy, even when the id list does not name it", () => {
+  const data = readFullBackup(backup(), validateSettings);
+  const deviceMarked = applyRemovals(data, new Set(), [{ ...row("a", "2026-03-01"), pdfRemovedAt: "2026-04-10" }], "2026-05-01");
+  assert.deepEqual([deviceMarked.pdfs.length, deviceMarked.skipped, [...deviceMarked.removed]], [0, 1, ["a"]]);
+  const backupMarked = readFullBackup(
+    backup({ records: [row("a", "2026-03-01", { pdfRemovedAt: "2026-04-01" }), row("b", "2026-03-02", { pdfMissing: true })], pdfs: [] }),
+    validateSettings,
+  );
+  assert.deepEqual([...applyRemovals(backupMarked, new Set(), [], "2026-05-01").removed], ["a"]);
+});
+
+test("restore: a merged list that would be too long stops before anything is written", () => {
+  const data = readFullBackup(backup(), validateSettings);
+  data.removed = Array.from({ length: 60000 }, (_, i) => `b${i}`);
+  assert.throws(() => applyRemovals(data, new Set(Array.from({ length: 60000 }, (_, i) => `d${i}`)), [], "2026-05-01"), /Ungültige Liste/);
+});

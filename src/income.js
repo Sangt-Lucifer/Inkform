@@ -371,6 +371,16 @@ export function createIncomeFeature({
         anonymizedAt: editing?.anonymizedAt,
         pdfRemovedAt: editing?.pdfRemovedAt,
       });
+      if (
+        editing &&
+        row.pdfMissing &&
+        !editing.pdfMissing &&
+        copies().has(row.id) &&
+        !window.confirm(
+          "Mit „PDF fehlt“ wird die PDF-Kopie dieses Eintrags aus der App gelöscht. Sie ist danach aus der App für immer weg und in keinem ZIP-Export mehr enthalten. Die Datei in der Dateien-App und auf anderen Speichern bleibt unberührt. Trotzdem speichern?",
+        )
+      )
+        return;
       if (editing) store.update(row, editing.updatedAt);
       else store.add(row);
       originalForm = snapshot();
@@ -735,16 +745,18 @@ export function createIncomeFeature({
       refresh();
     },
     refresh,
-    // Marks entries whose copy in the app is deleted; all or nothing.
-    markCopiesRemoved(ids, day) {
-      const now = new Date().toISOString();
+    // Marks entries whose copy in the app is deleted: only in the confirmed state (entries:
+    // { id, updatedAt }), all or nothing. The caller refreshes once everything is written.
+    markCopiesRemoved(entries, day) {
+      const now = new Date().toISOString(),
+        list = store.list();
       store.updateMany(
-        store
-          .list()
-          .filter((r) => ids.includes(r.id) && !r.pdfRemovedAt)
-          .map((r) => ({ record: { ...r, pdfRemovedAt: day, updatedAt: now }, expected: r.updatedAt })),
+        entries.map(({ id, updatedAt }) => {
+          const r = list.find((row) => row.id === id);
+          if (!r || r.pdfRemovedAt) throw Error("Ein Eintrag wurde inzwischen geändert oder entfernt. Bitte neu öffnen.");
+          return { record: { ...r, pdfRemovedAt: day, updatedAt: now }, expected: updatedAt };
+        }),
       );
-      refresh();
     },
     lock() {
       editor.close();

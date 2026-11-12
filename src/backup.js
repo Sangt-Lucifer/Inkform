@@ -83,11 +83,14 @@ export function readFullBackup(value, validateSettings) {
   };
 }
 
-// What a restore writes, given the ids this device already deleted from the app: their entries
-// keep (or get) the "PDF nicht mehr in der App" mark and their PDFs are left out.
+// What a restore writes. Deleted from the app is whatever either list names or either side marks;
+// those entries keep (or get) the "PDF nicht mehr in der App" mark and their PDFs are left out.
+// Throws before anything is written if the merged list is too long.
 export function applyRemovals(data, deviceRemoved, deviceRecords, today) {
-  const removed = new Set([...deviceRemoved, ...data.removed]),
-    marked = new Map(deviceRecords.filter((r) => r.pdfRemovedAt).map((r) => [r.id, r.pdfRemovedAt]));
+  const marked = new Map(deviceRecords.filter((r) => r.pdfRemovedAt).map((r) => [r.id, r.pdfRemovedAt])),
+    removed = new Set(
+      validateRemovedIds([...deviceRemoved, ...data.removed, ...marked.keys(), ...data.records.filter((r) => r.pdfRemovedAt).map((r) => r.id)]),
+    );
   return {
     removed,
     records: data.records.map((r) => (removed.has(r.id) && !r.pdfRemovedAt ? { ...r, pdfRemovedAt: marked.get(r.id) ?? today } : r)),

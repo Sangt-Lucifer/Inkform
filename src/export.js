@@ -55,7 +55,7 @@ export const previousMonth = (today) => {
 export const exportable = (r) => pdfMayExist(r) && !r.anonymizedAt && !r.pdfRemovedAt;
 
 export function validateRemovedIds(value) {
-  if (!Array.isArray(value) || value.length > 20000 || value.some((id) => typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(id)))
+  if (!Array.isArray(value) || value.length > 100000 || value.some((id) => typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(id)))
     throw Error("Ungültige Liste gelöschter PDF-Kopien.");
   return [...new Set(value)];
 }
@@ -165,7 +165,12 @@ export function createExportFeature({
     sharing = false,
     archived = new Set();
   const $ = (id) => document.getElementById(id),
-    allowed = (id) => !removedIds().has(id) && records().some((r) => r.id === id && exportable(r)),
+    // Ids whose copy may stay in the app; computed once per action (reading the list is not free).
+    allowedIds = () => {
+      const removed = removedIds();
+      return new Set(records().filter((r) => exportable(r) && !removed.has(r.id)).map((r) => r.id));
+    },
+    allowed = (id) => allowedIds().has(id),
     periodText = (period) => `${dateDe(period.from)} bis ${dateDe(period.to)}`,
     copiesText = (n) => `${n} ${n === 1 ? "PDF-Kopie" : "PDF-Kopien"}`;
 
@@ -199,6 +204,7 @@ export function createExportFeature({
       files,
       consents,
       copies,
+      copyEntries: copies.map((id) => ({ id, updatedAt: all.find((r) => r.id === id).updatedAt })),
       copyBytes,
       withoutPdf: plan.withoutPdf,
       removed: plan.removed,
@@ -208,7 +214,12 @@ export function createExportFeature({
   }
 
   function summary({ files, consents, withoutPdf, removed, note }) {
-    if (!files.length) return "Im gewählten Zeitraum gibt es keine Dokumente. Es wird keine ZIP-Datei erstellt.";
+    const marked = removed ? ` Davon ${removed} mit dem Vermerk „PDF nicht mehr in der App“.` : "";
+    if (!files.length)
+      return (
+        "Im gewählten Zeitraum gibt es keine Dokumente. Es wird keine ZIP-Datei erstellt." +
+        (removed ? ` ${removed} ${removed === 1 ? "Eintrag hat" : "Einträge haben"} den Vermerk „PDF nicht mehr in der App“.` : "")
+      );
     const pdfs = files.filter((f) => f.name.endsWith(".pdf")).length,
       csv = files.length - pdfs,
       size = files.reduce((sum, f) => sum + f.data.length, 0);
@@ -218,7 +229,7 @@ export function createExportFeature({
       (withoutPdf
         ? ` ${withoutPdf} ${withoutPdf === 1 ? "Eintrag" : "Einträge"} im Zeitraum ohne PDF in der App (gelöscht, „PDF fehlt“, anonymisiert, Kopie aus der App gelöscht oder vor diesem Update abgelegt).`
         : "") +
-      (removed ? ` Davon ${removed} mit dem Vermerk „PDF nicht mehr in der App“.` : "") +
+      marked +
       note
     );
   }
@@ -274,7 +285,7 @@ export function createExportFeature({
               ? `${file.name} an den Browser übergeben. Prüfe die Datei in der Dateien-App im Downloadordner.`
               : `Systemdialog abgeschlossen. Prüfe in der Dateien-App, ob ${file.name} im gewählten Ordner liegt.`;
           if (ready.copies.length) {
-            offered = { ids: ready.copies, period: ready.period, bytes: ready.copyBytes, zip: file.name };
+            offered = { entries: ready.copyEntries, period: ready.period, bytes: ready.copyBytes, zip: file.name };
             $("export-offer-text").textContent = `Die ${ready.copies.length} PDFs dieses Zeitraums jetzt aus der App löschen? Das spart Speicher auf dem iPad. Vorher die ZIP-Datei prüfen; „Später löschen“ ist jederzeit möglich, ohne dass etwas verloren geht.`;
             $("export-offer").hidden = false;
           }
@@ -321,7 +332,8 @@ export function createExportFeature({
     const host = $("copies-usage");
     if (!host) return;
     try {
-      const sizes = [...(await archive.sizes())].filter(([id]) => allowed(id)),
+      const ok = allowedIds(),
+        sizes = [...(await archive.sizes())].filter(([id]) => ok.has(id)),
         bytes = sizes.reduce((sum, [, size]) => sum + size, 0);
       host.textContent = `${copiesText(sizes.length)} in der App, zusammen ${sizes.length ? formatSize(bytes) : "0 KB"}.${
         bytes >= COPY_HINT_BYTES
@@ -351,7 +363,7 @@ export function createExportFeature({
     offered = null;
   function openDelete(target) {
     pending = target;
-    const n = target.ids.length;
+    const n = target.entries.length;
     $("copy-delete-summary").textContent = `${copiesText(n)} für ${periodText(target.period)}, zusammen ${formatSize(target.bytes)}.`;
     $("copy-delete-never").hidden = periodExported(exportLog(), target.period);
     $("copy-delete-step-count").textContent = `Im Ordner „Einwilligungen“ die PDFs zählen: Es müssen genau ${n} sein.`;
@@ -374,14 +386,22 @@ export function createExportFeature({
     }
     if (!event.target.closest("#copy-delete-confirm") || !pending || !$("copy-delete-checked").checked || !isUnlocked()) return;
     const target = pending,
-      ids = target.ids.filter(allowed);
-    if (!window.confirm(`Letzte Rückfrage: ${copiesText(ids.length)} für ${periodText(target.period)} endgültig aus der App löschen?`)) return;
+      n = target.entries.length;
+    if (!window.confirm(`Letzte Rückfrage: ${copiesText(n)} für ${periodText(target.period)} endgültig aus der App löschen?`)) return;
     pending = null;
     dialog.close();
+    // Only exactly what was confirmed: every entry unchanged, still in the period, copy still kept.
+    const ok = allowedIds(),
+      now = new Map(records().map((r) => [r.id, r]));
+    const unchanged = target.entries.every(({ id, updatedAt }) => {
+      const r = now.get(id);
+      return r && r.updatedAt === updatedAt && r.date >= target.period.from && r.date <= target.period.to && ok.has(id);
+    });
     try {
-      await removeCopies(ids);
-      notify(`${copiesText(ids.length)} aus der App gelöscht. Die Einträge in der Einnahmenliste bleiben erhalten.`);
-      if (offered?.ids === target.ids) {
+      if (!unchanged) throw Error("Die Einträge haben sich inzwischen geändert. Es wurde nichts gelöscht; bitte die Vorschau neu prüfen.");
+      await removeCopies(target.entries);
+      notify(`${copiesText(n)} aus der App gelöscht. Die Einträge in der Einnahmenliste bleiben erhalten.`);
+      if (offered === target) {
         offered = null;
         $("export-offer").hidden = true;
       }
@@ -409,7 +429,7 @@ export function createExportFeature({
       $("export-offer").hidden = true;
     }
     if (event.target.closest("#export-delete") && prepared?.copies.length)
-      openDelete({ ids: prepared.copies, period: prepared.period, bytes: prepared.copyBytes });
+      openDelete({ entries: prepared.copyEntries, period: prepared.period, bytes: prepared.copyBytes });
   });
 
   return {
@@ -417,7 +437,10 @@ export function createExportFeature({
     preview,
     usage,
     // Copies in the app, from the last sync; the income list reads it synchronously.
-    copies: () => new Set([...archived].filter(allowed)),
+    copies: () => {
+      const ok = allowedIds();
+      return new Set([...archived].filter((id) => ok.has(id)));
+    },
     // Kept after the owner confirmed the filing; asks the browser not to evict the app's storage.
     // An entry removed or marked while the PDF was being written loses the copy right away.
     async keep(id, blob) {
@@ -426,11 +449,12 @@ export function createExportFeature({
       if (allowed(id)) archived.add(id);
       else await archive.delete(id);
     },
-    // The entries are re-read before each deletion: a PDF kept meanwhile (also by another window)
+    // An entry is re-read before its copy is deleted: a PDF kept meanwhile (also by another window)
     // belongs to an entry that already exists, so it is never deleted.
     async sync() {
+      const ok = allowedIds();
       for (const key of await archive.keys())
-        if (allowed(key)) archived.add(key);
+        if (ok.has(key) || allowed(key)) archived.add(key);
         else {
           await archive.delete(key);
           archived.delete(key);
@@ -441,9 +465,10 @@ export function createExportFeature({
     // From the last sync; the overview reads it synchronously.
     unexportedMonths: (log) => unexportedMonths(records(), archived, log, today()),
     async pdfs() {
-      const out = [];
+      const out = [],
+        ok = allowedIds();
       for (const id of await archive.keys()) {
-        const blob = allowed(id) ? await archive.get(id) : null;
+        const blob = ok.has(id) ? await archive.get(id) : null;
         if (blob) out.push({ id, bytes: new Uint8Array(await blob.arrayBuffer()) });
       }
       return out;

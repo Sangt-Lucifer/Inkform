@@ -1606,13 +1606,27 @@ backupPicker.addEventListener("change", async () => {
 });
 const SETUP_FIELDS = ["name", "contact", "address", "location"];
 // The neutral edition is set up once all four studio details are saved.
-// Deletes copies in the app only. The entries get their mark first (all or nothing), then the ids
-// are recorded for good, and the sync removes the PDFs (also at the next start if deleting fails).
-async function removePdfCopies(ids) {
-  incomeFeature.markCopiesRemoved(ids, localDate());
-  addRemovedIds(localStorage, ids);
-  await exportFeature.sync();
+// Deletes copies in the app only (entries: { id, updatedAt } as confirmed). The ids are recorded for
+// good and the entries marked, both synchronously; if marking fails, the list is put back and
+// nothing is deleted. Only then does the sync remove the PDFs (also at the next start if it fails).
+async function removePdfCopies(entries) {
+  const before = localStorage.getItem(PDF_REMOVED_KEY);
+  addRemovedIds(localStorage, entries.map((e) => e.id));
+  try {
+    incomeFeature.markCopiesRemoved(entries, localDate());
+  } catch (error) {
+    if (before === null) localStorage.removeItem(PDF_REMOVED_KEY);
+    else localStorage.setItem(PDF_REMOVED_KEY, before);
+    throw error;
+  }
   incomeFeature.refresh();
+  await exportFeature.sync();
+}
+// Entries marked "PDF nicht mehr in der App", also from an income import, are recorded for good.
+function rememberRemoved() {
+  const known = readRemovedIds(localStorage),
+    marked = incomeFeature.list().filter((r) => r.pdfRemovedAt && !known.has(r.id));
+  if (marked.length) addRemovedIds(localStorage, marked.map((r) => r.id));
 }
 function needsSetup() {
   return BLANK_EDITION && SETUP_FIELDS.some((key) => !settings.studio[key].trim());
@@ -2642,8 +2656,14 @@ incomeFeature = createIncomeFeature({
   notify: toast,
   download: downloadFile,
   showReport: (blob, name, pages) => presentPdfArtifact(blob, name, pages, { isReport: true }),
-  onChange: () =>
-    exportFeature?.sync().catch((error) => console.error("Export-Archiv nicht abgeglichen:", error)),
+  onChange: () => {
+    try {
+      rememberRemoved();
+    } catch (error) {
+      console.error("Gelöschte PDF-Kopien nicht vermerkt:", error);
+    }
+    exportFeature?.sync().catch((error) => console.error("Export-Archiv nicht abgeglichen:", error));
+  },
   copies: () => exportFeature?.copies() ?? new Set(),
   removeCopy: (row) => {
     if (
@@ -2651,7 +2671,7 @@ incomeFeature = createIncomeFeature({
         `PDF-Kopie für ${row.customer} (Termin ${dateFormat(row.date)}) aus der App löschen?\n\nSie ist danach aus der App für immer weg und in keinem ZIP-Export mehr enthalten. Vorher prüfen, ob das PDF in der Dateien-App oder einer ZIP-Datei gesichert ist. Die Datei in der Dateien-App und auf anderen Speichern bleibt unberührt, der Eintrag in der Einnahmenliste bleibt erhalten.`,
       )
     )
-      removePdfCopies([row.id]).then(
+      removePdfCopies([{ id: row.id, updatedAt: row.updatedAt }]).then(
         () => toast("PDF-Kopie aus der App gelöscht. Der Eintrag bleibt erhalten."),
         (error) => toast("PDF-Kopie nicht gelöscht: " + error.message),
       );
@@ -2672,6 +2692,11 @@ exportFeature = createExportFeature({
     localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify([...readExportLog(localStorage), entry].slice(-1000))),
   today: localDate,
 });
+try {
+  rememberRemoved();
+} catch (error) {
+  console.error("Gelöschte PDF-Kopien nicht vermerkt:", error);
+}
 exportFeature.sync().catch((error) => console.error("Export-Archiv nicht abgeglichen:", error));
 applySettings(settings, { initial: true });
 let initialTheme = embeddedConfig?.theme || "dark";

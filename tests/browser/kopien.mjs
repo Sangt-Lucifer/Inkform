@@ -111,6 +111,15 @@ await until(`document.getElementById('copy-delete-dialog').open`);
 check("Nie als ZIP exportierter Zeitraum: deutliche Warnung", await ev(`!document.getElementById('copy-delete-never').hidden&&document.getElementById('copy-delete-summary').textContent.startsWith('1 PDF-Kopie für 01.05.2026 bis 31.05.2026')`));
 await ev(`document.querySelector('#copy-delete-dialog [data-copy-later]').click()`);
 check("„Später löschen“ im Prüfschritt: nichts gelöscht", (await ev(`!document.getElementById('copy-delete-dialog').open`)) && (await copies()) === 2);
+// Changed meanwhile (as from another window): nothing is deleted.
+await ev(`document.getElementById('export-delete').click()`);
+await until(`document.getElementById('copy-delete-dialog').open`);
+await ev(`(()=>{const v=JSON.parse(localStorage.getItem(INCOME_KEY));const r=v.records.find(r=>r.customer==='Emil Mai');r.date='2026-06-05';r.updatedAt=new Date().toISOString();localStorage.setItem(INCOME_KEY,JSON.stringify(v))})();document.getElementById('copy-delete-checked').click();document.getElementById('copy-delete-confirm').click()`);
+await until(`document.getElementById('toast').textContent.includes('Es wurde nichts gelöscht')`);
+check("Eintrag inzwischen in einen anderen Zeitraum verschoben: nichts gelöscht", (await copies()) === 2 && (await ev(`!incomeRecords().find(r=>r.customer==='Emil Mai').pdfRemovedAt&&readRemovedIds(localStorage).size===3`)));
+await ev(`(()=>{const v=JSON.parse(localStorage.getItem(INCOME_KEY));const r=v.records.find(r=>r.customer==='Emil Mai');r.date='2026-05-05';r.updatedAt=new Date().toISOString();localStorage.setItem(INCOME_KEY,JSON.stringify(v))})()`);
+await set("export-month", "2026-05");
+await until(`!document.getElementById('export-delete').disabled`);
 await ev(`document.getElementById('export-delete').click()`);
 await until(`document.getElementById('copy-delete-dialog').open`);
 await ev(`document.getElementById('copy-delete-checked').click();document.getElementById('copy-delete-confirm').click()`);
@@ -121,12 +130,28 @@ check("Nach Prüfschritt und Rückfrage gelöscht", await ev(`incomeRecords().fi
 await ev(`openAdminAuthorized('income');(()=>{const el=document.getElementById('income-filter-year');el.value='';el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
 const dora = await ev(`incomeRecords().find(r=>r.customer==='Dora April').id`);
 check("Einnahmenliste: Knopf nur bei vorhandener Kopie, Vermerk bei gelöschten", await ev(`document.querySelectorAll('[data-income-copy]').length===1&&!!document.querySelector('[data-income-copy="${dora}"]')&&[...document.querySelectorAll('.income-table tbody tr')].filter(tr=>tr.textContent.includes('PDF nicht mehr in der App')).length===4`));
+// "PDF fehlt" in the editor would delete the copy: warning first, cancel keeps everything.
+await ev(`window.confirm=(m)=>{window.__question=m;return false};document.querySelector('[data-income-edit="${dora}"]').click()`);
+await until(`document.getElementById('income-editor').open`);
+await ev(`document.getElementById('income-pdf-missing').click();document.getElementById('income-edit-form').requestSubmit()`);
+check("Editor: „PDF fehlt“ bei vorhandener Kopie warnt; Abbrechen ändert nichts", (await ev(`window.__question`)).includes("aus der App gelöscht") && (await ev(`!incomeRecords().find(r=>r.id==='${dora}').pdfMissing`)) && (await copies()) === 1);
+await ev(`document.getElementById('income-editor').close()`);
+// Marking fails (e.g. storage full): the id list is put back, no copy is deleted.
+await ev(`window.__mark=incomeFeature.markCopiesRemoved;incomeFeature.markCopiesRemoved=()=>{throw Error('Speicher voll (Test)')};window.confirm=()=>true;document.querySelector('[data-income-copy="${dora}"]').click()`);
+await until(`document.getElementById('toast').textContent.includes('PDF-Kopie nicht gelöscht')`);
+check("Fehler beim Vermerken: Liste zurückgesetzt, nichts gelöscht", (await copies()) === 1 && (await ev(`readRemovedIds(localStorage).size===4&&!readRemovedIds(localStorage).has('${dora}')`)));
+await ev(`incomeFeature.markCopiesRemoved=window.__mark`);
 await ev(`window.confirm=(m)=>{window.__question=m;return true};document.querySelector('[data-income-copy="${dora}"]').click()`);
 await until(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length===0)`);
 check("Einzeln: kurze Warnung mit Rückfrage, Kopie gelöscht, Eintrag bleibt", (await ev(`window.__question`)).includes("für immer weg") && (await ev(`window.__question`)).includes("Dateien-App") && (await ev(`incomeRecords().length===5&&incomeRecords().every(r=>r.pdfRemovedAt)`)));
 await ev(`window.confirm=window.__confirm`);
 
-// Restoring the older backup brings nothing back ------------------------------------------------
+// Marks are recorded for good even if the id list was lost (e.g. after an income import).
+await ev(`localStorage.setItem(PDF_REMOVED_KEY,'[]');incomeFeature.refresh()`);
+check("Vermerke werden in die dauerhafte Liste übernommen", await ev(`readRemovedIds(localStorage).size===5`));
+await ev(`localStorage.setItem(PDF_REMOVED_KEY,'[]')`);
+
+// Restoring the older backup brings nothing back, even without the id list -------------------------
 await ev(`openAdminAuthorized('overview')`);
 await ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([window.__backup],'sicherung.json',{type:'application/json'}));const i=document.getElementById('backup-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
 await until(`typeof adminAccess!=='undefined' && document.readyState==='complete' && document.getElementById('toast').textContent.includes('Sicherung wiederhergestellt')`);

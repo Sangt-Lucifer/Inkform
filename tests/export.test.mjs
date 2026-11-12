@@ -330,3 +330,11 @@ test("storage display: count and size of the copies, a hint from 200 MB", async 
   await exporter.usage();
   assert.equal(elements["copies-usage"].textContent, "1 PDF-Kopie in der App, zusammen 1 MB.");
 });
+
+test("preview: with only deleted copies the empty result still names the mark", async () => {
+  const list = [row("a", "2026-03-05", { pdfRemovedAt: "2026-04-01" }), row("b", "2026-03-06", { pdfRemovedAt: "2026-04-01" })];
+  const { change, preview } = feature({ records: () => list, archive: memoryArchive([]) });
+  change("export-month", "2026-03");
+  change("export-type", "consents");
+  assert.match(await preview(), /^Im gewählten Zeitraum gibt es keine Dokumente\. .* 2 Einträge haben den Vermerk „PDF nicht mehr in der App“\./);
+});
