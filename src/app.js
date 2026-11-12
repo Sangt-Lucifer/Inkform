@@ -1046,7 +1046,7 @@ function renderPdfArtifact(artifact) {
   $("income-capture-note").hidden = !consent;
   $("income-capture-note").textContent = missing
     ? "Bitte die Einwilligung erneut ausfüllen lassen, falls sie gebraucht wird. Die vorbereitete Einnahme (Name, Termin, Artist, Preise) kannst du hier mit dem Vermerk „PDF fehlt“ buchen; der Vermerk lässt sich später in der Einnahmenliste entfernen."
-    : "Sobald du als Inhaber die Ablage bestätigst, werden Name, Termin, Artist und Preise in der lokalen Einnahmenliste gebucht. Gesundheitsangaben und Unterschrift werden dort nicht gespeichert.";
+    : "Sobald du als Inhaber die Ablage bestätigst, werden Name, Termin, Artist und Preise in der lokalen Einnahmenliste gebucht. Gesundheitsangaben und Unterschrift werden dort nicht gespeichert. Das unterschriebene PDF bleibt zusätzlich für den ZIP-Export auf diesem Gerät, bis es als gelöscht markiert wird.";
   if (consent && artifact.keepError)
     $("income-capture-note").textContent =
       `Achtung: ${artifact.keepError} Bitte das PDF jetzt ablegen und die App bis zur Bestätigung nicht neu laden. ` +
@@ -1186,7 +1186,9 @@ function bookPendingConsent(pdfMissing) {
   if (!pdfMissing && artifact.blob)
     exportFeature.keep(artifact.incomeEntry.id, artifact.blob).catch((error) => {
       console.error("PDF nicht für den Export gespeichert:", error);
-      toast("Einnahme gebucht. Das PDF konnte nicht für den ZIP-Export gespeichert werden.");
+      toast(
+        "Einnahme gebucht. Das PDF konnte nicht für den ZIP-Export gespeichert werden (Speicher voll?) und fehlt dort; die Export-Vorschau zählt es als „ohne PDF“. Das abgelegte PDF in der Dateien-App ist davon nicht betroffen.",
+      );
     });
   pendingStore
     .clear(artifact.incomeEntry.id)
@@ -1812,7 +1814,8 @@ function renderAdminSection() {
             <li>Erst danach „PDF ist gespeichert · Nächster Kunde“ bestätigen.</li>
           </ol>
           <p class="ad-preview-note">
-            Kundeneingaben und Unterschriften werden nicht im Browser archiviert.
+            Nach der Bestätigung bleibt das unterschriebene PDF für den ZIP-Export unverschlüsselt
+            im Browser-Speicher, bis es als gelöscht markiert wird.
             Studio-Einstellungen bleiben lokal in diesem Browser gespeichert; Geräte synchronisieren
             sie nicht automatisch.
           </p>`,

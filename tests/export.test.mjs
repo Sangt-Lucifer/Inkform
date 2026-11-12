@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { consentFileName, exportPeriod, exportPlan, exportable, formatSize, previousMonth, uniqueNames } from "../src/export.js";
+import { consentFileName, createExportFeature, exportPeriod, exportPlan, exportable, formatSize, previousMonth, uniqueNames } from "../src/export.js";
 import { anonymizeRecord } from "../src/retention.js";
 
 const row = (id, date, extra = {}) => ({
@@ -145,4 +145,80 @@ test("size for the preview", () => {
   assert.equal(formatSize(1), "1 KB");
   assert.equal(formatSize(300 * 1024), "300 KB");
   assert.equal(formatSize(14 * 1024 * 1024 + 200_000), "14,2 MB");
+});
+
+// The feature with a minimal page: only the elements it touches.
+function feature({ records, archive }) {
+  const listeners = [],
+    elements = {
+      "admin-app": { addEventListener: (type, fn) => type === "change" && listeners.push(fn) },
+      "export-preview": { textContent: "", classList: { add() {}, remove() {}, toggle() {} } },
+      "export-save": { disabled: true },
+    };
+  globalThis.document = { getElementById: (id) => elements[id] ?? null, querySelectorAll: () => [] };
+  const exporter = createExportFeature({
+    archive,
+    records,
+    incomeReport: () => new Blob(["%PDF"]),
+    isUnlocked: () => true,
+    escape: (s) => s,
+    notify() {},
+    download() {},
+    today: () => "2026-04-10",
+  });
+  const change = (id, value) => listeners.forEach((fn) => fn({ target: { id, value } }));
+  const preview = async () => {
+    for (let n = 0; n < 50 && /berechnet|^$/.test(elements["export-preview"].textContent); n++) await new Promise((r) => setTimeout(r, 5));
+    return elements["export-preview"].textContent;
+  };
+  return { exporter, change, preview };
+}
+const memoryArchive = (keys) => {
+  const map = new Map(keys.map((k) => [k, new Blob(["%PDF"])]));
+  return {
+    map,
+    keys: async () => [...map.keys()],
+    get: async (k) => map.get(k) ?? null,
+    put: async (k, v) => void map.set(k, v),
+    delete: async (k) => void map.delete(k),
+  };
+};
+
+test("sync never deletes a PDF kept by another window while it was running", async () => {
+  let list = [row("old", "2026-03-01")];
+  const archive = memoryArchive(["old", "gone"]),
+    keys = archive.keys;
+  archive.keys = async () => {
+    const found = await keys();
+    archive.map.set("new", new Blob(["%PDF"]));
+    list = [...list, row("new", "2026-03-02")];
+    return [...found, "new"];
+  };
+  const { exporter } = feature({ records: () => list, archive });
+  await exporter.sync();
+  assert.deepEqual([...archive.map.keys()].sort(), ["new", "old"]);
+});
+
+test("a PDF whose entry was removed or marked during the write is not kept", async () => {
+  let list = [row("a", "2026-03-01"), row("b", "2026-03-02")];
+  const archive = memoryArchive([]),
+    put = archive.put;
+  archive.put = async (k, v) => {
+    await put(k, v);
+    list = k === "a" ? list.filter((r) => r.id !== "a") : list.map((r) => ({ ...r, pdfDeletedAt: "2026-04-10" }));
+  };
+  const { exporter } = feature({ records: () => list, archive });
+  await exporter.keep("a", new Blob(["%PDF"]));
+  await exporter.keep("b", new Blob(["%PDF"]));
+  assert.equal(archive.map.size, 0);
+});
+
+test("income only works without the PDF store", async () => {
+  const archive = memoryArchive([]);
+  archive.keys = () => Promise.reject(Error("IndexedDB nicht verfügbar."));
+  const { change, preview } = feature({ records: () => [row("a", "2026-03-05")], archive });
+  change("export-type", "income");
+  assert.match(await preview(), /^1 PDF und 1 CSV, /);
+  change("export-type", "all");
+  assert.match(await preview(), /IndexedDB nicht verfügbar/);
 });

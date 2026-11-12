@@ -103,12 +103,13 @@ export function createExportFeature({ archive, records, incomeReport, isUnlocked
   let prepared = null,
     run = 0,
     sharing = false;
-  const $ = (id) => document.getElementById(id);
+  const $ = (id) => document.getElementById(id),
+    allowed = (id) => records().some((r) => r.id === id && exportable(r));
 
   async function prepare() {
     const period = exportPeriod(state),
       all = records(),
-      plan = exportPlan(all, new Set(await archive.keys()), period, state.type),
+      plan = exportPlan(all, new Set(state.type === "income" ? [] : await archive.keys()), period, state.type),
       files = [];
     for (const { id, path } of plan.consents) {
       const blob = await archive.get(id);
@@ -207,7 +208,7 @@ export function createExportFeature({ archive, records, incomeReport, isUnlocked
       `<option value="${e(value)}"${value === selected ? " selected" : ""}>${e(label)}</option>`;
     const field = (kind, html) => `<label data-export-for="${kind}"${state.kind === kind ? "" : " hidden"}>${html}</label>`;
     return `<section class="ad-panel"><div class="ad-panel-header"><h2>ZIP-Datei nach Zeitraum</h2></div><div class="ad-panel-body">
-      <p class="ad-section-copy">Enthält die Einwilligungs-PDFs, die auf diesem Gerät abgelegt wurden, in „Einwilligungen/“ und die Einnahmenübersicht als PDF und CSV in „Einnahmen/“. Maßgeblich ist das Termindatum. Als gelöscht markierte, als „PDF fehlt“ gebuchte, entfernte und anonymisierte Einträge sind nicht enthalten.</p>
+      <p class="ad-section-copy">Enthält die Einwilligungs-PDFs, die auf diesem Gerät abgelegt wurden, in „Einwilligungen/“ und die Einnahmenübersicht als PDF und CSV in „Einnahmen/“. Maßgeblich ist das Termindatum. Einwilligungs-PDFs, die als gelöscht markiert, als „PDF fehlt“ gebucht, entfernt oder anonymisiert sind, sind nicht enthalten. Die Einnahmenübersicht enthält wie die Einnahmenliste alle Einträge des Zeitraums; Namen entfallen erst beim Anonymisieren.</p>
       <div class="income-filters">
       <label>Zeitraum<select id="export-kind">${option("month", "Ein Monat", state.kind)}${option("year", "Ein Jahr", state.kind)}${option("range", "Von – bis", state.kind)}</select></label>
       ${field("month", `Monat<input id="export-month" type="month" value="${e(state.month)}">`)}
@@ -239,13 +240,16 @@ export function createExportFeature({ archive, records, incomeReport, isUnlocked
     view,
     preview,
     // Kept after the owner confirmed the filing; asks the browser not to evict the app's storage.
-    keep(id, blob) {
+    // An entry removed or marked while the PDF was being written loses the copy right away.
+    async keep(id, blob) {
       navigator.storage?.persist?.().catch(() => {});
-      return archive.put(id, blob);
+      await archive.put(id, blob);
+      if (!allowed(id)) await archive.delete(id);
     },
+    // The entries are re-read before each deletion: a PDF kept meanwhile (also by another window)
+    // belongs to an entry that already exists, so it is never deleted.
     async sync() {
-      const keep = new Set(records().filter(exportable).map((r) => r.id));
-      for (const key of await archive.keys()) if (!keep.has(key)) await archive.delete(key);
+      for (const key of await archive.keys()) if (!allowed(key)) await archive.delete(key);
       if ($("export-preview")) preview();
     },
   };

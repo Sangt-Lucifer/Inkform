@@ -69,3 +69,11 @@ test("the Mac unpacks the ZIP without errors: unzip -t, ditto and Python zipfile
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("limits of the format are refused instead of written wrongly", () => {
+  assert.throws(() => createZip([], new Date(2108, 0, 1)), /1980 bis 2107/);
+  assert.throws(() => createZip([], new Date(1979, 11, 31)), /1980 bis 2107/);
+  assert.equal(createZip([], new Date(2107, 11, 31)).length, 22);
+  assert.throws(() => createZip([{ name: "ä".repeat(32_768), data: new Uint8Array(0) }]), /zu lang/);
+  assert.doesNotThrow(() => createZip([{ name: "a".repeat(0xffff), data: new Uint8Array(0) }]));
+});

@@ -15,9 +15,10 @@ export function crc32(bytes) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-// DOS time and date in local time; the format cannot store years before 1980.
+// DOS time and date in local time; the format covers the years 1980 to 2107.
 function dosDateTime(date) {
-  const year = Math.max(date.getFullYear(), 1980);
+  const year = date.getFullYear();
+  if (year < 1980 || year > 2107) throw Error("ZIP-Dateien können nur Daten von 1980 bis 2107 speichern.");
   return {
     time: (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1),
     day: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
@@ -30,6 +31,7 @@ export function createZip(files, date = new Date()) {
   const { time, day } = dosDateTime(date),
     encoder = new TextEncoder(),
     entries = files.map(({ name, data }) => ({ name: encoder.encode(name), data, crc: crc32(data) }));
+  if (entries.some((e) => e.name.length > 0xffff)) throw Error("Ein Dateiname ist für eine ZIP-Datei zu lang.");
   const localSize = entries.reduce((sum, e) => sum + 30 + e.name.length + e.data.length, 0),
     centralSize = entries.reduce((sum, e) => sum + 46 + e.name.length, 0);
   if (localSize + centralSize + 22 > 0xffffffff) throw Error("Die ZIP-Datei wäre größer als 4 GB.");
