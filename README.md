@@ -64,7 +64,7 @@ Durchsucht werden Text, dekodierte Base64-Blöcke, PNG-Textfelder und der Text v
 
 Die **Browser-Prüfungen** starten Google Chrome headless mit leerem Wegwerf-Profil, die Vorschau nur auf `127.0.0.1`, und verwenden ausschließlich erfundene Testdaten. Ihre Ausgaben landen im `test-results/` des jeweiligen Profils (Kern oder Studio-Ordner). Details stehen in `tests/browser/README.md`.
 
-## Werkstatt (lokal, Phase 1 bis 3)
+## Werkstatt (lokal, Phase 1 bis 4)
 
 ```sh
 npm run werkstatt          # http://127.0.0.1:8090, nur auf diesem Mac
@@ -96,6 +96,14 @@ Hat sich eine Profildatei geändert, seit der Editor sie geladen hat, wird nicht
 - Ins Paket kommen nur die Dateien, aus denen ein Build besteht (`index.html`, `dist/index.html`, `sw.js`, Manifest, Lizenzen, `icons/icon-<größe>.png`), und nur, wenn sie Byte für Byte dem geprüften Build entsprechen. Eine fremde Datei, etwa in `icons/`, stoppt den Export. Kern- und Studio-Commit sowie der Exportordner werden bis zum Umbenennen mehrfach nachgeprüft.
 - Geschrieben wird das Paket von `werkstatt/publish.py` (python3 der Command Line Tools, nur Standardbibliothek): Jeder Ordner wird ohne Verfolgen von Verknüpfungen geöffnet, jede Datei exklusiv relativ zu diesem Ordner angelegt, und der fertige Ordner bekommt seinen Namen mit `renameatx_np(RENAME_EXCL)`, das nie etwas ersetzt. Geschrieben wird nur in einen echten Exportordner ohne fremde Einträge. Direkt vor dem Umbenennen werden Stand und Bytes noch einmal geprüft. Bei jedem Fehler entfernt die Werkstatt nur, was sie selbst angelegt hat.
 - Gültig ist ein Paket nur, wenn `SHA256SUMS` genau die vorhandenen Dateien auflistet und jede Prüfsumme stimmt; das prüft auch die Übersicht. Ein unvollständiges oder verändertes Paket sperrt weitere Exporte dieses Studios, bis es weggeräumt ist. Ein vorhandenes ZIP wird nie ersetzt.
+
+**Vor Ort** („Vor Ort …“, für Blanko und freigegebene Studios): liefert einen gültigen Export im Studio-WLAN unter `https://inkform-app.local:8443/` an das iPad aus, nur solange er läuft.
+- Zertifikat je Studio unter `~/Library/Application Support/Inkform/zertifikate/<studio>/`: Stammzertifikat (10 Jahre, nur für `inkform-app.local` gültig), Schlüssel mit Passwort verschlüsselt (AES-256; das Passwort wird nie gespeichert, es gehört in den Passwortmanager), Serverzertifikat 825 Tage. Erneuern mit demselben Passwort; am iPad ist dann nichts zu tun. Warnung ab 60 Tagen vor Ablauf.
+- Vor dem Start geprüft: gültiger Export, Zertifikat, WLAN-Adresse, `inkform-app.local` im Netz noch frei (sonst Abbruch, nie ein anderer Name), kein Rückschritt gegenüber der installierten Version, FileVault an. Für Studios zusätzlich: der neutrale Name wurde vorher mit Blanko an einem Test-iPad geprüft und freigegeben.
+- Start: `dns-sd -P` kündigt den Namen für die WLAN-Adresse an (der Mac wird nicht umbenannt), `scripts/serve.mjs --lan` liefert den Export mit dem Studio-Zertifikat aus, gebunden nur an die WLAN-Adresse. Ende nach 30 Minuten ohne Anfrage, per Knopf oder mit der Werkstatt.
+- Anzeige: Adresse groß mit QR-Code (eigener Encoder, mit dem QR-Leser von macOS geprüft), `.webloc` und Stammzertifikat zum AirDrop im Finder (nie der Schlüssel), Checkliste fürs iPad (gespeichert nur Datum), Anfragen nur mit Uhrzeit und Pfad.
+- `serve.mjs` hat dafür drei zusätzliche Schalter (`--cert-dir`, `--bind`, `--log-requests`); ohne sie verhält es sich wie bisher, das prüft ein eigener Test.
+- Nicht geprüft: ob ein echtes iPad `inkform-app.local` findet und das Zertifikat annimmt. Das ist der erste Test mit einem Test-iPad (nicht dem iPad des Bestandsstudios). Time Machine-Verschlüsselung prüft die Werkstatt nicht automatisch.
 
 **Zugriff:** Die Oberfläche lauscht nur auf `127.0.0.1`. Jede Anfrage muss den richtigen Host und ein Sitzungs-Token tragen; dazu kommt eine strenge CSP. So kann keine andere Webseite im Browser die Werkstatt auslesen oder Aktionen starten.
 

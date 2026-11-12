@@ -13,7 +13,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkDraft, commitStudio, createStudio, editable, pendingChanges, readEditable, saveDraft } from "./profile.mjs";
+import { execFile } from "node:child_process";
+import { certStatus, createCert, renewCert } from "./certs.mjs";
 import { exportStudio, listExports, readiness } from "./export.mjs";
+import { ADDRESS, CHECKLIST, approveNeutralName, confirmInstalled, createOnsite, setChecklist, studioState, writeWebloc } from "./onsite.mjs";
+import { qrMatrix } from "./qr.mjs";
 import { createRunner } from "./runs.mjs";
 import {
   blankoMarkers,
@@ -42,6 +46,8 @@ export async function startWerkstatt({
   stateDir = defaultStateDir(),
   certDir = defaultCertDir(),
   git,
+  onsiteOptions = {},
+  reveal = (file) => new Promise((resolve) => execFile("open", ["-R", file], () => resolve())),
 } = {}) {
   // Folders from the environment are fixed as absolute paths once: nothing depends on the
   // working directory (the export temporarily works inside its package folder).
@@ -52,6 +58,7 @@ export async function startWerkstatt({
     if (env[k]) env[k] = env[k].split(path.delimiter).filter(Boolean).map((p) => path.resolve(p)).join(path.delimiter);
   const token = randomBytes(24).toString("hex");
   const runner = createRunner({ stateDir, env });
+  const onsite = createOnsite({ stateDir, env, ...onsiteOptions });
   let statusCache = null;
   // Editing a profile, creating a studio and committing never overlap with each other or with a
   // run (a build reading half-saved files would test something that was never saved).
@@ -133,6 +140,74 @@ export async function startWerkstatt({
       if (text.length > limit) throw Object.assign(Error("Anfrage zu groß."), { status: 413 });
     }
     return text ? JSON.parse(text) : {};
+  }
+
+  // ---------- on-site mode (only Blanko and released studios) ----------
+  async function onsiteEntry(res, key) {
+    const entry = (await studios()).find((e) => e.key === key);
+    if (!entry) return send(res, 404, { error: "Studio nicht gefunden." }), null;
+    if (!entry.actionable) return send(res, 403, { error: entry.protectedReason }), null;
+    return entry;
+  }
+  async function onsiteRoute(req, res, url) {
+    const p = url.pathname;
+    if (req.method === "GET" && p === "/api/vor-ort/laufend") return send(res, 200, { session: onsite.current() });
+    if (req.method === "GET" && p === "/api/vor-ort/qr") return send(res, 200, { address: ADDRESS, ...qrMatrix(ADDRESS) });
+    if (req.method === "POST" && p === "/api/vor-ort/stop") return send(res, 200, { session: onsite.stop("per Knopf beendet") });
+    if (req.method === "GET" && p === "/api/vor-ort") {
+      const entry = await onsiteEntry(res, url.searchParams.get("key"));
+      if (!entry) return;
+      const exports = (await listExports(entry.id, env)).filter((e) => e.valid).reverse().map((e) => ({ name: e.name, version: e.version, date: e.date }));
+      return send(res, 200, {
+        address: ADDRESS,
+        exports,
+        cert: await certStatus(entry.id, env),
+        state: await studioState(stateDir, entry.id),
+        checklist: CHECKLIST,
+        session: onsite.current(),
+        blanko: entry.kind === "blanko",
+      });
+    }
+    const input = req.method === "POST" ? await body(req) : {};
+    const entry = await onsiteEntry(res, input.studio);
+    if (!entry) return;
+    if (p === "/api/vor-ort/pruefen") {
+      const { ok, checks } = await onsite.checks(entry, input.export);
+      return send(res, 200, { ok, checks });
+    }
+    if (p === "/api/vor-ort/start") {
+      const result = await onsite.start(entry, input.export);
+      if (!result.error) await writeWebloc(stateDir);
+      return send(res, result.error ? 409 : 200, result);
+    }
+    if (p === "/api/vor-ort/zertifikat") {
+      // The password is only passed on to openssl; it is never logged or stored.
+      const result = input.action === "renew" ? await renewCert(entry.id, input.password, env) : await createCert(entry.id, input.password, env);
+      return send(res, result.error ? 400 : 200, result.error ? { error: result.error } : { cert: result });
+    }
+    if (p === "/api/vor-ort/finder") {
+      // Shows the root certificate or the .webloc in the Finder for AirDrop. Never the key.
+      const file = input.what === "webloc" ? await writeWebloc(stateDir) : (await certStatus(entry.id, env)).rootFile;
+      if (!file) return send(res, 400, { error: "Noch kein Zertifikat." });
+      await reveal(file);
+      return send(res, 200, { shown: path.basename(file) });
+    }
+    if (p === "/api/vor-ort/checkliste") {
+      const result = await setChecklist(stateDir, entry.id, input.key, input.done === true);
+      return send(res, result.error ? 400 : 200, result);
+    }
+    if (p === "/api/vor-ort/installiert") {
+      const result = await confirmInstalled(stateDir, entry.id, input.version);
+      return send(res, result.error ? 400 : 200, result);
+    }
+    if (p === "/api/vor-ort/freigeben") {
+      // Only after a Blanko session that the (test) iPad actually loaded.
+      const s = onsite.current();
+      if (entry.kind !== "blanko" || !s || s.id !== entry.id || !s.requests.some((r) => r.path === "/" || r.path === "/index.html"))
+        return send(res, 409, { error: "Erst mit Blanko im Vor-Ort-Modus ein Test-iPad die App laden lassen." });
+      return send(res, 200, { neutralApproved: await approveNeutralName(stateDir) });
+    }
+    return send(res, 404, { error: "Unbekannt." });
   }
 
   const server = createServer(async (req, res) => {
@@ -229,6 +304,7 @@ export async function startWerkstatt({
             return send(res, result.error ? 409 : 201, result);
           });
         }
+        if (url.pathname.startsWith("/api/vor-ort")) return onsiteRoute(req, res, url);
         return send(res, 404, { error: "Unbekannt." });
       }
 
@@ -248,11 +324,14 @@ export async function startWerkstatt({
     }
   });
   await new Promise((resolve, reject) => server.once("error", reject).listen(port, "127.0.0.1", resolve));
-  return { server, token, url: `http://127.0.0.1:${server.address().port}/`, runner };
+  server.on("close", () => onsite.cleanup());
+  return { server, token, url: `http://127.0.0.1:${server.address().port}/`, runner, onsite };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const i = process.argv.indexOf("--port");
   const { url } = await startWerkstatt({ port: i > 0 ? Number(process.argv[i + 1]) : 8090 });
   console.log(`Inkform Werkstatt: ${url}  (nur auf diesem Mac, beenden mit Ctrl+C)`);
+  // Ctrl+C ends the Werkstatt and with it a running on-site server and its Bonjour announcement.
+  for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(0));
 }

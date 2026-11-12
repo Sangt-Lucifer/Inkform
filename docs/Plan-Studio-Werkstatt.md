@@ -1,6 +1,6 @@
 # Plan: Studio-Werkstatt
 
-Stand: 11.11.2026 · Phase 1 bis 3 umgesetzt · Phase 4 erst nach deinem Okay
+Stand: 12.11.2026 · Phase 1 bis 4 umgesetzt · offen: erster Test mit einem echten Test-iPad
 
 Die Werkstatt ist eine lokale Oberfläche auf dem Mac. Mit ihr bereitest du die iPad-App für jedes Studio einzeln vor, prüfst sie, exportierst sie und installierst sie vor Ort.
 
@@ -151,6 +151,8 @@ Nie enthalten sind `test-results/`, Exporte, Sicherungen, Zertifikate oder Daten
 **Ablage:** `../Inkform-Exporte/<studio>/`, außerhalb aller Repos. Auf Wunsch zusätzlich als ZIP über `ditto`.
 
 ## Phase 4 – Vor-Ort-Modus
+
+**Umgesetzt** (`werkstatt/certs.mjs`, `onsite.mjs`, `qr.mjs`). Abweichungen: `serve.mjs` bekommt drei statt zwei Optionen (zusätzlich `--log-requests` für das Anfrage-Protokoll ohne Adressen). Die Bonjour-Ankündigung nutzt `_https._tcp`. Ob der Name im Netz frei ist, prüft eine mDNS-Abfrage (bis 6 Sekunden). Time Machine-Verschlüsselung wird nicht automatisch geprüft. Studios können den neutralen Namen erst nutzen, wenn er mit Blanko an einem Test-iPad freigegeben wurde. Am echten iPad ist noch nichts geprüft.
 
 **Vorbereitung im Studio-WLAN:**
 1. Studio und Export auswählen; vorgeschlagen ist der neueste.

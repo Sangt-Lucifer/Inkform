@@ -363,3 +363,24 @@ label.check {
   color: var(--ink);
   margin: 12px 0;
 }
+.address {
+  font-size: 28px;
+  font-weight: 700;
+  word-break: break-all;
+  margin: 12px 0;
+}
+.qr-wrap {
+  background: #fff;
+  display: inline-block;
+  padding: 8px;
+  border-radius: 8px;
+}
+#onsite-qr {
+  width: 220px;
+  height: 220px;
+  display: block;
+}
+h3 {
+  font-size: 15px;
+  margin: 14px 0 4px;
+}

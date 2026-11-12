@@ -93,6 +93,7 @@ function card(s, busy) {
           el("button", { type: "button", class: cls, disabled: busy, "data-studio": s.key, "data-kind": kind }, label),
         ),
         el("button", { type: "button", disabled: busy, "data-export": s.key, "data-name": s.name || s.id }, "Exportieren …"),
+        el("button", { type: "button", "data-onsite": s.key, "data-name": s.name || s.id }, "Vor Ort …"),
       )
     : el("p", { class: "lock-text" }, s.protectedReason);
   const edit =
@@ -502,6 +503,156 @@ $("studios").addEventListener("click", async (event) => {
   } catch (error) {
     showError(error.message);
   }
+});
+
+// ---------- on-site mode ----------
+let onsiteKey = null,
+  onsiteData = null,
+  onsiteTimer = null;
+const SVG = "http://www.w3.org/2000/svg";
+async function drawQr() {
+  const { modules } = await api("/api/vor-ort/qr");
+  const size = modules.length + 8;
+  const svg = $("onsite-qr");
+  svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+  svg.setAttribute("shape-rendering", "crispEdges");
+  const parts = [];
+  modules.forEach((row, r) => row.forEach((dark, c) => dark && parts.push(`M${c + 4} ${r + 4}h1v1h-1z`)));
+  const p = document.createElementNS(SVG, "path");
+  p.setAttribute("d", parts.join(""));
+  p.setAttribute("fill", "#000");
+  svg.replaceChildren(p);
+}
+function renderOnsite() {
+  const d = onsiteData;
+  if (!d) return;
+  const cert = d.cert;
+  $("onsite-cert").textContent = cert.exists
+    ? `Gültig für ${cert.host}. Server bis ${date(cert.server?.until)} (${cert.server?.daysLeft} Tage), Stammzertifikat bis ${date(cert.root?.until)}.${cert.warnings?.length ? " " + cert.warnings.join(" ") : ""}`
+    : `Noch kein Zertifikat. Es wird nur für ${cert.host} gelten.`;
+  $("onsite-cert-create").disabled = cert.exists;
+  $("onsite-cert-renew").disabled = $("onsite-cert-show").disabled = !cert.exists;
+  const s = d.session && !d.session.endedAt ? d.session : null;
+  const mine = s && s.studio === onsiteKey;
+  $("onsite-running").hidden = !mine;
+  $("onsite-start").disabled = !!s;
+  $("onsite-stop").disabled = !s;
+  if (mine) {
+    $("onsite-address").textContent = s.address;
+    $("onsite-info").textContent = `Läuft seit ${date(s.startedAt)} auf ${s.ip} mit ${s.exportName}. Endet nach ${s.idleMinutes} Minuten ohne Anfrage oder per Knopf.`;
+    $("onsite-log").replaceChildren(...[...s.requests].reverse().map((r) => el("li", {}, `${date(r.at)} · iPad hat geladen: ${r.path}`)));
+  } else if (d.session?.endedAt && d.session.studio === onsiteKey) {
+    $("onsite-info").textContent = `Beendet ${date(d.session.endedAt)}: ${d.session.reason}`;
+  }
+  $("onsite-checklist").replaceChildren(
+    ...d.checklist.map(([key, label]) => {
+      const box = el("input", { type: "checkbox", checked: !!d.state.checklist[key], "data-check": key });
+      return el("label", { class: "check" }, box, `${label}${d.state.checklist[key] ? ` (${d.state.checklist[key]})` : ""}`);
+    }),
+  );
+  const chosen = d.exports.find((e) => e.name === $("onsite-export").value);
+  $("onsite-installed").disabled = !chosen;
+  $("onsite-installed").textContent = chosen ? `Installation von ${chosen.version} bestätigen` : "Installation bestätigen";
+  $("onsite-state").textContent = d.state.installed ? `Installiert: ${d.state.installed.version} am ${d.state.installed.date}.` : "Noch keine Installation bestätigt.";
+  $("onsite-approve").hidden = !d.blanko || !!d.state.neutralApproved;
+}
+async function refreshOnsite() {
+  if (!onsiteKey) return;
+  onsiteData = await api(`/api/vor-ort?key=${encodeURIComponent(onsiteKey)}`);
+  renderOnsite();
+}
+async function openOnsite(key, name) {
+  showError("");
+  try {
+    onsiteKey = key;
+    onsiteData = await api(`/api/vor-ort?key=${encodeURIComponent(key)}`);
+    $("onsite-title").textContent = `Vor Ort · ${name}`;
+    $("onsite-export").replaceChildren(
+      ...(onsiteData.exports.length ? onsiteData.exports.map((e) => el("option", { value: e.name }, `${e.name}`)) : [el("option", { value: "" }, "noch kein gültiger Export")]),
+    );
+    $("onsite-checks").replaceChildren();
+    $("onsite-password").value = "";
+    $("onsite").hidden = false;
+    renderOnsite();
+    await drawQr();
+    $("onsite").scrollIntoView({ block: "start" });
+    clearInterval(onsiteTimer);
+    onsiteTimer = setInterval(() => refreshOnsite().catch(() => {}), 2000);
+  } catch (error) {
+    showError(error.message);
+  }
+}
+const onsitePost = (pathname, extra = {}) => api(pathname, { method: "POST", body: JSON.stringify({ studio: onsiteKey, ...extra }) });
+async function onsiteAction(button, work) {
+  button.disabled = true;
+  showError("");
+  try {
+    await work();
+    await refreshOnsite();
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    renderOnsite();
+    if (button.id === "onsite-check") button.disabled = false;
+  }
+}
+$("onsite-check").addEventListener("click", () =>
+  onsiteAction($("onsite-check"), async () => {
+    $("onsite-checks").replaceChildren(el("li", {}, el("span", { class: "badge busy" }, "prüft …")));
+    const { checks } = await onsitePost("/api/vor-ort/pruefen", { export: $("onsite-export").value });
+    $("onsite-checks").replaceChildren(...checks.map((c) => el("li", {}, el("span", { class: `badge ${c.ok ? "ok" : "bad"}` }, c.ok ? "ok" : "fehlt"), " ", c.text)));
+  }),
+);
+for (const [id, action] of [
+  ["onsite-cert-create", "create"],
+  ["onsite-cert-renew", "renew"],
+])
+  $(id).addEventListener("click", () =>
+    onsiteAction($(id), async () => {
+      await onsitePost("/api/vor-ort/zertifikat", { action, password: $("onsite-password").value });
+      $("onsite-password").value = "";
+    }),
+  );
+$("onsite-cert-show").addEventListener("click", () => onsiteAction($("onsite-cert-show"), () => onsitePost("/api/vor-ort/finder", { what: "zertifikat" })));
+$("onsite-webloc").addEventListener("click", () => onsiteAction($("onsite-webloc"), () => onsitePost("/api/vor-ort/finder", { what: "webloc" })));
+$("onsite-start").addEventListener("click", () =>
+  onsiteAction($("onsite-start"), async () => {
+    const response = await fetch("/api/vor-ort/start", {
+      method: "POST",
+      headers: { "X-Werkstatt-Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ studio: onsiteKey, export: $("onsite-export").value }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (data.checks)
+        $("onsite-checks").replaceChildren(...data.checks.map((c) => el("li", {}, el("span", { class: `badge ${c.ok ? "ok" : "bad"}` }, c.ok ? "ok" : "fehlt"), " ", c.text)));
+      throw new Error(data.error || `Fehler ${response.status}`);
+    }
+  }),
+);
+$("onsite-stop").addEventListener("click", () => onsiteAction($("onsite-stop"), () => api("/api/vor-ort/stop", { method: "POST", body: "{}" })));
+$("onsite-checklist").addEventListener("change", (event) => {
+  const box = event.target.closest("input[data-check]");
+  if (box) onsiteAction(box, () => onsitePost("/api/vor-ort/checkliste", { key: box.dataset.check, done: box.checked }));
+});
+$("onsite-installed").addEventListener("click", () => {
+  const chosen = onsiteData?.exports.find((e) => e.name === $("onsite-export").value);
+  if (chosen && confirm(`Bestätigen, dass ${chosen.version} jetzt auf dem iPad installiert ist?`))
+    onsiteAction($("onsite-installed"), () => onsitePost("/api/vor-ort/installiert", { version: chosen.version }));
+});
+$("onsite-approve").addEventListener("click", () => {
+  if (confirm("Hat das Test-iPad die App über inkform-app.local geladen und das Zertifikat angenommen?"))
+    onsiteAction($("onsite-approve"), () => onsitePost("/api/vor-ort/freigeben"));
+});
+$("onsite-export").addEventListener("change", renderOnsite);
+$("onsite-close").addEventListener("click", () => {
+  clearInterval(onsiteTimer);
+  onsiteKey = null;
+  $("onsite").hidden = true;
+});
+$("studios").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-onsite]");
+  if (button) openOnsite(button.dataset.onsite, button.dataset.name);
 });
 
 window.addEventListener("beforeunload", (event) => {

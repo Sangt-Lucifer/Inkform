@@ -16,7 +16,7 @@ const profile = JSON.parse(await readFile(path.join(studioDir, "profile.json"), 
 await writeFile(path.join(studioDir, "profile.json"), JSON.stringify({ ...profile, id: "testatelier", name: "Testatelier" }));
 const { server, url } = await startWerkstatt({
   port: 0,
-  env: { ...process.env, INKFORM_STUDIOS: path.join(base, "studios"), INKFORM_EXPORTE: path.join(base, "exporte") },
+  env: { ...process.env, INKFORM_STUDIOS: path.join(base, "studios"), INKFORM_EXPORTE: path.join(base, "exporte"), INKFORM_ZERTIFIKATE: path.join(base, "zertifikate") },
   stateDir: path.join(base, "state"),
   certDir: path.join(base, "keine-zertifikate"),
 });
@@ -81,6 +81,17 @@ try {
     await ev(`document.getElementById('export-reasons').textContent.includes('noch nicht gelaufen') && document.getElementById('export-ok').disabled`),
   );
   await ev(`document.getElementById('export-cancel').click()`);
+
+  // Phase 4: the on-site panel opens, shows the QR code and starts nothing by itself.
+  check("Geschütztes Studio: kein Vor-Ort-Knopf", await ev(`!document.querySelector('.card[data-key="s-testatelier"] [data-onsite]')`));
+  await ev(`document.querySelector('.card[data-key="blanko"] [data-onsite]').click()`);
+  await until(`!document.getElementById('onsite').hidden && document.querySelector('#onsite-qr path')`);
+  check(
+    "Vor-Ort: QR-Code gezeichnet, Zertifikat noch nicht vorhanden, nichts gestartet",
+    await ev(`document.querySelector('#onsite-qr path').getAttribute('d').length > 100 && document.getElementById('onsite-cert').textContent.includes('Noch kein Zertifikat') && document.getElementById('onsite-running').hidden && !document.getElementById('onsite-start').disabled`),
+  );
+  await screenshot("werkstatt-vor-ort");
+  await ev(`document.getElementById('onsite-close').click()`);
   if (errors.length) console.log("Fehler:", JSON.stringify(errors).slice(0, 1500));
   check("Keine JavaScript- oder CSP-Fehler", errors.length === 0);
 } finally {

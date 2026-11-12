@@ -98,6 +98,57 @@
           </fieldset>
         </form>
       </section>
+      <section id="onsite" class="editor" hidden aria-labelledby="onsite-title">
+        <div class="editor-head">
+          <div>
+            <h2 id="onsite-title">Vor Ort</h2>
+            <p class="muted">Liefert einen geprüften Export im Studio-WLAN an das iPad aus, nur solange er läuft. Es werden keine Daten vom iPad angenommen.</p>
+          </div>
+          <div class="actions"><button type="button" id="onsite-close">Schließen</button></div>
+        </div>
+        <fieldset>
+          <legend>1 · Export und Voraussetzungen</legend>
+          <label>Export <select id="onsite-export"></select></label>
+          <div class="actions"><button type="button" id="onsite-check">Voraussetzungen prüfen</button></div>
+          <ul id="onsite-checks" class="facts"></ul>
+        </fieldset>
+        <fieldset>
+          <legend>2 · Zertifikat dieses Studios</legend>
+          <p id="onsite-cert" class="muted"></p>
+          <p class="muted">Das Passwort schützt den Schlüssel des Stammzertifikats und wird nur zum Erzeugen und Erneuern gebraucht. Es wird nicht gespeichert: bitte im Passwortmanager ablegen.</p>
+          <label>Passwort <input type="password" id="onsite-password" autocomplete="new-password" minlength="12" maxlength="200" /></label>
+          <div class="actions">
+            <button type="button" id="onsite-cert-create">Zertifikat erzeugen</button>
+            <button type="button" id="onsite-cert-renew">Serverzertifikat erneuern</button>
+            <button type="button" id="onsite-cert-show">Zertifikat im Finder zeigen</button>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>3 · Ausliefern</legend>
+          <div class="actions">
+            <button type="button" id="onsite-start" class="primary">Vor-Ort-Modus starten</button>
+            <button type="button" id="onsite-stop">Beenden</button>
+          </div>
+          <div id="onsite-running" hidden>
+            <p class="address" id="onsite-address"></p>
+            <div class="qr-wrap"><svg id="onsite-qr" role="img" aria-label="QR-Code mit der Adresse"></svg></div>
+            <div class="actions"><button type="button" id="onsite-webloc">Adresse als .webloc im Finder zeigen</button></div>
+            <p class="muted" id="onsite-info"></p>
+            <h3>Anfragen</h3>
+            <ul id="onsite-log" class="files"></ul>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>4 · Checkliste am iPad</legend>
+          <p class="muted">Nur abhaken, was du am iPad gesehen hast. Gespeichert wird nur das Datum.</p>
+          <div id="onsite-checklist"></div>
+          <div class="actions">
+            <button type="button" id="onsite-installed">Installation bestätigen</button>
+            <button type="button" id="onsite-approve" hidden>Test-iPad hat inkform-app.local geladen: neutralen Namen freigeben</button>
+          </div>
+          <p id="onsite-state" class="muted"></p>
+        </fieldset>
+      </section>
     </main>
     <dialog id="new-dialog">
       <form method="dialog" id="new-form">

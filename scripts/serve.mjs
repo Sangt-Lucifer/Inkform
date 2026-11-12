@@ -14,6 +14,11 @@ import path from "node:path";
 // serves HTTPS on port 8443 with the certificate from scripts/lokales-zertifikat.mjs, reachable
 // as https://<mac>.local:8443. Keep host name and port unchanged: the iPad stores the app's data
 // per address. Only the static app is served; customer data never passes through this server.
+//
+// Additional options, used by the Werkstatt's on-site mode (without them nothing changes):
+//   --cert-dir <ordner>   certificate folder (server.key, server.crt, host.txt) instead of the default
+//   --bind <ip>           listen only on this address (e.g. the Wi-Fi address) instead of all
+//   --log-requests        one line per request: time and path, never the client address
 import { defaultOut, resolveProfileDir } from "./build.mjs";
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(name);
@@ -34,7 +39,9 @@ const types = {
   ".txt": "text/plain; charset=utf-8",
 };
 
+const logRequests = process.argv.includes("--log-requests");
 const handler = async (request, response) => {
+  if (logRequests) console.log(`ANFRAGE ${new Date().toISOString()} ${request.method} ${new URL(request.url, "http://localhost").pathname}`);
   try {
     if (!["GET", "HEAD"].includes(request.method)) {
       response.writeHead(405).end();
@@ -61,13 +68,13 @@ const handler = async (request, response) => {
 };
 
 if (lan) {
-  const dir = path.join(homedir(), "Library", "Application Support", "Inkform", "zertifikat");
+  const dir = path.resolve(arg("--cert-dir", path.join(homedir(), "Library", "Application Support", "Inkform", "zertifikat")));
   const read = (n) =>
     readFile(path.join(dir, n)).catch(() => {
       throw new Error(`Zertifikat fehlt (${n}). Zuerst: node scripts/lokales-zertifikat.mjs`);
     });
   const [key, cert, host] = await Promise.all([read("server.key"), read("server.crt"), read("host.txt")]);
-  createHttpsServer({ key, cert }, handler).listen(port, "0.0.0.0", () => {
+  createHttpsServer({ key, cert }, handler).listen(port, arg("--bind", "0.0.0.0"), () => {
     console.log(`Für das iPad: https://${String(host).trim()}:${port}/  (${root})`);
     console.log("Läuft nur, solange dieses Fenster offen ist. Beenden mit Ctrl+C.");
   });
