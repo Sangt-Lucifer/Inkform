@@ -17,7 +17,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defaultOut, isBuiltin, resolveProfileDir, root } from "../../scripts/build.mjs";
 
-const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "export", "sicherung", "schriftgroessen", "offline", "update", "werkstatt", "blanko"];
+const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "export", "kopien", "sicherung", "schriftgroessen", "offline", "update", "werkstatt", "blanko"];
 // Checks bound to one built-in profile; that profile runs only these.
 const PROFILE_CHECKS = { blanko: ["blanko"] };
 // Checks of the core itself, not of a studio's app: only with the built-in profile.

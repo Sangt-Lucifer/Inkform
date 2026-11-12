@@ -25,6 +25,9 @@ const incomeFields = [
   // name and PDF reference removed from this list.
   "pdfDeletedAt",
   "anonymizedAt",
+  // Optional date: the copy kept in the app for the ZIP export was deleted on purpose. The PDF in
+  // the Files app or elsewhere is not affected.
+  "pdfRemovedAt",
 ];
 export function incomeId() {
   return (
@@ -77,7 +80,7 @@ export function validateIncomeRecord(value) {
     throw Error("Ungültige Angabe: pdfMissing.");
   // Stored only when set, so existing entries and backups stay unchanged.
   if (value.pdfMissing === true) row.pdfMissing = true;
-  for (const key of ["pdfDeletedAt", "anonymizedAt"]) {
+  for (const key of ["pdfDeletedAt", "anonymizedAt", "pdfRemovedAt"]) {
     if (value[key] === undefined || value[key] === null || value[key] === "") continue;
     if (
       typeof value[key] !== "string" ||
@@ -109,6 +112,8 @@ export function validateIncomeBackup(value) {
 function keepAnonymized(old, row) {
   if (old?.anonymizedAt && !row.anonymizedAt)
     throw Error("Ein anonymisierter Eintrag kann nicht wiederhergestellt werden.");
+  if (old?.pdfRemovedAt && !row.pdfRemovedAt)
+    throw Error("Eine aus der App gelöschte PDF-Kopie lässt sich nicht zurückholen.");
 }
 export function createIncomeStore(storage) {
   function read() {
@@ -275,6 +280,8 @@ export function createIncomeFeature({
   showReport,
   isUnlocked,
   onChange = () => {},
+  copies = () => new Set(),
+  removeCopy = () => {},
 }) {
   const store = createIncomeStore(storage);
   const filters = { artist: "", unassigned: false, year: today().slice(0, 4), month: "" };
@@ -362,6 +369,7 @@ export function createIncomeFeature({
         // Retention marks are kept when an entry is edited.
         pdfDeletedAt: editing?.pdfDeletedAt,
         anonymizedAt: editing?.anonymizedAt,
+        pdfRemovedAt: editing?.pdfRemovedAt,
       });
       if (editing) store.update(row, editing.updatedAt);
       else store.add(row);
@@ -414,7 +422,8 @@ export function createIncomeFeature({
         return '<p class="ad-notice">Bitte den Admin-Bereich mit der Inhaber-PIN entsperren.</p>';
       const all = store.list(),
         rows = selectIncome(all, filters),
-        summary = summarizeIncome(rows);
+        summary = summarizeIncome(rows),
+        inApp = copies();
       const artistNames = new Map();
       for (const row of all)
         if (!artistNames.has(normalizeArtist(row.artist)))
@@ -462,7 +471,7 @@ export function createIncomeFeature({
       <div class="income-summary"><strong>${money(summary.totalCents)}<small>Summe bekannter Gesamtpreise</small></strong><strong>${summary.count}<small>Einwilligungen</small></strong><strong>${summary.open}<small>Preise offen – nicht in der Summe</small></strong></div>
       <div class="ad-actions-row income-actions"><button class="ad-button primary" data-income-action="add">Einwilligung nachtragen</button><button class="ad-button" data-income-action="pdf"${rows.length ? "" : " disabled"}>Gefilterte Liste als PDF</button><button class="ad-button" data-income-action="csv"${rows.length ? "" : " disabled"}>Gefilterte Liste als CSV</button></div>
       <p class="ad-preview-note">Neue Einwilligungen werden übernommen, sobald du als Inhaber die Ablage des unterschriebenen PDFs bestätigst. Ältere PDFs hier nachtragen; die App durchsucht keine Dateien-Ordner.</p>
-      <div class="income-table-wrap"><table class="income-table"><caption>Einwilligungen im gewählten Zeitraum</caption><thead><tr><th>Termin</th><th>Artist</th><th>Name</th><th>Gesamtkosten</th><th>Anzahlung</th><th>Bearbeiten</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td>${e(r.date.split("-").reverse().join("."))}</td><td>${e(r.artist || "Nicht zugeordnet")}</td><td>${e(r.customer)}${r.pdfMissing ? ' <span class="income-open">PDF fehlt</span>' : ""}${r.source ? `<small>${e(r.source)}</small>` : ""}${r.pdfDeletedAt ? `<small>PDF gelöscht am ${e(r.pdfDeletedAt.split("-").reverse().join("."))}</small>` : ""}</td><td>${r.totalCents === null ? '<span class="income-open">Preis offen</span>' : money(r.totalCents)}</td><td>${r.depositCents === null ? "–" : money(r.depositCents)}</td><td><button class="ad-button" data-income-edit="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} bearbeiten">Bearbeiten</button><button class="ad-button danger" data-income-remove="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} entfernen">Entfernen</button></td></tr>`).join("") : '<tr><td colspan="6">Keine Einwilligungen für diese Auswahl.</td></tr>'}</tbody></table></div>
+      <div class="income-table-wrap"><table class="income-table"><caption>Einwilligungen im gewählten Zeitraum</caption><thead><tr><th>Termin</th><th>Artist</th><th>Name</th><th>Gesamtkosten</th><th>Anzahlung</th><th>Bearbeiten</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td>${e(r.date.split("-").reverse().join("."))}</td><td>${e(r.artist || "Nicht zugeordnet")}</td><td>${e(r.customer)}${r.pdfMissing ? ' <span class="income-open">PDF fehlt</span>' : ""}${r.source ? `<small>${e(r.source)}</small>` : ""}${r.pdfDeletedAt ? `<small>PDF gelöscht am ${e(r.pdfDeletedAt.split("-").reverse().join("."))}</small>` : ""}${r.pdfRemovedAt ? "<small>PDF nicht mehr in der App</small>" : ""}</td><td>${r.totalCents === null ? '<span class="income-open">Preis offen</span>' : money(r.totalCents)}</td><td>${r.depositCents === null ? "–" : money(r.depositCents)}</td><td><button class="ad-button" data-income-edit="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} bearbeiten">Bearbeiten</button><button class="ad-button danger" data-income-remove="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} entfernen">Entfernen</button>${inApp.has(r.id) ? `<button class="ad-button" data-income-copy="${e(r.id)}" aria-label="PDF-Kopie für ${e(r.customer)} aus der App löschen">PDF-Kopie aus der App löschen</button>` : ""}</td></tr>`).join("") : '<tr><td colspan="6">Keine Einwilligungen für diese Auswahl.</td></tr>'}</tbody></table></div>
       <details class="income-daily"><summary>Tagessummen je Artist</summary><ul>${
         [...daily.values()]
           .map((day) => {
@@ -666,6 +675,10 @@ export function createIncomeFeature({
           notify(`${rows.length} Einträge anonymisiert.`);
         }
       }
+      if (button.dataset.incomeCopy) {
+        const row = store.list().find((r) => r.id === button.dataset.incomeCopy);
+        if (row) removeCopy(row);
+      }
       if (button.dataset.incomeEdit)
         openEdit(store.list().find((r) => r.id === button.dataset.incomeEdit));
       if (button.dataset.incomeRemove) {
@@ -719,6 +732,18 @@ export function createIncomeFeature({
     reportPdf: (rows, scope) => reportPdf(rows, scope).blob,
     removeMany(ids) {
       store.removeMany(ids);
+      refresh();
+    },
+    refresh,
+    // Marks entries whose copy in the app is deleted; all or nothing.
+    markCopiesRemoved(ids, day) {
+      const now = new Date().toISOString();
+      store.updateMany(
+        store
+          .list()
+          .filter((r) => ids.includes(r.id) && !r.pdfRemovedAt)
+          .map((r) => ({ record: { ...r, pdfRemovedAt: day, updatedAt: now }, expected: r.updatedAt })),
+      );
       refresh();
     },
     lock() {

@@ -122,5 +122,22 @@ export function createIndexedDbFiles(indexedDB = globalThis.indexedDB, name = "i
     delete: (key) => run("readwrite", (s) => s.delete(key)),
     clear: () => run("readwrite", (s) => s.clear()),
     keys: () => run("readonly", (s) => s.getAllKeys()),
+    // Byte size per key, read one entry at a time.
+    sizes: async () => {
+      const db = await open(),
+        sizes = new Map();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("files", "readonly"),
+          request = tx.objectStore("files").openCursor();
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (!cursor) return;
+          sizes.set(cursor.key, cursor.value?.data?.byteLength ?? 0);
+          cursor.continue();
+        };
+        tx.oncomplete = () => resolve(sizes);
+        tx.onerror = tx.onabort = () => reject(tx.error || request.error);
+      });
+    },
   };
 }

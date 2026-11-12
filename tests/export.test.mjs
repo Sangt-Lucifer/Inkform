@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { addRemovedIds, periodExported, readRemovedIds } from "../src/export.js";
+import { createIncomeStore } from "../src/income.js";
+import { dueForPdfDeletion } from "../src/retention.js";
 import { consentFileName, createExportFeature, exportPeriod, unexportedMonths, validateExportLog, exportPlan, exportable, formatSize, previousMonth, uniqueNames } from "../src/export.js";
 import { anonymizeRecord } from "../src/retention.js";
 
@@ -148,14 +151,21 @@ test("size for the preview", () => {
 });
 
 // The feature with a minimal page: only the elements it touches.
-function feature({ records, archive }) {
+function feature({ records, archive, removed = new Set() }) {
   const listeners = [],
     elements = {
       "admin-app": { addEventListener: (type, fn) => type === "change" && listeners.push(fn) },
       "export-preview": { textContent: "", classList: { add() {}, remove() {}, toggle() {} } },
       "export-save": { disabled: true },
+      "export-delete": { disabled: true, textContent: "" },
+      "copies-usage": { textContent: "", classList: { toggle() {} } },
     };
-  globalThis.document = { getElementById: (id) => elements[id] ?? null, querySelectorAll: () => [] };
+  globalThis.document = {
+    getElementById: (id) => elements[id] ?? null,
+    querySelectorAll: () => [],
+    createElement: () => ({ setAttribute() {}, addEventListener() {} }),
+    body: { append() {} },
+  };
   const exporter = createExportFeature({
     archive,
     records,
@@ -165,6 +175,9 @@ function feature({ records, archive }) {
     notify() {},
     save: async () => "share",
     logExport() {},
+    exportLog: () => [],
+    removedIds: () => removed,
+    removeCopies: async () => {},
     today: () => "2026-04-10",
   });
   const change = (id, value) => listeners.forEach((fn) => fn({ target: { id, value } }));
@@ -172,7 +185,7 @@ function feature({ records, archive }) {
     for (let n = 0; n < 50 && /berechnet|^$/.test(elements["export-preview"].textContent); n++) await new Promise((r) => setTimeout(r, 5));
     return elements["export-preview"].textContent;
   };
-  return { exporter, change, preview };
+  return { exporter, change, preview, elements };
 }
 const memoryArchive = (keys) => {
   const map = new Map(keys.map((k) => [k, new Blob(["%PDF"])]));
@@ -250,4 +263,70 @@ test("export log: checked entries only", () => {
   assert.throws(() => validateExportLog({}), /Protokoll/);
   assert.throws(() => validateExportLog([{ from: "2026-01-01", to: "2026-01-31", type: "alles", at: "x" }]), /Protokoll/);
   assert.throws(() => validateExportLog([{ from: "2026-02-30", to: "2026-03-01", type: "all", at: "x" }]), /Datum/);
+});
+
+const memoryStorage = () => {
+  const map = new Map();
+  return { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, String(v)) };
+};
+
+test("copy deleted from the app: excluded from the export, named in the preview, separate from deleted", () => {
+  const records = [row("a", "2026-03-01"), row("b", "2026-03-02", { pdfRemovedAt: "2026-04-01" }), row("c", "2026-03-03", { pdfDeletedAt: "2026-04-01" })];
+  assert.deepEqual(records.filter(exportable).map((r) => r.id), ["a"]);
+  const plan = exportPlan(records, new Set(["a", "b", "c"]), exportPeriod({ kind: "month", month: "2026-03" }), "all");
+  assert.deepEqual([ids(plan), plan.withoutPdf, plan.removed], [["a"], 2, 1]);
+  assert.equal(exportPlan(records, new Set(), exportPeriod({ kind: "month", month: "2026-03" }), "income").removed, 0);
+  // Still in the Files app as far as the app knows: stays on the retention list.
+  assert.deepEqual(dueForPdfDeletion(records, 1, "2027-06-01").map((r) => r.id), ["a", "b"]);
+});
+
+test("the list of deleted copies only grows and refuses damaged values", () => {
+  const storage = memoryStorage();
+  assert.deepEqual([...readRemovedIds(storage)], []);
+  addRemovedIds(storage, ["a", "b"]);
+  addRemovedIds(storage, ["b", "c"]);
+  assert.deepEqual([...readRemovedIds(storage)], ["a", "b", "c"]);
+  assert.throws(() => addRemovedIds(storage, ["../x"]), /Ungültige Liste/);
+  storage.setItem("inkform.pdf-removed.v1", "{}");
+  assert.throws(() => readRemovedIds(storage), /Ungültige Liste/);
+});
+
+test("the mark \u201ePDF nicht mehr in der App\u201c cannot be taken back, neither by editing nor by import", () => {
+  const store = createIncomeStore(memoryStorage());
+  store.add(row("a", "2026-03-01"));
+  const marked = { ...row("a", "2026-03-01"), pdfRemovedAt: "2026-04-01", updatedAt: "2026-04-01T00:00:00.000Z" };
+  store.updateMany([{ record: marked, expected: "2026-01-01T00:00:00.000Z" }]);
+  assert.throws(() => store.update({ ...marked, pdfRemovedAt: "", updatedAt: "2026-04-02T00:00:00.000Z" }, marked.updatedAt), /nicht zurückholen/);
+  assert.throws(() => store.merge({ schemaVersion: 1, records: [row("a", "2026-03-01")] }), /abweichenden Eintrag/);
+  assert.equal(store.list()[0].pdfRemovedAt, "2026-04-01");
+  assert.throws(() => store.add({ ...row("x", "2026-03-01"), pdfRemovedAt: "gestern" }), /pdfRemovedAt/);
+});
+
+test("periodExported: only a saved ZIP with consents that covers the whole period", () => {
+  const march = exportPeriod({ kind: "month", month: "2026-03" });
+  assert.equal(periodExported([], march), false);
+  assert.equal(periodExported([{ from: "2026-03-01", to: "2026-03-31", type: "income", at: "x" }], march), false);
+  assert.equal(periodExported([{ from: "2026-03-02", to: "2026-03-31", type: "all", at: "x" }], march), false);
+  assert.equal(periodExported([{ from: "2026-01-01", to: "2026-12-31", type: "consents", at: "x" }], march), true);
+});
+
+test("deleted copies are not offered by the feature", async () => {
+  const list = [row("a", "2026-03-01"), row("b", "2026-03-02")],
+    archive = memoryArchive(["a", "b"]);
+  const { exporter } = feature({ records: () => list, archive, removed: new Set(["b"]) });
+  await exporter.sync();
+  assert.deepEqual([...archive.map.keys()], ["a"]);
+  assert.deepEqual([...exporter.copies()], ["a"]);
+});
+
+test("storage display: count and size of the copies, a hint from 200 MB", async () => {
+  const list = [row("a", "2026-03-01"), row("b", "2026-03-02"), row("c", "2026-03-03", { pdfRemovedAt: "2026-04-01" })],
+    archive = memoryArchive([]);
+  archive.sizes = async () => new Map([["a", 150 * 1024 * 1024], ["b", 60 * 1024 * 1024], ["c", 999]]);
+  const { exporter, elements } = feature({ records: () => list, archive });
+  await exporter.usage();
+  assert.match(elements["copies-usage"].textContent, /^2 PDF-Kopien in der App, zusammen 210 MB\. Das ist viel Speicher/);
+  archive.sizes = async () => new Map([["a", 1024 * 1024]]);
+  await exporter.usage();
+  assert.equal(elements["copies-usage"].textContent, "1 PDF-Kopie in der App, zusammen 1 MB.");
 });

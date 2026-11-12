@@ -4,9 +4,25 @@ import { STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
 import { PDF_FONT, createPdfDocument, unsupportedPdfChars } from "./pdf-fonts.js";
 import { createIndexedDbFiles, createPendingStore } from "./pending.js";
 import { birthDateValid, fileSlug, moneyCents, studioInitials } from "./consent.js";
-import { ARCHIVE_DB, EXPORT_LOG_KEY, createExportFeature, formatSize, readExportLog } from "./export.js";
+import {
+  ARCHIVE_DB,
+  EXPORT_LOG_KEY,
+  PDF_REMOVED_KEY,
+  addRemovedIds,
+  createExportFeature,
+  formatSize,
+  readExportLog,
+  readRemovedIds,
+} from "./export.js";
 import { isSample, sampleRecords } from "./sample.js";
-import { BACKUP_INTERVALS, BACKUP_INTERVAL_KEY, createFullBackup, readBackupDays, readFullBackup } from "./backup.js";
+import {
+  BACKUP_INTERVALS,
+  BACKUP_INTERVAL_KEY,
+  applyRemovals,
+  createFullBackup,
+  readBackupDays,
+  readFullBackup,
+} from "./backup.js";
 import {
   LAST_BACKUP_KEY,
   PENDING_REMINDER_DAYS,
@@ -1518,6 +1534,7 @@ async function createBackup() {
       backupDays: readBackupDays(localStorage),
       exports: readExportLog(localStorage),
       records: incomeFeature.list(),
+      removed: readRemovedIds(localStorage),
       pdfs: await exportFeature.pdfs(),
     });
     preparedBackup = new File([JSON.stringify(backup)], `Inkform_Sicherung_${localDate()}.json`, { type: "application/json" });
@@ -1563,20 +1580,22 @@ backupPicker.addEventListener("change", async () => {
     if ((pendingConsent && !pendingConsent.confirmed) || pendingStore.read())
       throw Error("Bitte zuerst die offene Einwilligung ablegen und bestätigen.");
     if (adminChanged()) throw Error("Bitte zuerst die Änderungen speichern oder verwerfen.");
-    const data = readFullBackup(JSON.parse(await file.text()), validateSettings);
+    const data = readFullBackup(JSON.parse(await file.text()), validateSettings),
+      { removed, records, pdfs, skipped } = applyRemovals(data, readRemovedIds(localStorage), incomeFeature.list(), localDate());
     if (
       !window.confirm(
-        `Sicherung vom ${timeFormat(new Date(data.createdAt))} wiederherstellen?\n\nSie enthält ${data.records.length} Einträge, ${data.pdfs.length} PDFs, Einstellungen und Fristen.\n\nAlles auf diesem Gerät wird ersetzt: Einnahmenliste (aktuell ${incomeFeature.list().length} Einträge), PDFs für den ZIP-Export, Einstellungen, Fristen und Export-Protokoll. Das lässt sich nicht rückgängig machen. Die PIN bleibt.`,
+        `Sicherung vom ${timeFormat(new Date(data.createdAt))} wiederherstellen?\n\nSie enthält ${data.records.length} Einträge, ${data.pdfs.length} PDFs, Einstellungen und Fristen.${skipped ? ` ${skipped} PDF-Kopien wurden auf diesem Gerät schon aus der App gelöscht und werden nicht zurückgeholt.` : ""}\n\nAlles auf diesem Gerät wird ersetzt: Einnahmenliste (aktuell ${incomeFeature.list().length} Einträge), PDFs für den ZIP-Export, Einstellungen, Fristen und Export-Protokoll. Das lässt sich nicht rückgängig machen. Die PIN bleibt.`,
       )
     )
       return;
-    await exportFeature.restore(data.pdfs);
+    localStorage.setItem(PDF_REMOVED_KEY, JSON.stringify([...removed]));
+    await exportFeature.restore(pdfs);
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
     localStorage.setItem(THEME_KEY, data.theme);
     writeRetention(localStorage, data.retention);
     localStorage.setItem(BACKUP_INTERVAL_KEY, String(data.backupDays));
     localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(data.exports));
-    localStorage.setItem(INCOME_KEY, JSON.stringify({ schemaVersion: 1, records: data.records }));
+    localStorage.setItem(INCOME_KEY, JSON.stringify({ schemaVersion: 1, records }));
     localStorage.setItem(LAST_BACKUP_KEY, data.createdAt);
     await exportFeature.sync();
     sessionStorage.setItem("inkform.restored", data.createdAt);
@@ -1587,6 +1606,14 @@ backupPicker.addEventListener("change", async () => {
 });
 const SETUP_FIELDS = ["name", "contact", "address", "location"];
 // The neutral edition is set up once all four studio details are saved.
+// Deletes copies in the app only. The entries get their mark first (all or nothing), then the ids
+// are recorded for good, and the sync removes the PDFs (also at the next start if deleting fails).
+async function removePdfCopies(ids) {
+  incomeFeature.markCopiesRemoved(ids, localDate());
+  addRemovedIds(localStorage, ids);
+  await exportFeature.sync();
+  incomeFeature.refresh();
+}
 function needsSetup() {
   return BLANK_EDITION && SETUP_FIELDS.some((key) => !settings.studio[key].trim());
 }
@@ -2103,7 +2130,10 @@ function renderAdminSection() {
     )}<div class="ad-notice">Die Admin-Oberfläche ist durch die lokale Inhaber-PIN geschützt. Die PIN verschlüsselt weder Browserdaten noch die im HTML enthaltene Studio-Konfiguration. Studioexporte enthalten keine Einnahmenliste oder PIN. Es gibt keine Server-Benutzerverwaltung.</div>`;
   }
   $("admin-section").innerHTML = content;
-  if (adminPage === "export") exportFeature.preview();
+  if (adminPage === "export") {
+    exportFeature.preview();
+    exportFeature.usage();
+  }
   updateAdminChrome();
   updateThemeButtons();
 }
@@ -2614,6 +2644,18 @@ incomeFeature = createIncomeFeature({
   showReport: (blob, name, pages) => presentPdfArtifact(blob, name, pages, { isReport: true }),
   onChange: () =>
     exportFeature?.sync().catch((error) => console.error("Export-Archiv nicht abgeglichen:", error)),
+  copies: () => exportFeature?.copies() ?? new Set(),
+  removeCopy: (row) => {
+    if (
+      window.confirm(
+        `PDF-Kopie für ${row.customer} (Termin ${dateFormat(row.date)}) aus der App löschen?\n\nSie ist danach aus der App für immer weg und in keinem ZIP-Export mehr enthalten. Vorher prüfen, ob das PDF in der Dateien-App oder einer ZIP-Datei gesichert ist. Die Datei in der Dateien-App und auf anderen Speichern bleibt unberührt, der Eintrag in der Einnahmenliste bleibt erhalten.`,
+      )
+    )
+      removePdfCopies([row.id]).then(
+        () => toast("PDF-Kopie aus der App gelöscht. Der Eintrag bleibt erhalten."),
+        (error) => toast("PDF-Kopie nicht gelöscht: " + error.message),
+      );
+  },
 });
 exportFeature = createExportFeature({
   archive: createIndexedDbFiles(globalThis.indexedDB, ARCHIVE_DB),
@@ -2623,6 +2665,9 @@ exportFeature = createExportFeature({
   escape: escapeHtml,
   notify: toast,
   save: saveFile,
+  exportLog: () => readExportLog(localStorage),
+  removedIds: () => readRemovedIds(localStorage),
+  removeCopies: removePdfCopies,
   logExport: (entry) =>
     localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify([...readExportLog(localStorage), entry].slice(-1000))),
   today: localDate,

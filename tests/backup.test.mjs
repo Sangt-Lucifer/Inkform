@@ -1,7 +1,7 @@
 // Full backup (src/backup.js): complete round trip, strict checks before anything is restored.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BACKUP_INTERVAL_KEY, createFullBackup, fromBase64, readBackupDays, readFullBackup, toBase64 } from "../src/backup.js";
+import { BACKUP_INTERVAL_KEY, applyRemovals, createFullBackup, fromBase64, readBackupDays, readFullBackup, toBase64 } from "../src/backup.js";
 
 const row = (id, date, extra = {}) => ({
   id,
@@ -31,6 +31,7 @@ const backup = (extra = {}) =>
         exports: [{ from: "2026-03-01", to: "2026-03-31", type: "all", at: "2026-04-02T10:00:00.000Z" }],
         records: [row("a", "2026-03-01"), row("b", "2026-03-02", { pdfMissing: true })],
         pdfs: [{ id: "a", bytes: pdf("Jürgen Müller") }],
+        removed: new Set(),
         now: new Date("2026-04-03T08:00:00.000Z"),
         ...extra,
       }),
@@ -89,4 +90,27 @@ test("reminder interval: only the offered values, otherwise 7 days", () => {
   assert.equal(readBackupDays(storage("14")), 14);
   assert.equal(readBackupDays(storage("5")), 7);
   assert.equal(readBackupDays(storage("abc")), 7);
+});
+
+test("deleted copies travel with the backup; a PDF for one of them is refused", () => {
+  const value = backup({ removed: new Set(["x"]) });
+  assert.deepEqual(readFullBackup(value, validateSettings).removed, ["x"]);
+  const older = backup();
+  delete older.pdfRemoved;
+  assert.deepEqual(readFullBackup(older, validateSettings).removed, [], "backups without the list stay readable");
+  assert.throws(() => readFullBackup(backup({ removed: new Set(["a"]) }), validateSettings), /ohne passenden Einnahmeneintrag/);
+});
+
+test("restore never brings back a copy this device deleted from the app", () => {
+  const data = readFullBackup(backup(), validateSettings),
+    device = [{ ...row("a", "2026-03-01"), pdfRemovedAt: "2026-04-10" }];
+  const result = applyRemovals(data, new Set(["a"]), device, "2026-05-01");
+  assert.deepEqual(result.pdfs, []);
+  assert.equal(result.skipped, 1);
+  assert.equal(result.records.find((r) => r.id === "a").pdfRemovedAt, "2026-04-10");
+  assert.deepEqual([...result.removed], ["a"]);
+  const unknownDate = applyRemovals(data, new Set(["a"]), [], "2026-05-01");
+  assert.equal(unknownDate.records.find((r) => r.id === "a").pdfRemovedAt, "2026-05-01");
+  const nothing = applyRemovals(data, new Set(), [], "2026-05-01");
+  assert.deepEqual([nothing.pdfs.length, nothing.skipped, "pdfRemovedAt" in nothing.records[0]], [1, 0, false]);
 });

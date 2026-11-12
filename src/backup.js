@@ -1,9 +1,11 @@
 // Full backup of this device's app data as one JSON file: settings, theme, income list, retention
 // deadlines, export log, reminder interval and the consent PDFs kept for the ZIP export.
 // Not included: the PIN (the restoring device keeps its own) and an open, unconfirmed consent.
+// Copies deleted from the app on purpose stay deleted: the list of their ids travels with the
+// backup and is merged with the device's own list when restoring.
 import { validateIncomeBackup } from "./income.js";
 import { validateRetention } from "./retention.js";
-import { exportable, validateExportLog } from "./export.js";
+import { exportable, validateExportLog, validateRemovedIds } from "./export.js";
 
 export const BACKUP_INTERVAL_KEY = "inkform.backup.interval.v1";
 export const BACKUP_INTERVALS = [1, 3, 7, 14, 30];
@@ -27,7 +29,7 @@ export function fromBase64(text) {
 }
 
 // pdfs: [{ id, bytes: Uint8Array }]
-export function createFullBackup({ settings, theme, retention, backupDays, exports, records, pdfs, now = new Date() }) {
+export function createFullBackup({ settings, theme, retention, backupDays, exports, records, pdfs, removed, now = new Date() }) {
   return {
     kind: BACKUP_KIND,
     schemaVersion: 1,
@@ -38,6 +40,7 @@ export function createFullBackup({ settings, theme, retention, backupDays, expor
     backupDays,
     exports,
     income: { schemaVersion: 1, records },
+    pdfRemoved: [...removed],
     pdfs: pdfs.map(({ id, bytes }) => ({ id, pdf: toBase64(bytes) })),
   };
 }
@@ -51,7 +54,8 @@ export function readFullBackup(value, validateSettings) {
   if (!["dark", "light"].includes(value.theme)) throw Error("Die Sicherung enthält kein gültiges Farbschema.");
   if (!BACKUP_INTERVALS.includes(value.backupDays)) throw Error("Die Sicherung enthält keinen gültigen Erinnerungsabstand.");
   const records = validateIncomeBackup(value.income),
-    allowed = new Set(records.filter(exportable).map((r) => r.id)),
+    removed = validateRemovedIds(value.pdfRemoved ?? []),
+    allowed = new Set(records.filter((r) => exportable(r) && !removed.includes(r.id)).map((r) => r.id)),
     seen = new Set();
   if (!Array.isArray(value.pdfs)) throw Error("Die Sicherung enthält keine PDF-Liste.");
   const pdfs = value.pdfs.map((entry) => {
@@ -74,6 +78,20 @@ export function readFullBackup(value, validateSettings) {
     backupDays: value.backupDays,
     exports: validateExportLog(value.exports),
     records,
+    removed,
     pdfs,
+  };
+}
+
+// What a restore writes, given the ids this device already deleted from the app: their entries
+// keep (or get) the "PDF nicht mehr in der App" mark and their PDFs are left out.
+export function applyRemovals(data, deviceRemoved, deviceRecords, today) {
+  const removed = new Set([...deviceRemoved, ...data.removed]),
+    marked = new Map(deviceRecords.filter((r) => r.pdfRemovedAt).map((r) => [r.id, r.pdfRemovedAt]));
+  return {
+    removed,
+    records: data.records.map((r) => (removed.has(r.id) && !r.pdfRemovedAt ? { ...r, pdfRemovedAt: marked.get(r.id) ?? today } : r)),
+    pdfs: data.pdfs.filter((p) => !removed.has(p.id)),
+    skipped: data.pdfs.filter((p) => removed.has(p.id)).length,
   };
 }

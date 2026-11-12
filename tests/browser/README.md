@@ -11,6 +11,7 @@
 | `aufbewahrung.mjs` | Erinnerung an offene Einwilligung, Sicherheits-Checkliste, Fristen, Löschliste, Anonymisieren, Sicherungsdatum |
 | `sicherung.mjs` | Erinnerung ohne Sicherung und nach dem Abstand, Hinweis auf nicht exportierte Monate, Inhalt der Gesamtsicherung ohne PIN, Abbrechen und beschädigte Dateien ändern nichts, Wiederherstellen ersetzt alles außer der PIN; im Flugmodus |
 | `blanko.mjs` | Nur mit Profil `blanko`: im Flugmodus, keine Mac-Hinweise, PIN nur Ziffern mit eigenen Meldungen, Einrichtungsassistent, Beispieldaten laden und entfernen, Einwilligung mit eingerichtetem Studio |
+| `kopien.mjs` | PDF-Kopien in der App löschen: Speicheranzeige, Angebot nach dem Export, „Später löschen“, Prüfschritt mit Kästchen und letzter Rückfrage, nach Zeitraum mit Warnung, einzeln, Vermerk in der Liste und im Export, ältere Sicherung holt nichts zurück; im Flugmodus |
 | `export.mjs` | PDF-Kopie für den Export beim Bestätigen, Entfernen bei „PDF fehlt“ und gelöschtem Eintrag, Vorschau, leerer Zeitraum, Monat/Jahr/von–bis, Filter, ZIP mit `unzip`, `ditto` und Python geprüft; im Flugmodus |
 | `schriftgroessen.mjs` | Kundenbereich auf vier iPad-Größen: Eingaben und Fließtext ≥ 16 px, nichts < 14 px, kein seitliches Scrollen; mit `INKFORM_FONT_BASELINE=<datei>` zusätzlich keine Schrift kleiner als vorher |
 | `update.mjs` | App-Update: wartet bei angefangenem Formular, übernimmt im Leerlauf ohne Neuladen und löscht die alte Version aus dem Offline-Speicher |
