@@ -274,6 +274,7 @@ export function createIncomeFeature({
   download,
   showReport,
   isUnlocked,
+  onChange = () => {},
 }) {
   const store = createIncomeStore(storage);
   const filters = { artist: "", unassigned: false, year: today().slice(0, 4), month: "" };
@@ -482,6 +483,7 @@ export function createIncomeFeature({
     if (host) host.innerHTML = view();
     const retention = document.getElementById("retention-content");
     if (retention) retention.innerHTML = retentionView();
+    onChange();
   }
   const dateDe = (iso) => iso.split("-").reverse().join(".");
   // Admin page "Aufbewahrung": deadlines, deletion list for consent PDFs, anonymization.
@@ -552,7 +554,8 @@ export function createIncomeFeature({
       return `<div class="ad-error" role="alert">Aufbewahrung nicht verfügbar: ${e(error.message)}</div>`;
     }
   }
-  function report(rows) {
+  // Throws if a name contains characters the PDF font cannot print.
+  function reportPdf(rows, scope) {
     const missing = unsupportedChars(rows.map((r) => r.artist + r.customer).join(""));
     if (missing.length)
       throw Error(
@@ -573,9 +576,7 @@ export function createIncomeFeature({
       }
     };
     line("%%reportStudio%% · Einnahmenübersicht", true);
-    line(
-      `Artist: ${filters.unassigned ? "Nicht zugeordnet" : filters.artist || "Alle"} | Jahr: ${filters.year || "Alle"} | Monat: ${filters.month || "Alle"}`,
-    );
+    line(scope);
     line("Gesamtpreise laut Einwilligungen; keine Zahlungseingangs- oder Gewinnabrechnung.");
     y += 4;
     for (const r of rows) {
@@ -596,11 +597,14 @@ export function createIncomeFeature({
       doc.setFontSize(8);
       doc.text(`Vertraulich · nur für den Inhaber | Seite ${n} von ${pages}`, 19, 289);
     }
-    showReport(
-      doc.output("blob"),
-      `Inkform_Einnahmen_${filters.year || "alle-Jahre"}_${filters.month || "alle-Monate"}.pdf`,
-      pages,
+    return { blob: doc.output("blob"), pages };
+  }
+  function report(rows) {
+    const { blob, pages } = reportPdf(
+      rows,
+      `Artist: ${filters.unassigned ? "Nicht zugeordnet" : filters.artist || "Alle"} | Jahr: ${filters.year || "Alle"} | Monat: ${filters.month || "Alle"}`,
     );
+    showReport(blob, `Inkform_Einnahmen_${filters.year || "alle-Jahre"}_${filters.month || "alle-Monate"}.pdf`, pages);
   }
   document.getElementById("admin-app").addEventListener("change", (event) => {
     const key = {
@@ -627,7 +631,7 @@ export function createIncomeFeature({
         if (
           row &&
           window.confirm(
-            `Ist das PDF ${row.source ? `„${row.source}“` : `für ${row.customer}`} in der Dateien-App und in allen Sicherungen gelöscht?`,
+            `Ist das PDF ${row.source ? `„${row.source}“` : `für ${row.customer}`} in der Dateien-App und in allen Sicherungen gelöscht? Die Kopie für den ZIP-Export wird dann ebenfalls gelöscht.`,
           )
         ) {
           store.updateMany([
@@ -669,7 +673,7 @@ export function createIncomeFeature({
         if (
           row &&
           window.confirm(
-            `Eintrag für ${row.customer} vom ${row.date} aus der lokalen Übersicht entfernen? Das PDF bleibt erhalten.`,
+            `Eintrag für ${row.customer} vom ${row.date} aus der lokalen Übersicht entfernen? Das PDF in der Dateien-App bleibt erhalten, die Kopie für den ZIP-Export wird gelöscht.`,
           )
         ) {
           store.remove(row.id, row.updatedAt);
@@ -715,6 +719,7 @@ export function createIncomeFeature({
     view,
     retentionView,
     list: () => store.list(),
+    reportPdf: (rows, scope) => reportPdf(rows, scope).blob,
     lock() {
       editor.close();
       refresh();

@@ -4,6 +4,7 @@ import { STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
 import { PDF_FONT, createPdfDocument, unsupportedPdfChars } from "./pdf-fonts.js";
 import { createIndexedDbFiles, createPendingStore } from "./pending.js";
 import { birthDateValid, fileSlug, moneyCents, studioInitials } from "./consent.js";
+import { ARCHIVE_DB, createExportFeature } from "./export.js";
 import {
   LAST_BACKUP_KEY,
   PENDING_REMINDER_DAYS,
@@ -20,6 +21,7 @@ const APP_SOURCE_HTML = "<!DOCTYPE html>\n" + document.documentElement.outerHTML
 let studio = { ...STUDIO_DEFAULTS };
 let adminAccess = null,
   incomeFeature = null,
+  exportFeature = null,
   pendingStore = null,
   consentIncomeId = incomeId();
 const MEDICAL = clone(DEFAULT_SETTINGS.medical);
@@ -1178,9 +1180,14 @@ function bookPendingConsent(pdfMissing) {
     return;
   }
   artifact.confirmed = true;
-  // Booking is written: remove this consent's device copy. The metadata goes at once, so the next
-  // customer can start; the PDF is deleted once a write still in progress has finished. If that
-  // fails, the start-up sweep removes it.
+  // Booking is written: the PDF is kept for the ZIP export, and this consent's pending copy is
+  // removed. The metadata goes at once, so the next customer can start; the pending PDF is deleted
+  // once a write still in progress has finished. If that fails, the start-up sweep removes it.
+  if (!pdfMissing && artifact.blob)
+    exportFeature.keep(artifact.incomeEntry.id, artifact.blob).catch((error) => {
+      console.error("PDF nicht für den Export gespeichert:", error);
+      toast("Einnahme gebucht. Das PDF konnte nicht für den ZIP-Export gespeichert werden.");
+    });
   pendingStore
     .clear(artifact.incomeEntry.id)
     .catch((error) => console.error("PDF-Kopie nicht entfernt, wird beim nächsten Start gelöscht:", error));
@@ -1262,6 +1269,13 @@ const ADMIN_PAGES = {
     title: "Einnahmenübersicht",
     description:
       "Gesamtpreise je Termin und Artist auswerten, fehlende Preise ergänzen und Listen ausgeben.",
+  },
+  export: {
+    label: "Export",
+    icon: "download",
+    title: "Export nach Zeitraum",
+    description:
+      "Einwilligungs-PDFs und Einnahmen eines Monats, eines Jahres oder eines freien Zeitraums als ZIP-Datei sichern.",
   },
   retention: {
     label: "Aufbewahrung",
@@ -1476,6 +1490,8 @@ function renderAdminSection() {
   let content = "";
   if (adminPage === "income") {
     content = `<div id="income-content">${incomeFeature.view()}</div>`;
+  } else if (adminPage === "export") {
+    content = `<div id="export-content">${exportFeature.view()}</div>`;
   } else if (adminPage === "retention") {
     content = `<div id="retention-content">${incomeFeature.retentionView()}</div>`;
   } else if (adminPage === "overview") {
@@ -1853,6 +1869,7 @@ function renderAdminSection() {
     )}<div class="ad-notice">Die Admin-Oberfläche ist durch die lokale Inhaber-PIN geschützt. Die PIN verschlüsselt weder Browserdaten noch die im HTML enthaltene Studio-Konfiguration. Studioexporte enthalten keine Einnahmenliste oder PIN. Es gibt keine Server-Benutzerverwaltung.</div>`;
   }
   $("admin-section").innerHTML = content;
+  if (adminPage === "export") exportFeature.preview();
   updateAdminChrome();
   updateThemeButtons();
 }
@@ -2322,7 +2339,20 @@ incomeFeature = createIncomeFeature({
   notify: toast,
   download: downloadFile,
   showReport: (blob, name, pages) => presentPdfArtifact(blob, name, pages, { isReport: true }),
+  onChange: () =>
+    exportFeature?.sync().catch((error) => console.error("Export-Archiv nicht abgeglichen:", error)),
 });
+exportFeature = createExportFeature({
+  archive: createIndexedDbFiles(globalThis.indexedDB, ARCHIVE_DB),
+  records: () => incomeFeature.list(),
+  incomeReport: (rows, scope) => incomeFeature.reportPdf(rows, scope),
+  isUnlocked: () => adminAccess.isUnlocked(),
+  escape: escapeHtml,
+  notify: toast,
+  download: downloadFile,
+  today: localDate,
+});
+exportFeature.sync().catch((error) => console.error("Export-Archiv nicht abgeglichen:", error));
 applySettings(settings, { initial: true });
 let initialTheme = embeddedConfig?.theme || "dark";
 try {

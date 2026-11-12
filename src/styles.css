@@ -2609,7 +2609,8 @@ html[data-theme="dark"] dialog::backdrop {
   font-size: 12px;
   font-weight: 600;
 }
-.income-filters select {
+.income-filters select,
+.income-filters input {
   display: block;
   width: 100%;
   min-height: 44px;

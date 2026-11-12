@@ -34,6 +34,8 @@ const TEMPLATED = [
   "src/pending.js",
   "src/consent.js",
   "src/retention.js",
+  "src/zip.js",
+  "src/export.js",
   "src/app.js",
 ];
 
@@ -135,6 +137,8 @@ export async function buildProfile(ref) {
     pending = filled["src/pending.js"],
     consent = filled["src/consent.js"],
     retention = filled["src/retention.js"],
+    zip = filled["src/zip.js"],
+    exporter = filled["src/export.js"],
     app = filled["src/app.js"];
   const exported = /^export\s+(?=(?:const|(?:async\s+)?function)\s)/gm;
 
@@ -149,6 +153,8 @@ export async function buildProfile(ref) {
     fonts.replace(exported, ""),
     pending.replace(exported, ""),
     consent.replace(exported, ""),
+    zip.replace(exported, ""),
+    exporter.replace(local, "").replace(exported, ""),
     app.replace(local, ""),
   ].join("\n");
   if (/^\s*(?:import|export)\s/m.test(bundledJs) || /__PDF_FONT_\w+__/.test(bundledJs))
