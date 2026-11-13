@@ -82,7 +82,9 @@ export function translator(code) {
     date: (iso, options) => new Intl.DateTimeFormat(locale, options).format(new Date(iso + "T12:00:00")),
     dateTime: (date, options) => new Intl.DateTimeFormat(locale, options).format(date),
     number: (value, options) => new Intl.NumberFormat(locale, options).format(value),
-    money: (cents) => new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 100),
+    // code overrides the current currency: for an amount recorded under an earlier currency, so a
+    // later change does not relabel it.
+    money: (cents, code = currency) => new Intl.NumberFormat(locale, { style: "currency", currency: code }).format(cents / 100),
   };
 }
 

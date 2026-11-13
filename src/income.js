@@ -1,5 +1,6 @@
 // Only financial references are persisted. No health answers, signatures or PDFs.
 import { BASE_LANGUAGE, language, markup, t, th, translator } from "./i18n.js";
+import { validCurrency } from "./languages.js";
 import {
   ANONYMIZED,
   anonymizeRecord,
@@ -18,6 +19,9 @@ const incomeFields = [
   "customer",
   "totalCents",
   "depositCents",
+  // Optional: the currency the amounts above were recorded in, so a later change to the studio's
+  // currency does not relabel earlier entries. Missing on entries from before this field existed.
+  "currency",
   "source",
   "updatedAt",
   // Optional: true when the income was booked although the signed PDF was not filed.
@@ -81,6 +85,11 @@ export function validateIncomeRecord(value) {
     throw Error(t("income.invalidPdfMissing"));
   // Stored only when set, so existing entries and backups stay unchanged.
   if (value.pdfMissing === true) row.pdfMissing = true;
+  if (value.currency !== undefined) {
+    if (typeof value.currency !== "string" || !validCurrency(value.currency))
+      throw Error(t("income.invalidField", { feld: "currency" }));
+    row.currency = value.currency;
+  }
   for (const key of ["pdfDeletedAt", "anonymizedAt", "pdfRemovedAt"]) {
     if (value[key] === undefined || value[key] === null || value[key] === "") continue;
     if (
@@ -218,6 +227,8 @@ export function selectIncome(
     );
 }
 
+// The sum is shown in the current currency even if some entries were recorded under an earlier
+// one (see validateIncomeRecord): changing currency is meant to happen before income exists.
 export function summarizeIncome(records) {
   return {
     totalCents: records.reduce((sum, r) => sum + (r.totalCents ?? 0), 0),
@@ -272,6 +283,7 @@ export function createIncomeFeature({
   escape,
   money,
   parseMoney,
+  currency = () => undefined,
   today,
   notify,
   download,
@@ -367,6 +379,7 @@ export function createIncomeFeature({
         source: input("source").value,
         updatedAt: new Date().toISOString(),
         pdfMissing: input("pdfMissing").checked,
+        currency: editing?.currency ?? currency(),
         // Retention marks are kept when an entry is edited.
         pdfDeletedAt: editing?.pdfDeletedAt,
         anonymizedAt: editing?.anonymizedAt,
@@ -485,7 +498,7 @@ export function createIncomeFeature({
       <div class="income-summary"><strong>${money(summary.totalCents)}<small>${th("income.sumKnown")}</small></strong><strong>${summary.count}<small>${th("income.consents")}</small></strong><strong>${summary.open}<small>${th("income.openNotInSum")}</small></strong></div>
       <div class="ad-actions-row income-actions"><button class="ad-button primary" data-income-action="add">${th("income.add")}</button><button class="ad-button" data-income-action="pdf"${rows.length ? "" : " disabled"}>${th("income.listPdf")}</button><button class="ad-button" data-income-action="csv"${rows.length ? "" : " disabled"}>${th("income.listCsv")}</button></div>
       <p class="ad-preview-note">${th("income.newNote")}</p>
-      <div class="income-table-wrap"><table class="income-table"><caption>${th("income.tableCaption")}</caption><thead><tr><th>${th("pdf.appointment")}</th><th>${th("csv.artist")}</th><th>${th("csv.name")}</th><th>${th("income.colTotal")}</th><th>${th("income.colDeposit")}</th><th>${th("income.edit")}</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.artist || t("common.unassigned"))}</td><td>${e(r.customer)}${r.pdfMissing ? ` <span class="income-open">${th("income.pdfMissing")}</span>` : ""}${r.source ? `<small>${e(r.source)}</small>` : ""}${r.pdfDeletedAt ? `<small>${th("income.pdfDeletedOn", { datum: dateDe(r.pdfDeletedAt) })}</small>` : ""}${r.pdfRemovedAt ? `<small>${th("income.pdfRemoved")}</small>` : ""}</td><td>${r.totalCents === null ? `<span class="income-open">${th("income.priceOpen")}</span>` : money(r.totalCents)}</td><td>${r.depositCents === null ? "–" : money(r.depositCents)}</td><td><button class="ad-button" data-income-edit="${e(r.id)}" aria-label="${th("income.editAria", { name: r.customer })}">${th("income.edit")}</button><button class="ad-button danger" data-income-remove="${e(r.id)}" aria-label="${th("income.removeAria", { name: r.customer })}">${th("editor.remove")}</button>${inApp.has(r.id) ? `<button class="ad-button" data-income-copy="${e(r.id)}" aria-label="${th("income.copyAria", { name: r.customer })}">${th("income.copyRemove")}</button>` : ""}</td></tr>`).join("") : `<tr><td colspan="6">${th("income.none")}</td></tr>`}</tbody></table></div>
+      <div class="income-table-wrap"><table class="income-table"><caption>${th("income.tableCaption")}</caption><thead><tr><th>${th("pdf.appointment")}</th><th>${th("csv.artist")}</th><th>${th("csv.name")}</th><th>${th("income.colTotal")}</th><th>${th("income.colDeposit")}</th><th>${th("income.edit")}</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.artist || t("common.unassigned"))}</td><td>${e(r.customer)}${r.pdfMissing ? ` <span class="income-open">${th("income.pdfMissing")}</span>` : ""}${r.source ? `<small>${e(r.source)}</small>` : ""}${r.pdfDeletedAt ? `<small>${th("income.pdfDeletedOn", { datum: dateDe(r.pdfDeletedAt) })}</small>` : ""}${r.pdfRemovedAt ? `<small>${th("income.pdfRemoved")}</small>` : ""}</td><td>${r.totalCents === null ? `<span class="income-open">${th("income.priceOpen")}</span>` : money(r.totalCents, r.currency)}</td><td>${r.depositCents === null ? "–" : money(r.depositCents, r.currency)}</td><td><button class="ad-button" data-income-edit="${e(r.id)}" aria-label="${th("income.editAria", { name: r.customer })}">${th("income.edit")}</button><button class="ad-button danger" data-income-remove="${e(r.id)}" aria-label="${th("income.removeAria", { name: r.customer })}">${th("editor.remove")}</button>${inApp.has(r.id) ? `<button class="ad-button" data-income-copy="${e(r.id)}" aria-label="${th("income.copyAria", { name: r.customer })}">${th("income.copyRemove")}</button>` : ""}</td></tr>`).join("") : `<tr><td colspan="6">${th("income.none")}</td></tr>`}</tbody></table></div>
       <details class="income-daily"><summary>${th("income.daily")}</summary><ul>${
         [...daily.values()]
           .map((day) => {
@@ -540,7 +553,7 @@ export function createIncomeFeature({
         .slice(0, 50)
         .map(
           (r) =>
-            `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.artist || t("common.unassigned"))}</td><td>${e(r.customer)}</td><td>${r.totalCents === null ? th("income.priceOpen") : money(r.totalCents)}</td></tr>`,
+            `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.artist || t("common.unassigned"))}</td><td>${e(r.customer)}</td><td>${r.totalCents === null ? th("income.priceOpen") : money(r.totalCents, r.currency)}</td></tr>`,
         )
         .join("");
       return `<section class="ad-panel"><div class="ad-panel-header"><h2>${th("retention.title")}</h2></div><div class="ad-panel-body">
@@ -614,8 +627,8 @@ export function createIncomeFeature({
       );
       line(
         t("report.amounts", {
-          gesamt: r.totalCents === null ? t("income.priceOpen") : money(r.totalCents),
-          anzahlung: r.depositCents === null ? t("report.notGiven") : money(r.depositCents),
+          gesamt: r.totalCents === null ? t("income.priceOpen") : money(r.totalCents, r.currency),
+          anzahlung: r.depositCents === null ? t("report.notGiven") : money(r.depositCents, r.currency),
         }),
       );
       y += 3;
@@ -795,6 +808,7 @@ export function createIncomeFeature({
         customer: `${data.fields.firstName} ${data.fields.lastName}`.trim(),
         totalCents: parseMoney(data.fields.totalPrice),
         depositCents: parseMoney(data.fields.depositPaid),
+        currency: currency(),
         source,
         updatedAt: new Date().toISOString(),
       });

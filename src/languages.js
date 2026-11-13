@@ -23,9 +23,14 @@ export function validCurrency(code) {
 }
 
 // Languages missing in this build are dropped, so settings from a build with more languages load.
+// An explicitly named content language that is missing is an error instead: the base texts are
+// actually written in it, so relabeling them as another language would show the wrong texts under
+// the wrong language, without the note for it, and never offer the correct translation for it.
 export function validateLocale(value, fallback) {
   const input = value && typeof value === "object" ? value : fallback;
   const known = (code) => hasLanguage(code);
+  if (typeof input.content === "string" && input.content && !known(input.content))
+    throw new Error(t("languages.unknownContent", { sprache: input.content.slice(0, 20) }));
   const content = known(input.content) ? input.content : known(fallback.content) ? fallback.content : BASE_LANGUAGE;
   const studio = known(input.studio) ? input.studio : content;
   const customer = [...new Set([studio, ...(Array.isArray(input.customer) ? input.customer : []).filter(known)])];

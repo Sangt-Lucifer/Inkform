@@ -43,7 +43,7 @@ fillConsent();form.requestSubmit();`);
 await until(`!document.getElementById('completion-screen').hidden`);
 check('PDF save ends in black thank-you screen and locks admin',await ev(`getComputedStyle(document.getElementById('completion-screen')).backgroundColor==='rgb(0, 0, 0)' && document.getElementById('completion-title').textContent==='Vielen Dank'&&document.getElementById('customer-app').hidden&&document.getElementById('admin-app').hidden&&!adminAccess.isUnlocked()&&!document.getElementById('pdf-dialog').open`));
 check('Signed consent is not booked before the owner confirms the filing',await ev(`!localStorage.getItem(INCOME_KEY)&&JSON.parse(localStorage.getItem(PENDING_KEY)).income.totalCents===45050`));
-check('Prepared income entry excludes health answers and signature',await ev(`Object.keys(JSON.parse(localStorage.getItem(PENDING_KEY)).income).every(k=>['id','date','artist','customer','source','updatedAt','totalCents','depositCents'].includes(k))`));
+check('Prepared income entry excludes health answers and signature',await ev(`Object.keys(JSON.parse(localStorage.getItem(PENDING_KEY)).income).every(k=>['id','date','artist','customer','source','updatedAt','totalCents','depositCents','currency'].includes(k))`));
 await writeFile(OUT+'/inkform-thank-you.png',Buffer.from((await cmd('Page.captureScreenshot',{format:'png'})).data,'base64'));
 await ev(`document.getElementById('completion-unlock').click();document.getElementById('admin-pin').value='000000';document.getElementById('admin-pin-form').requestSubmit()`);
 await until(`!document.getElementById('admin-pin-error').hidden`);

@@ -72,3 +72,62 @@ test("editing selected artist casing preserves the selected dropdown option", ()
     else globalThis.window = previousWindow;
   }
 });
+test("currency: a captured entry keeps its own currency in the table even after the studio currency changes", () => {
+  const storage = mem(),
+    store = createIncomeStore(storage);
+  const listeners = {};
+  const admin = { addEventListener: (type, fn) => (listeners[type] = fn) };
+  const host = { innerHTML: "" };
+  const form = { addEventListener: () => {} };
+  const element = () => ({
+    setAttribute: () => {},
+    querySelector: () => form,
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    close: () => {},
+  });
+  const previousDocument = globalThis.document,
+    previousWindow = globalThis.window;
+  try {
+    globalThis.document = {
+      createElement: element,
+      body: { append: () => {} },
+      getElementById: (id) => (id === "admin-app" ? admin : host),
+    };
+    globalThis.window = { addEventListener: () => {} };
+    let studioCurrency = "EUR";
+    const feature = createIncomeFeature({
+      storage,
+      escape: (s) => s,
+      money: (cents, code) => `${cents}${code ?? studioCurrency}`,
+      parseMoney: (v) => Math.round(Number(v) * 100),
+      currency: () => studioCurrency,
+      today: () => "2026-11-06",
+      notify: () => {},
+      download: () => {},
+      showReport: () => {},
+      isUnlocked: () => true,
+    });
+    const captured = feature.capture(
+      { fields: { appointment: "2026-11-06", artist: "Alex", firstName: "A", lastName: "B", totalPrice: "100", depositPaid: "" } },
+      "a.pdf",
+      "cur1",
+    );
+    assert.equal(captured.currency, "EUR");
+    feature.book(captured);
+    studioCurrency = "CHF"; // studio switches currency after this entry was already recorded
+    const html = feature.view();
+    assert.match(html, /10000EUR/); // the existing entry still shows its own currency
+    const captured2 = feature.capture(
+      { fields: { appointment: "2026-11-06", artist: "Alex", firstName: "C", lastName: "D", totalPrice: "50", depositPaid: "" } },
+      "b.pdf",
+      "cur2",
+    );
+    assert.equal(captured2.currency, "CHF"); // a new entry gets the now-current currency
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});

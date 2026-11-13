@@ -497,7 +497,7 @@ function isSectionComplete(id) {
     (id !== "personal" || (birthValid() && priceErrors().length === 0))
   );
 }
-const formatMoney = (cents) => language().money(cents);
+const formatMoney = (cents, currency) => language().money(cents, currency);
 function priceErrors() {
   const total = moneyCents(fieldValue("totalPrice"));
   const deposit = moneyCents(fieldValue("depositPaid"));
@@ -2744,6 +2744,7 @@ incomeFeature = createIncomeFeature({
   escape: escapeHtml,
   money: formatMoney,
   parseMoney: moneyCents,
+  currency: () => settings.locale.currency,
   today: localDate,
   notify: toast,
   download: downloadFile,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { buildProfile, root } from "../scripts/build.mjs";
 import { languagesForApp, loadLanguages } from "../scripts/sprachen.mjs";
@@ -48,6 +49,14 @@ test("locale: missing settings use the profile, unknown languages are dropped", 
   assert.ok(validCurrency("JPY") && !validCurrency("ABC") && !validCurrency("eur"));
 });
 
+test("locale: an explicit content language this build does not know is an error, not a relabel", () => {
+  // Restoring a backup whose real base texts are in a language this build has no file for must
+  // not silently call them German: that would show the wrong texts under the wrong language.
+  assert.throws(() => validateLocale({ ...FALLBACK, content: "fr", studio: "fr", customer: ["fr"] }, FALLBACK), /„fr“/);
+  // No locale at all (a pre-multilingual backup) still falls back to the profile, as before.
+  assert.deepEqual(validateLocale({}, FALLBACK), FALLBACK);
+});
+
 test("translations: only known languages, parts and ids; a language is offered only when complete", async () => {
   await withPseudo(() => {
     const translations = validateTranslations({ [PSEUDO]: { ...full, medical: { ...full.medical, other: { title: "x" } } }, xx: full, de: full }, base, "de");
@@ -69,6 +78,32 @@ test("translations: only known languages, parts and ids; a language is offered o
     assert.deepEqual(offeredLanguages(partial), ["de"]);
     assert.equal(contentIn(settings, "de"), settings);
   });
+});
+
+test("defaults: a studio language without default translations is corrected to the content language at startup", async () => {
+  // A profile could set "studio" different from "content" in profile.json; today that never ships
+  // default translations, so without this correction the app would start in a language missing
+  // every text and crash instead of a settings page offering to add it (see languages.js).
+  const dir = await mkdtemp(path.join(tmpdir(), "inkform-defaults-"));
+  try {
+    for (const file of ["defaults.js", "i18n.js", "languages.js"])
+      await writeFile(path.join(dir, file), await readFile(path.join(root, "src", file), "utf8"));
+    const locale = { content: "de", studio: PSEUDO, customer: [PSEUDO], currency: "EUR", note: {} };
+    const defaultsSource = (await readFile(path.join(dir, "defaults.js"), "utf8")).replace(
+      '"__PROFILE_LOCALE__"',
+      JSON.stringify(JSON.stringify(locale)),
+    );
+    await writeFile(path.join(dir, "defaults.js"), defaultsSource);
+    const i18n = await import(pathToFileURL(path.join(dir, "i18n.js")).href);
+    await withPseudo(async (languages) => {
+      i18n.registerLanguages(languagesForApp(await loadLanguages(languages), (t) => t));
+      const { DEFAULT_SETTINGS } = await import(pathToFileURL(path.join(dir, "defaults.js")).href);
+      assert.equal(DEFAULT_SETTINGS.locale.studio, "de");
+      assert.deepEqual(DEFAULT_SETTINGS.locale.customer, ["de", PSEUDO]);
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("profile: languages and currency are checked against the language files and the manifest", async () => {

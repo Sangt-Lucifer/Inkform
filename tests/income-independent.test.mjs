@@ -1,7 +1,7 @@
 // Independent edge-case review of the income module (ported from the website archive, 2026-11-06).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createIncomeStore, selectIncome, summarizeIncome, validateIncomeBackup, incomeCsv, createIncomeFeature, INCOME_KEY } from '../src/income.js';
+import { createIncomeStore, selectIncome, summarizeIncome, validateIncomeBackup, incomeCsv, createIncomeFeature, validateIncomeRecord, INCOME_KEY } from '../src/income.js';
 const r=(changes={})=>({id:'one', date:'2026-11-06', artist:'Alex', customer:'Independent Test', totalCents:50000, depositCents:10000, source:'first.pdf', updatedAt:'2026-11-06T12:00:00.000Z', ...changes});
 function mem(){let raw=null;return {getItem:()=>raw,setItem:(k,v)=>{assert.equal(k,INCOME_KEY);raw=v}}}
 test('10000 highest allowed values remain exact; deposits never enter total',()=>{
@@ -69,4 +69,16 @@ test('editing selected artist casing preserves the selected dropdown option',()=
  assert.match(select,/value="artist:ALEX" selected/);assert.equal((select.match(/ selected/g)||[]).length,1);
  assert.match(html,/<strong>1<small>Einwilligungen/); // All would have shown 2
  delete globalThis.document;delete globalThis.window;
+});
+test('currency: stored only when valid, kept unchanged by later entries, so a currency change never relabels it',()=>{
+ assert.equal(validateIncomeRecord(r()).currency, undefined);
+ assert.equal(validateIncomeRecord(r({currency:'CHF'})).currency, 'CHF');
+ assert.throws(()=>validateIncomeRecord(r({currency:'Euro'})), /currency/);
+ assert.throws(()=>validateIncomeRecord(r({currency:'xyz'})), /currency/);
+ const storage=mem(),store=createIncomeStore(storage);
+ store.add(r({currency:'CHF'}));
+ assert.equal(store.list()[0].currency,'CHF');
+ // A later entry in another currency leaves the first one as it was.
+ store.add(r({id:'two',currency:'USD'}));
+ assert.deepEqual(store.list().map(x=>x.currency),['CHF','USD']);
 });
