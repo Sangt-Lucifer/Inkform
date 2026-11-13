@@ -75,6 +75,7 @@ a {
   padding: 0 48px;
 }
 .topbar {
+  padding-top: env(safe-area-inset-top);
   border-bottom: 1px solid var(--line);
   background: rgba(246, 246, 246, 0.96);
 }
@@ -135,7 +136,7 @@ a {
 }
 .sidebar {
   position: sticky;
-  top: 35px;
+  top: calc(35px + env(safe-area-inset-top));
   align-self: start;
 }
 .eyebrow {
@@ -1421,7 +1422,7 @@ html[data-theme="dark"] .choice input:focus-visible + span,
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: 30px 18px 20px;
+  padding: calc(30px + env(safe-area-inset-top)) 18px 20px;
 }
 .ad-brand {
   display: flex;
@@ -1551,6 +1552,7 @@ html[data-theme="dark"] .choice input:focus-visible + span,
 }
 .ad-main {
   min-width: 0;
+  padding-top: env(safe-area-inset-top);
 }
 .ad-topbar {
   height: 85px;
@@ -2169,7 +2171,7 @@ html[data-theme="dark"] .ad-notice.review {
 }
 .ad-preview-sticky {
   position: sticky;
-  top: 24px;
+  top: calc(24px + env(safe-area-inset-top));
 }
 .ad-theme-options {
   display: grid;
@@ -2308,8 +2310,11 @@ html[data-theme="dark"] .ad-notice.review {
     position: static;
     height: auto;
     border: 0;
-    padding: 19px 18px 0;
+    padding: calc(19px + env(safe-area-inset-top)) 18px 0;
     border-bottom: 1px solid var(--ad-line);
+  }
+  .ad-main {
+    padding-top: 0;
   }
   .ad-brand {
     padding: 0;
