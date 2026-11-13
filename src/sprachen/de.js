@@ -436,6 +436,7 @@ export default {
     "languages.currencyHelp": "Dreistelliger Währungscode, z. B. EUR, CHF oder USD. Gilt für das Formular und für neue Einnahmen; bereits erfasste Einnahmen behalten ihre Währung, Beträge werden nie umgerechnet. Am besten vor der ersten Einnahme festlegen.",
     "languages.customer": "Sprachen für Kunden",
     "languages.customerHelp": "Die Studiosprache ist immer dabei. Ab zwei Sprachen erscheint auf dem Formular eine Sprachauswahl.",
+    "languages.draft": "(Entwurf, nicht juristisch geprüft)",
     "languages.missingTexts": "(Formulartexte fehlen)",
     "languages.note": "Hinweis im PDF",
     "languages.noteFor": "Hinweis im PDF ({sprache}), optional",

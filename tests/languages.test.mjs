@@ -62,6 +62,9 @@ test("translations: only known languages, parts and ids; a language is offered o
     const translations = validateTranslations({ [PSEUDO]: { ...full, medical: { ...full.medical, other: { title: "x" } } }, xx: full, de: full }, base, "de");
     assert.deepEqual(Object.keys(translations), [PSEUDO]);
     assert.deepEqual(Object.keys(translations[PSEUDO].medical), ["allergies"]);
+    assert.equal(translations[PSEUDO].draft, undefined);
+    assert.equal(validateTranslations({ [PSEUDO]: { ...full, draft: true } }, base, "de")[PSEUDO].draft, true);
+    assert.equal(validateTranslations({ [PSEUDO]: { ...full, draft: "yes" } }, base, "de")[PSEUDO].draft, undefined);
     assert.throws(() => validateTranslations({ [PSEUDO]: { app: { headline: 5 } } }, base, "de"), /ungültig oder zu lang/);
 
     const settings = { ...base, locale: { ...FALLBACK, customer: ["de", PSEUDO] }, translations };
@@ -123,6 +126,54 @@ test("profile: languages and currency are checked against the language files and
       await assert.rejects(build({ languages: { customer: ["xx"] } }), /languages\.customer "xx" hat keine Sprachdatei/);
       await assert.rejects(build({ currency: "euro" }), /Währungscode/);
       await assert.rejects(build({ languages: { studio: PSEUDO } }), /manifest\.webmanifest "lang" \(de\) passt nicht/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("profiles: shipped English drafts are complete but only offered once the owner enables them", async () => {
+  const { DEFAULT_SETTINGS } = await import("../src/defaults.js");
+  for (const name of ["beispiel", "blanko"]) {
+    const json = JSON.parse(await readFile(path.join(root, "profiles", name, "profile.json"), "utf8"));
+    assert.ok(!json.languages?.customer?.includes("en"), `${name}: English must not be enabled by default`);
+    const translations = validateTranslations(json.translations, DEFAULT_SETTINGS, "de");
+    assert.equal(translations.en.draft, true, `${name}: English must be marked as an unreviewed draft`);
+    const settings = { ...DEFAULT_SETTINGS, locale: { ...FALLBACK }, translations };
+    assert.ok(contentIn(settings, "en"), `${name}: English draft is incomplete`);
+    assert.deepEqual(offeredLanguages(settings), ["de"]);
+    assert.deepEqual(offeredLanguages({ ...settings, locale: { ...FALLBACK, customer: ["de", "en"] } }), ["de", "en"]);
+  }
+});
+
+test("profile: default translations for other languages are validated and baked in, ids beyond the defaults are dropped", async () => {
+  await withPseudo(async (languages) => {
+    const dir = await mkdtemp(path.join(tmpdir(), "inkform-profil-"));
+    const profile = path.join(dir, "beispiel");
+    try {
+      await cp(path.join(root, "profiles/beispiel"), profile, { recursive: true });
+      const json = JSON.parse(await readFile(path.join(profile, "profile.json"), "utf8"));
+      const build = async (extra) => {
+        await writeFile(path.join(profile, "profile.json"), JSON.stringify({ ...json, ...extra }));
+        return buildProfile(profile, { languages });
+      };
+      const translations = {
+        de: { app: { headline: "Should be skipped: de is the content language" } },
+        [PSEUDO]: {
+          app: { headline: "[head]" },
+          medical: { allergies: { title: "[allergy]" }, notReal: { title: "x" } },
+          legal: { privacy: { text: "[privacy text]" } },
+        },
+      };
+      const { bundledJs } = await build({ languages: { customer: [PSEUDO] }, translations });
+      assert.ok(!bundledJs.includes("Should be skipped"));
+      assert.ok(bundledJs.includes("[head]"));
+      assert.ok(bundledJs.includes("[allergy]"));
+      assert.ok(!bundledJs.includes("notReal"));
+      await assert.rejects(build({ translations: { xx: { app: { headline: "x" } } } }), /translations\.xx hat keine Sprachdatei/);
+      await assert.rejects(build({ translations: { [PSEUDO]: { app: { headline: "x".repeat(18001) } } } }), /ungültig oder zu lang/);
+      await assert.rejects(build({ translations: { [PSEUDO]: { draft: "ja" } } }), /draft muss true oder false sein/);
+      assert.ok((await build({ translations: { [PSEUDO]: { draft: true } } })).bundledJs.includes(`\\"draft\\":true`));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -32,5 +32,108 @@
     "titlePrefix": "",
     "welcomeStudio": "im Studio",
     "wordmarkLabel": "Inkform"
+  },
+  "translations": {
+    "en": {
+      "draft": true,
+      "app": {
+        "documentTitle": "Tattoo Consent",
+        "eyebrow": "CUSTOMER FORM",
+        "headline": "Tattoo Consent",
+        "description": "Welcome to the studio. Please fill in your details and discuss any open questions with your tattoo artist before your tattoo.",
+        "photoText": "I voluntarily allow the studio to photograph my finished tattoo and to publish it to show the studio's own tattoo work in the studio portfolio, on the studio's website and social media profiles. No names, faces, health information, consent forms or signatures are published. The tattoo itself may still make me recognisable. A no has no effect on the tattoo. I can withdraw this consent at any time for the future, verbally with the owner or via the studio's stated contact details, including for individual publication channels listed above. Processing carried out before the withdrawal remains lawful. The studio will end the affected use and remove the photos from the publications it can influence, unless another legal basis applies. For publications on the internet and social media, platform operators and third parties may store, further distribute or process the images outside the EU; full retrieval of copies held by others cannot be guaranteed. A new agreement is required for other purposes of use or further platforms. This declaration does not transfer any rights to the tattoo motif.",
+        "photoDeniedText": "The offered photo consent was declined. There is no consent to publish my tattoo photos for the portfolio, website or social media. A no has no effect on the treatment.",
+        "signatureText": "With my signature I confirm my details and the declarations I have selected. I voluntarily consent to the described tattoo. My decision on photos remains independent of this.",
+        "privacyTemplate": "Responsible: {{studio.name}}\nAddress: {{studio.address}}\nContact and withdrawal: {{studio.contact}}\n\nPurposes and legal bases: the core, contact and appointment data needed to prepare and carry out the tattoo appointment are processed on the basis of Art. 6(1)(b) GDPR. For the health information used in preparation, the personal preliminary conversation and documentation, we obtain explicit consent under Art. 6(1)(a) and Art. 9(2)(a) GDPR. Tattoo photos for the portfolio and the stated websites are only used with separate, voluntary consent (Art. 6(1)(a) GDPR).\n\nWhere further retention is needed to assert, exercise or defend legal claims, Art. 6(1)(f) GDPR applies, and for health data additionally Art. 9(2)(f) GDPR. The legitimate interest is the necessary proof of the information given and consent obtained, or legal action or defence. This does not amount to unlimited storage.\n\nRetention and deletion: {{studio.retention}}\n\nAccess, recipients and filing: {{studio.recipients}}\n\nWithdrawal: a consent given can be withdrawn at any time for the future, verbally with the owner or via the email address stated above. Processing carried out before the withdrawal remains lawful. From the withdrawal onward, processing on the basis of this consent ends. Any further, independent retention only takes place where another legal basis exists, and only to the extent necessary.\n\nYour rights: subject to the legal requirements, you have rights to access, rectification, erasure, restriction of processing and data portability. You can object to processing based on legitimate interests for reasons arising from your particular situation. You can complain to the data protection supervisory authority responsible for the studio.\n\nRequired and voluntary information: providing the health information is not a legal requirement. Please only share details relevant to the agreed tattoo. If information needed for safe performance is missing, this must be clarified in the personal preliminary conversation; the tattoo may not be able to go ahead as a result. Photo consent is voluntary; declining it has no disadvantages for the tattoo. There is no automated decision-making or profiling.\n\nThe app processes your details and your signature on this device and creates the PDF locally. It does not transmit this customer data to the internet. Form entries not yet completed are lost on closing or reloading. When the signed PDF is created, name, tattoo appointment, artist, total price and any deposit are additionally stored in a local income overview. This is used to track and evaluate the agreed services; health information and signatures are not stored in it. This contract and billing data is processed to perform the contract under Art. 6(1)(b) GDPR. Access to, backup of and any required deletion of this overview are the owner's responsibility. The signed PDF is additionally kept as a copy in the app's storage on this device until the studio deletes this copy; it is not transmitted. The studio is responsible for filing, accessing and retaining the saved PDF files."
+      },
+      "studio": {
+        "retention": "The documentation is kept during the preparation and performance of the appointment, and afterwards only for as long as it is needed to prove the consent or to assert, exercise or defend legal claims. The applicable limitation periods and the necessity in the individual case are decisive. For claims arising from personal injury or harm to health, the maximum limitation period under § 199(2) of the German Civil Code (BGB) can be 30 years; this does not mean a blanket 30-year retention duty. Once the purposes no longer apply and there is no other legal basis, the studio management deletes the records, including the copies in the app's storage and the local backup copies. In the event of an actual legal dispute, the records needed for it are kept until it ends and no further grounds for retention remain.",
+        "recipients": "Only the studio management has access to the consent PDF and the health data it contains. Filing and backup take place locally; this app has no automatic cloud synchronisation or transmission. Any disclosure required by law remains reserved. The separately chosen publication of tattoo photos does not include passing on this form, the health data or the signature."
+      },
+      "medical": {
+        "bloodMeds": {
+          "title": "Blood-thinning medication",
+          "hint": "Do you take, for example, aspirin, ASA or Marcumar?"
+        },
+        "allergies": {
+          "title": "Allergies or intolerances",
+          "hint": "e.g. to plasters, latex, nickel, disinfectants or dyes"
+        },
+        "infections": {
+          "title": "Known infectious diseases",
+          "hint": "e.g. hepatitis or HIV; please only give relevant details"
+        },
+        "skin": {
+          "title": "Skin conditions at the tattoo site",
+          "hint": "e.g. eczema, psoriasis, dermatitis or open areas of skin"
+        },
+        "chronic": {
+          "title": "Heart, diabetes, epilepsy or circulation",
+          "hint": "Do you have heart conditions, diabetes, epilepsy, or a tendency towards circulation problems?"
+        },
+        "pregnancy": {
+          "title": "Pregnancy or breastfeeding",
+          "hint": "Are you currently pregnant or breastfeeding?"
+        },
+        "painkillers": {
+          "title": "Painkillers before the appointment",
+          "hint": "Have you taken any painkillers before the appointment?"
+        },
+        "clotting": {
+          "title": "Blood clotting or wound healing",
+          "hint": "Do you have clotting disorders, poor wound healing, or a tendency to excessive scarring?"
+        },
+        "immune": {
+          "title": "Immune system, antibiotics or other therapy",
+          "hint": "Do you have a weakened immune system, or are you taking antibiotics, immunosuppressants or other relevant medication?"
+        },
+        "acute": {
+          "title": "Acute illness or fever",
+          "hint": "Are you currently ill, feverish, or do you have an acute infection?"
+        },
+        "alcohol24": {
+          "title": "Alcohol in the last 24 hours",
+          "hint": "Have you consumed alcohol in the last 24 hours?"
+        }
+      },
+      "legal": {
+        "adult": {
+          "title": "I am at least 18 years old.",
+          "text": "This applies today and on the stated tattoo appointment date."
+        },
+        "voluntary": {
+          "title": "I am choosing this tattoo voluntarily.",
+          "text": "I consent to the introduction of colour pigments using needles and the resulting injury to my skin at the described body site."
+        },
+        "consultation": {
+          "title": "My questions were answered in a personal conversation.",
+          "text": "I was given clear information, had enough time for questions, and have given truthful answers to the relevant health questions. I will report any changes before the procedure begins."
+        },
+        "risks": {
+          "title": "I have been informed about the risks.",
+          "text": "These include pain, bleeding, swelling, redness, inflammation, infections, allergic reactions and scarring. Reactions can also occur with a delay; long-term health effects are not conclusively established."
+        },
+        "permanent": {
+          "title": "I understand that my tattoo is permanent.",
+          "text": "Complete, scar-free removal cannot be guaranteed. Colours and outlines can change due to skin, healing, ageing and sun exposure."
+        },
+        "design": {
+          "title": "Motif, size and placement have been agreed with me.",
+          "text": "I have checked the discussed design or stencil and agree to it being carried out. Any further changes will be discussed with me before the procedure begins."
+        },
+        "aftercare": {
+          "title": "I have received and understood the written aftercare instructions.",
+          "text": "I will follow the individual aftercare instructions and seek medical advice, as well as inform the studio, if there are signs of infection, allergy or other complications."
+        },
+        "liability": {
+          "title": "Aftercare and statutory rights",
+          "text": "I will follow the aftercare instructions I received and seek medical advice, as well as inform the studio, if problems arise. My statutory rights arising from a defective service or breach of duty by the studio remain unaffected. This declaration is not a waiver of liability."
+        },
+        "privacy": {
+          "title": "I expressly consent to the processing of my health information.",
+          "text": "I expressly consent to the studio processing the health information I have given on this form for the personal preliminary conversation, preparing the agreed tattoo and documenting that I was informed and gave consent, and storing it in the local consent PDF. I received the privacy notice on access, retention and my rights before this decision. I can withdraw this consent at any time for the future, verbally with the owner or via the studio's stated contact details. Processing carried out before the withdrawal remains lawful. Further retention for legal defence is only possible under the conditions stated in the privacy notice. My decision on the use of photos is independent of this."
+        }
+      }
+    }
   }
 }

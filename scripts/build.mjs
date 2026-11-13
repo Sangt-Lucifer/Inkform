@@ -21,7 +21,8 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { loadPdfFonts } from "./fonts.mjs";
-import { validCurrency } from "../src/languages.js";
+import { DEFAULT_SETTINGS } from "../src/defaults.js";
+import { TRANSLATED, validCurrency } from "../src/languages.js";
 import { BASE_LANGUAGE, checkKeyUsage, checkLanguages, languagesForApp, loadLanguages } from "./sprachen.mjs";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
@@ -161,6 +162,54 @@ function profileLocale(profile, languages, manifest) {
   return { content, studio, customer, currency, note };
 }
 
+// profile.json "translations": default settings.translations content for additional languages,
+// same shape and limits as validateTranslations (src/languages.js) at runtime. Lets a profile ship
+// a language's legal and form texts, e.g. an unreviewed English draft, without the owner having to
+// type them into the admin console first; the language is still only offered once the owner picks
+// it on the studio page (see languages.js offeredLanguages).
+function profileTranslations(profile, languages, content) {
+  const where = `${profile.id}: profile.json`;
+  const value = profile.translations;
+  const output = {};
+  if (value === undefined) return output;
+  if (!value || typeof value !== "object") throw new Error(`${where}: translations muss ein Objekt sein.`);
+  const text = (input, max, field) => {
+    if (input === undefined || input === "") return undefined;
+    if (typeof input !== "string" || input.length > max)
+      throw new Error(`${where}: translations.${field} ist ungültig oder zu lang.`);
+    return input.normalize("NFC").trim() || undefined;
+  };
+  for (const [code, tr] of Object.entries(value)) {
+    if (code === content) continue;
+    if (!Object.hasOwn(languages, code))
+      throw new Error(`${where}: translations.${code} hat keine Sprachdatei in src/sprachen/.`);
+    if (!tr || typeof tr !== "object") throw new Error(`${where}: translations.${code} muss ein Objekt sein.`);
+    const own = { app: {}, studio: {}, medical: {}, legal: {} };
+    for (const part of ["app", "studio"])
+      for (const key of TRANSLATED[part]) {
+        const v = text(tr[part]?.[key], 18000, `${code}.${part}.${key}`);
+        if (v !== undefined) own[part][key] = v;
+      }
+    for (const [part, items] of [
+      ["medical", DEFAULT_SETTINGS.medical],
+      ["legal", DEFAULT_SETTINGS.legal],
+    ])
+      for (const item of items) {
+        const entry = {};
+        for (const key of TRANSLATED[part]) {
+          const v = text(tr[part]?.[item.id]?.[key], 8000, `${code}.${part}.${item.id}.${key}`);
+          if (v !== undefined) entry[key] = v;
+        }
+        if (Object.keys(entry).length) own[part][item.id] = entry;
+      }
+    if (tr.draft !== undefined && typeof tr.draft !== "boolean")
+      throw new Error(`${where}: translations.${code}.draft muss true oder false sein.`);
+    if (tr.draft) own.draft = true;
+    output[code] = own;
+  }
+  return output;
+}
+
 // `languages` (a folder of language files) is for tests only; a real build reads src/sprachen/.
 export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR } = {}) {
   const profile = await loadProfile(ref);
@@ -177,6 +226,7 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
     languages,
     JSON.parse(await readFile(path.join(profile.dir, "manifest.webmanifest"), "utf8")),
   );
+  const translations = profileTranslations(profile, languages, locale.content);
   const unused = Object.keys(profile.text).filter((key) => !used.has(key));
   if (unused.length) throw new Error(`${id}: ungenutzte Profiltexte: ${unused.join(", ")}`);
 
@@ -191,7 +241,9 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
   ]);
   const template = filled["src/index.html"],
     css = filled["src/styles.css"],
-    defaults = filled["src/defaults.js"].replace('"__PROFILE_LOCALE__"', () => JSON.stringify(JSON.stringify(locale))),
+    defaults = filled["src/defaults.js"]
+      .replace('"__PROFILE_LOCALE__"', () => JSON.stringify(JSON.stringify(locale)))
+      .replace('"__PROFILE_TRANSLATIONS__"', () => JSON.stringify(JSON.stringify(translations))),
     income = filled["src/income.js"],
     access = filled["src/access.js"],
     i18n = filled["src/i18n.js"],
@@ -231,7 +283,7 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
   ]
     .map((source) => source.replace(local, "").replace(exported, ""))
     .join("\n");
-  if (/^\s*(?:import|export)\s/m.test(bundledJs) || /__PDF_FONT_\w+__|__BLANK_EDITION__|__PROFILE_LOCALE__/.test(bundledJs))
+  if (/^\s*(?:import|export)\s/m.test(bundledJs) || /__PDF_FONT_\w+__|__BLANK_EDITION__|__PROFILE_LOCALE__|__PROFILE_TRANSLATIONS__/.test(bundledJs))
     throw new Error("Bundle enthält noch Modul-Importe/-Exporte oder Schrift-Platzhalter.");
   const escapeScript = (source) => source.replace(/<\/script/gi, "<\\/script");
   let portable = template

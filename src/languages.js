@@ -72,6 +72,7 @@ export function validateTranslations(value, base, content) {
         }
         if (Object.keys(entry).length) own[part][item.id] = entry;
       }
+    if (tr.draft === true) own.draft = true;
     output[code] = own;
   }
   return output;

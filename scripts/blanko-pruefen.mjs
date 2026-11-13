@@ -51,7 +51,7 @@ const STUDIO_TEXTS = [
   "eyebrowPrefix",
   "filesFolder",
 ];
-const PLACEHOLDER_EMAILS = ["du@beispiel.de", "kontakt@dein-studio.de"];
+const PLACEHOLDER_EMAILS = ["du@beispiel.de", "kontakt@dein-studio.de", "you@example.com", "contact@your-studio.com"];
 const PNG_CHUNKS = new Set(["IHDR", "PLTE", "tRNS", "IDAT", "IEND"]);
 const FIXED = [
   { label: "PEM-Block (Zertifikat oder Schlüssel)", rx: /-----BEGIN [A-Z0-9 ]+-----/ },

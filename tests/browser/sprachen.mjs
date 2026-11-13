@@ -83,6 +83,17 @@ for (const [label, width, height] of viewports) {
   check(`${label}: alle Admin-Seiten übersetzt und nicht breiter als der Bildschirm`, ok);
   await screenshot(`sprachen-admin-${width}`);
 }
+// The profile's English draft: complete, so it can be ticked, but not offered until the owner does.
+await ev(`openAdminAuthorized('studio')`);
+check(
+  "Englischer Entwurf: wählbar, nicht angeboten, als ungeprüft gekennzeichnet",
+  await ev(`(() => {
+    const box = document.querySelector('[data-locale-customer="en"]');
+    return !!box && !box.disabled && !box.checked && box.closest('label').querySelector('small')?.textContent === t('languages.draft')
+      && !settings.locale.customer.includes('en');
+  })()`),
+);
+
 // Form texts in the pseudo language, offered to customers next to the studio language.
 await ev(`(() => {
   const p = (x) => x ? '[' + x + ']' : x, s = JSON.parse(JSON.stringify(settings));

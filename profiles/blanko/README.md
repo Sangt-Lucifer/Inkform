@@ -41,6 +41,31 @@ Damit der Speicher nicht dauerhaft wächst, lassen sich die PDF-Kopien in der Ap
 
 Eine neue Version erscheint unter derselben Adresse. Die App lädt sie, wenn sie mit Internet geöffnet ist, und übernimmt sie erst, wenn nichts in Arbeit ist (kein Formular, keine offene Einwilligung). Die Daten bleiben erhalten. Vor einem Update ist eine Gesamtsicherung sinnvoll. Alle Geräte möglichst gemeinsam aktualisieren.
 
+## English
+
+Inkform is a tattoo consent form with signature, PDF filing and an income list for the iPad. It runs entirely on the device and offline: no account, no server, no cloud.
+
+**Set up**
+
+1. Open the app's address once in **Safari**, with an internet connection, and wait for “Ready offline”.
+2. Share → **Add to Home Screen**, keep “Open as Web App” on, then start Inkform from the new icon (it has its own storage, separate from the Safari tab).
+3. Choose a **PIN** of 6 to 12 digits. There is no online reset.
+4. In the setup assistant, enter the studio, privacy contact, address and place of signature. Everything stays on the iPad and can be changed later under “Studio & Contact”.
+5. Check the form texts, health questions and privacy notice and adapt them to the studio. They are neutral drafts and need a legal review before use.
+6. Test PDF filing under “iPad & Files”.
+
+**Languages**
+
+- The admin area follows the language chosen under “Appearance & Backup” → “Language of this Device”. This applies to this iPad only and is not part of the backup.
+- The customer form starts in the studio language. Under “Studio & Contact” → “Languages and Currency”, tick further **Languages for Customers**; a language selector then appears on the form.
+- English form texts are included as a **draft, not legally reviewed**. They are not offered to customers until you tick English. Have them reviewed first.
+- The English texts do not follow later changes to the German texts in the app. If a health question or declaration is added, English is no longer offered until it is translated.
+- Switching the language keeps the customer's details and health answers; declarations, photo choice and signature start again. The PDF is created in the customer's language.
+
+**Data and backup**
+
+Everything is stored in this app on this iPad and belongs to the app's address. Make a **full backup** regularly (Overview) and keep it on the iPad (“On My iPad”) or your own computer, not in iCloud Drive: it contains health information and signatures. Restoring replaces all data except the PIN. Under “Export”, ZIP files with the consent PDFs and the income overview are created per month, year or period.
+
 ## Inhalt
 
 | Datei | Inhalt |

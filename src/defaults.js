@@ -8,6 +8,13 @@ export const PROFILE_LOCALE = PROFILE_LOCALE_JSON.startsWith("{")
   ? JSON.parse(PROFILE_LOCALE_JSON)
   : { content: BASE_LANGUAGE, studio: BASE_LANGUAGE, customer: [BASE_LANGUAGE], currency: "EUR", note: {} };
 
+// Default translations the profile ships for additional languages (profile.json "translations"),
+// e.g. an unreviewed English draft of the legal and form texts; unbuilt sources ship none.
+const PROFILE_TRANSLATIONS_JSON = "__PROFILE_TRANSLATIONS__";
+export const PROFILE_TRANSLATIONS = PROFILE_TRANSLATIONS_JSON.startsWith("{")
+  ? JSON.parse(PROFILE_TRANSLATIONS_JSON)
+  : {};
+
 export const STUDIO_DEFAULTS = {
   name: "%%studioName%%",
   address: "%%studioAddress%%",
@@ -171,11 +178,11 @@ Die App verarbeitet deine Angaben und deine Unterschrift auf diesem Gerät und e
   medical: DEFAULT_MEDICAL,
   legal: DEFAULT_LEGAL,
   locale: PROFILE_LOCALE,
-  translations: {},
+  translations: PROFILE_TRANSLATIONS,
 };
-// A profile can only start in a studio language other than its content language once default
-// translations for it exist; without them (always true today, since profiles carry no
-// translations yet) the app would otherwise start in a language that is missing all its texts.
+// A profile can only start in a studio language other than its content language once the shipped
+// default translations fully cover it; otherwise the studio language falls back to the content
+// language, so the app never starts in a language that is missing some of its texts.
 if (!contentIn(DEFAULT_SETTINGS, DEFAULT_SETTINGS.locale.studio)) {
   PROFILE_LOCALE.studio = PROFILE_LOCALE.content;
   PROFILE_LOCALE.customer = [...new Set([PROFILE_LOCALE.studio, ...PROFILE_LOCALE.customer])];

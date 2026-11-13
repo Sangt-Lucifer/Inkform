@@ -1430,7 +1430,7 @@ function languagePanel() {
           ${locale.customer.includes(code) ? "checked" : ""}
           ${code === locale.studio || !complete ? "disabled" : ""}
         />
-        <span lang="${code}">${escapeHtml(translator(code).name)}</span>${complete ? "" : ` <small>${th("languages.missingTexts")}</small>`}</label
+        <span lang="${code}">${escapeHtml(translator(code).name)}</span>${complete ? "" : ` <small>${th("languages.missingTexts")}</small>`}${complete && adminDraft.translations[code]?.draft ? ` <small>${th("languages.draft")}</small>` : ""}</label
       >`;
     })
     .join("");

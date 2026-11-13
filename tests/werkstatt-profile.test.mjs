@@ -42,6 +42,7 @@ test("new studio: copy of the sample with its own id, .gitignore, own git repo w
   const profile = JSON.parse(await readFile(path.join(dir, "profile.json"), "utf8"));
   assert.equal(profile.id, "atelier-nord");
   assert.deepEqual(profile.markers, ["Atelier Nord"]);
+  assert.equal(profile.translations, undefined, "the sample's translations name the sample studio");
   assert.match(await readFile(path.join(dir, ".gitignore"), "utf8"), /\/build\/[\s\S]*\*\.key[\s\S]*\*\.crt/);
   assert.equal(execFileSync("git", ["-C", dir, "remote"], { encoding: "utf8" }), "");
   assert.throws(() => execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { stdio: "ignore" }), "no commit yet");

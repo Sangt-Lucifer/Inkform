@@ -541,6 +541,8 @@ export async function createStudio({ id, name, env, stateDir }) {
     await git(target, ["init", "-q", "-b", "main"]);
     const sample = await sampleProfile();
     const profile = { ...sample, id, name: name.trim(), description: "", markers: [name.trim()] };
+    // The sample's translations name the sample studio and cannot be edited in the Werkstatt.
+    delete profile.translations;
     await writeFile(path.join(target, FILES.profile), JSON.stringify(profile, null, 2) + "\n", { flag: "wx" });
   } catch (error) {
     await rm(target, { recursive: true, force: true }).catch(() => {});
