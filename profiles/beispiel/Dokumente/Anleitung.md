@@ -63,10 +63,10 @@ Apple-Anleitung: [Website auf dem iPad in eine App verwandeln](https://support.a
 
 ## PDF speichern und Gerät zurückgeben
 
-- PDF erstellen & sichern wählen. Das Dokument wird auf diesem Gerät erzeugt. Namen mit Sonderzeichen wie Ş, Ł oder ı erscheinen korrekt. Zeichen, die die PDF-Schrift nicht darstellen kann (zum Beispiel ✓, Emojis oder arabische Schrift), meldet die App vorher.
-- Wenn iPadOS den Systemdialog öffnet: In Dateien sichern, Auf meinem iPad, den Studioordner und Sichern wählen. Alternativ wird der PDF-Download verwendet.
-- Die App zeigt jetzt den schwarzen Bildschirm Vielen Dank. Der Kunde kann das Formular oder den Admin-Bereich nicht weiter über die Oberfläche bedienen.
-- Der Inhaber wählt Studio entsperren und gibt seine PIN ein. Das letzte PDF und die Ablagehinweise stehen wieder zur Verfügung. Bei Abbruch oder Fehler die Speicherung hier wiederholen.
+- PDF erstellen wählen. Das Dokument wird auf diesem Gerät erzeugt. Namen mit Sonderzeichen wie Ş, Ł oder ı erscheinen korrekt. Zeichen, die die PDF-Schrift nicht darstellen kann (zum Beispiel ✓, Emojis oder arabische Schrift), meldet die App vorher.
+- Die App zeigt jetzt den schwarzen Bildschirm Vielen Dank. Der Kunde sieht kein Speicherfenster und kann das Formular oder den Admin-Bereich nicht weiter über die Oberfläche bedienen.
+- Der Inhaber wählt Studio entsperren und gibt seine PIN ein. Das PDF und die Ablagehinweise erscheinen.
+- In Dateien sichern wählen, im Systemdialog Auf meinem iPad, den Studioordner und Sichern. Ohne Systemdialog wird der PDF-Download verwendet. Bei Abbruch oder Fehler die Speicherung hier wiederholen.
 - Das PDF in der Dateien-App tatsächlich öffnen und den Speicherort prüfen. Die App kann nicht feststellen, ob das Dokument im Systemordner gespeichert wurde.
 - Erst danach PDF ist gespeichert / Nächster Kunde bestätigen. Erst jetzt werden Name, Tattoo-Termin, Artist und Preise in die Einnahmenliste gebucht, genau einmal. Die Angaben werden geleert, das nächste Kundenformular wird freigegeben und der Admin ist wieder gesperrt.
 

@@ -10,7 +10,7 @@ Die ausführliche **[Anleitung für iPad und Admin](Anleitung-iPad-und-Admin.pdf
 
 ## Kundenablauf
 
-Nach **PDF erstellen & sichern** entsteht das unterschriebene PDF lokal, ein finanzieller Verweis wird in der Einnahmenliste gespeichert und der schwarze **Vielen Dank**-Bildschirm sperrt die Oberfläche. Der Inhaber entsperrt mit PIN und prüft bzw. wiederholt die tatsächliche PDF-Ablage. Erst nach **PDF ist gespeichert / Nächster Kunde** wird ein leeres Formular freigegeben. Die App kann das Speichern im Systemordner nicht selbst bestätigen.
+Nach **PDF erstellen** entsteht das unterschriebene PDF lokal, ein finanzieller Verweis wird in der Einnahmenliste gespeichert und der schwarze **Vielen Dank**-Bildschirm sperrt die Oberfläche; der Kunde sieht kein Speicherfenster. Der Inhaber entsperrt mit PIN und legt das PDF über **In Dateien sichern** ab. Erst nach **PDF ist gespeichert / Nächster Kunde** wird ein leeres Formular freigegeben. Die App kann das Speichern im Systemordner nicht selbst bestätigen.
 
 Name, Termin, Artist und Preise werden in der Einnahmenliste lokal gespeichert. Das unterschriebene PDF (mit Gesundheitsangaben und Unterschrift) bleibt bis zur Bestätigung der Ablage zwischengespeichert und danach für den ZIP-Export unverschlüsselt im Browser-Speicher, bis es als gelöscht markiert, als „PDF fehlt“ gebucht, entfernt oder anonymisiert wird. Die PIN ist ein Schutz der Bedienoberfläche, keine Verschlüsselung der Browserdaten. Betriebssystem-Gerätesperre und separate lokale Sicherungen bleiben notwendig. Es gibt keinen Online-PIN-Reset.
 

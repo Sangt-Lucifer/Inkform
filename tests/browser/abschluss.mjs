@@ -50,8 +50,11 @@ check("Änderung nach dem Unterschreiben verlangt eine neue Unterschrift", await
 await ev(`resetCustomerForm()`);
 
 // 1. Unicode names in the PDF -------------------------------------------------------------
+await ev(`window.__shares=0;navigator.canShare=()=>true;navigator.share=async()=>{window.__shares++}`);
 await ev(`fillConsent({firstName:'Gül',lastName:'Şahin',artist:'Łukasz Ćwik',motif:'Schriftzug „Ayşe Yıldız“ – Ąę Żółć',placement:'Unterarm'});form.requestSubmit()`);
 await until(`!document.getElementById('completion-screen').hidden && !!pendingConsent`);
+await new Promise((r) => setTimeout(r, 500));
+check("Kunde sieht nur „Vielen Dank“: kein Teilen-Fenster, kein Download, kein PDF-Dialog", await ev(`window.__shares===0&&!document.getElementById('pdf-dialog').open`));
 const pdf = Buffer.from(await ev(`blobBase64(pendingConsent.blob)`), "base64");
 await writeFile(OUT + "/abschluss-unicode.pdf", pdf);
 const text = pdfText(pdf);

@@ -1040,9 +1040,10 @@ form.addEventListener("submit", (event) => {
     const clock = data.createdAt.toTimeString().slice(0, 8).replaceAll(":", "");
     const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
     const filename = `${translator(settings.locale.studio).t("file.consent")}_${slug}_${data.fields.appointment}_${clock}_${suffix}.pdf`;
-    // Prepared now, booked only when the owner confirms the filing (pdf-next).
+    // Prepared now, booked only when the owner confirms the filing (pdf-next). The customer sees
+    // only the thank-you screen: the owner saves the PDF after unlocking.
     const incomeEntry = incomeFeature.capture(data, filename, consentIncomeId);
-    presentPdfArtifact(blob, filename, result.pages, { autoSave: true, incomeEntry });
+    presentPdfArtifact(blob, filename, result.pages, { incomeEntry });
     showCompletion();
     keepPending(pendingConsent);
   } catch (error) {
