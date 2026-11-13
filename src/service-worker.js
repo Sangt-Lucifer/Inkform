@@ -31,7 +31,8 @@ self.addEventListener("install", (event) => {
 });
 // Updates wait until all app windows are closed, or until the app reports that it is idle (no form
 // in progress, no unconfirmed consent): then the page asks this worker to take over at once, so an
-// older cached version can never start again on data written by the newer one. Nothing reloads.
+// older cached version can never start again on data written by the newer one. Only „Nach Update
+// suchen“ reloads the page afterwards.
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });

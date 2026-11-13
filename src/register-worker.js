@@ -71,17 +71,41 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
         if (document.visibilityState === "visible") lookForUpdate("visible");
       });
       lookForUpdate("start");
-      // „Nach Update suchen“: "found", "none", or a rejection without connection.
+      // „Nach Update suchen“: "loading" (the page reloads into the new version), "busy" (found,
+      // but a form or unsaved change holds it up), "none", or a rejection without connection.
+      let reloadOnTakeOver = false,
+        tookOver = false;
       window.inkformLookForUpdate = async () => {
         noteUpdateCheck("button", true);
         await registered.update();
-        return registered.installing || registered.waiting ? "found" : "none";
+        const next = registered.installing || registered.waiting;
+        if (!next && !tookOver) return "none";
+        if (!window.inkformIdle?.()) return "busy";
+        if (!next) {
+          location.reload();
+          return "loading";
+        }
+        reloadOnTakeOver = true;
+        await new Promise((resolve, reject) => {
+          const check = () => {
+            if (next.state === "redundant") reject(Error("redundant"));
+            else if (next.state !== "installing") resolve();
+          };
+          next.addEventListener("statechange", check);
+          check();
+        });
+        next.postMessage({ type: "SKIP_WAITING" });
+        return "loading";
       };
       setInterval(takeOver, 15000);
       takeOver();
-      navigator.serviceWorker.addEventListener("controllerchange", () =>
-        navigator.serviceWorker.ready.then((r) => r.active?.postMessage({ type: "CHECK_OFFLINE" })),
-      );
+      const firstController = navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        tookOver = Boolean(firstController);
+        if (reloadOnTakeOver) location.reload();
+        else
+          navigator.serviceWorker.ready.then((r) => r.active?.postMessage({ type: "CHECK_OFFLINE" }));
+      });
       const registration = await navigator.serviceWorker.ready;
       registration.active?.postMessage({ type: "CHECK_OFFLINE" });
     } catch (error) {

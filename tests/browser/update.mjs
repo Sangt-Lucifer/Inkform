@@ -62,11 +62,15 @@ try {
   await until(`caches.keys().then(k=>k.includes('inkform-app-testupdate2')&&!k.includes('inkform-app-testupdate'))`, 200);
   check("Erster Start eines neuen Tages: fragt selbst nach der neuen Version", await ev(`localStorage.getItem('inkform.update-day.v1')===new Date().toDateString()`));
 
-  // „Nach Update suchen“ asks at any time.
+  // „Nach Update suchen“ asks at any time; while a form is in progress it only reports the update.
   await writeFile(swFile, original.replace(/inkform-app-[0-9a-f]+/, "inkform-app-testupdate3"));
-  check("Knopf „Nach Update suchen“ findet die neue Version", (await ev(`window.inkformLookForUpdate()`)) === "found");
-  await until(`caches.keys().then(k=>k.includes('inkform-app-testupdate3')&&!k.includes('inkform-app-testupdate2'))`, 200);
-  check("Ohne Neuladen: Seite bleibt bedienbar", await ev(`!document.getElementById('customer-app').hidden&&typeof adminAccess!=='undefined'`));
+  await ev(`document.getElementById('firstName').value='Halb';document.getElementById('firstName').dispatchEvent(new Event('input',{bubbles:true}))`);
+  check("Knopf bei Formular in Arbeit: meldet die neue Version, lädt nicht", (await ev(`window.inkformLookForUpdate()`)) === "busy");
+  // Idle: the new version takes over and the page reloads into it.
+  await ev(`resetCustomerForm();window.__alteSeite=true`);
+  check("Knopf „Nach Update suchen“ lädt die neue Version", (await ev(`window.inkformLookForUpdate()`)) === "loading");
+  await until(`!window.__alteSeite&&document.readyState==='complete'&&!!navigator.serviceWorker.controller`, 200);
+  check("Nach dem Neuladen: neue Version aktiv, alte gelöscht, App bedienbar", await ev(`caches.keys().then(k=>k.includes('inkform-app-testupdate3')&&!k.includes('inkform-app-testupdate2')&&!!document.getElementById('customer-app'))`));
   check("Keine JavaScript-Fehler", errors.length === 0);
 } finally {
   await writeFile(swFile, original);

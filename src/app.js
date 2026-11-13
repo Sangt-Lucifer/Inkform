@@ -2964,7 +2964,9 @@ $("admin-app").addEventListener("click", (event) => {
       else
         window
           .inkformLookForUpdate()
-          .then((result) => toast(t(result === "found" ? "ipad.updateFound" : "ipad.updateNone")))
+          .then((result) =>
+            toast(t({ loading: "ipad.updateLoading", busy: "ipad.updateBusy" }[result] ?? "ipad.updateNone")),
+          )
           .catch(() => toast(t("ipad.updateFailed")))
           .finally(showOfflineDetails);
       break;
