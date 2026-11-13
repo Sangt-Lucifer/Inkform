@@ -1276,12 +1276,47 @@ function bookPendingConsent(pdfMissing) {
 }
 // Used by the service-worker registration: an app update may take over only while nothing is in
 // progress (empty customer form, no unconfirmed consent, no unsaved admin changes, no open dialog).
-window.inkformIdle = () =>
-  !dirty &&
-  !pendingConsent &&
-  !adminChanged() &&
-  !incomeFeature?.hasUnsavedChanges() &&
-  !document.querySelector("dialog[open]");
+// What keeps a waiting app update from taking over; empty when the app is idle.
+function updateBlockers() {
+  const dialog = document.querySelector("dialog[open]");
+  return [
+    dirty && "form",
+    pendingConsent && "consent",
+    adminChanged() && "settings",
+    incomeFeature?.hasUnsavedChanges() && "income",
+    dialog && `dialog#${dialog.id}`,
+  ].filter(Boolean);
+}
+window.inkformIdle = () => !updateBlockers().length;
+async function offlineDetails() {
+  const worker = (w) => (w ? `${w.state} ${new URL(w.scriptURL).pathname}` : "–");
+  const registration = await navigator.serviceWorker?.getRegistration().catch(() => null);
+  const copies = await caches?.keys().catch(() => []);
+  return [
+    ["ipad.detailAddress", location.href],
+    ["ipad.detailController", worker(navigator.serviceWorker?.controller)],
+    ["ipad.detailActive", worker(registration?.active)],
+    ["ipad.detailWaiting", worker(registration?.waiting || registration?.installing)],
+    ["ipad.detailCopies", (copies || []).filter((k) => k.startsWith("inkform-app-")).join(", ") || "–"],
+    ["ipad.detailBlockers", updateBlockers().join(", ") || "–"],
+  ];
+}
+async function showOfflineDetails() {
+  const box = document.querySelector("[data-offline-details]");
+  if (!box) return;
+  const rows = await offlineDetails();
+  box.replaceChildren(
+    ...rows.map(([key, value]) => {
+      const row = document.createElement("div"),
+        label = document.createElement("span"),
+        text = document.createElement("strong");
+      label.textContent = t(key);
+      text.textContent = value;
+      row.append(label, text);
+      return row;
+    }),
+  );
+}
 $("pdf-next").addEventListener("click", () => bookPendingConsent(false));
 $("pdf-missing").addEventListener("click", () => bookPendingConsent(true));
 function runFilesTest() {
@@ -2245,6 +2280,7 @@ function renderAdminSection() {
           </div>
         </div>`,
       ) +
+      adminPanel(th("ipad.details"), `<div class="ipad-checks ipad-details" data-offline-details></div>`) +
       adminPanel(
         th("ipad.step1"),
         /* HTML */ `<p class="ad-section-copy">${th("ipad.step1Copy")}</p>
@@ -2336,6 +2372,7 @@ function renderAdminSection() {
     exportFeature.preview();
     exportFeature.usage();
   }
+  if (adminPage === "ipad") showOfflineDetails();
   updateAdminChrome();
   updateThemeButtons();
 }

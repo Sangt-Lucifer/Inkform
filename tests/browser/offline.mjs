@@ -35,6 +35,8 @@ await cmd('Page.reload');await reload;await until(`document.documentElement.data
 check('Root URL restarts offline after duplicate-cache cleanup',await ev(`typeof window.jspdf?.jsPDF==='function'&&!adminAccess.isUnlocked()&&document.getElementById('admin-app').hidden`));
 await ev(`openAdmin('income');document.getElementById('admin-pin').value='839274';document.getElementById('admin-pin-form').requestSubmit()`);await until(`adminAccess.isUnlocked()`);
 check('PIN and income admin remain usable offline',await ev(`document.querySelector('#income-filter-artist')!==null`));
+await ev(`openAdmin('ipad')`);await until(`document.querySelectorAll('[data-offline-details] strong').length===6`);
+check('Offline details name the controlling worker and its copy',await ev(`(()=>{const v=[...document.querySelectorAll('[data-offline-details] strong')].map(n=>n.textContent);return v[1]==='activated /sw.js'&&v[2]==='activated /sw.js'&&v[3]==='–'&&/^inkform-app-[0-9a-f]{12}$/.test(v[4])})()`));
 check('No third-party connections',requests.every(u=>!/^https?:/.test(u)||u.startsWith(ORIGIN+'/')));
 check('No JavaScript or CSP failures',errors.length===0);
 await writeFile(OUT+'/inkform-offline-final-results.json',JSON.stringify({requests,errors},null,2));

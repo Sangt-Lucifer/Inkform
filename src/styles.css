@@ -2483,6 +2483,9 @@ html[data-theme="dark"] .ad-notice.review {
   font-size: 12px;
 }
 .files-instructions ol,
+.ipad-details strong {
+  overflow-wrap: anywhere;
+}
 .ipad-steps {
   list-style: decimal;
   padding-left: 19px;
