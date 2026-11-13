@@ -26,11 +26,13 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
         registered.installing?.addEventListener("statechange", takeOver),
       );
       // Safari does not look for a new worker by itself when the app starts or returns from the
-      // background; without asking, an installed app would never get an update.
-      const lookForUpdate = () => registered.update().catch(() => {});
+      // background; without asking, an installed app would never get an update. Not while
+      // offline: in airplane mode iPadOS would answer the request with its own notice.
+      const lookForUpdate = () => navigator.onLine && registered.update().catch(() => {});
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") lookForUpdate();
       });
+      window.addEventListener("online", lookForUpdate);
       lookForUpdate();
       setInterval(takeOver, 15000);
       takeOver();
