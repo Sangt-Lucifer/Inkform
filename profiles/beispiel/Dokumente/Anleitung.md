@@ -1,6 +1,6 @@
 # 1. Start und erste Einrichtung
 
-INKFORM – neutrale Vorlage. Anleitung für die Studioverwaltung. Stand: 12. November 2026.
+INKFORM – neutrale Vorlage. Anleitung für die Studioverwaltung. Stand: 13. November 2026.
 
 Mit Inkform füllt der Kunde seine Tattoo-Einwilligung aus und unterschreibt auf dem Gerät. Das PDF entsteht lokal. Eine separate Einnahmenliste enthält nur Name, Termin, Artist und Preise. Gesundheitsangaben und Unterschriften landen nicht in dieser Liste.
 
@@ -98,6 +98,16 @@ Texte und Studioangaben sind zunächst ein Entwurf. Änderungen speichern übern
 Einnahmeneinträge haben einen eigenen Dialog mit Eintrag speichern. Sie werden nicht über die untere Schaltfläche für Studioeinstellungen gespeichert. Bereits unterschriebene PDFs werden durch spätere Änderungen an Texten oder Preisen nicht verändert.
 
 Die PIN schützt die Bedienoberfläche; sie ist keine Verschlüsselung der Browserdaten. Gerät und lokale Sicherungen zusätzlich mit den Möglichkeiten des Betriebssystems schützen. Es gibt keinen Online-PIN-Reset.
+
+## Sprachen
+
+- Die Verwaltung erscheint in der Sprache dieses Geräts (Design & Sicherung → Sprache dieses Geräts). Die Einstellung gilt nur für dieses Gerät und ist nicht in der Gesamtsicherung.
+- Das Kundenformular startet immer in der Studiosprache. Weitere Sprachen für Kunden unter Studio & Kontakt → Sprachen und Währung ankreuzen; ab zwei Sprachen erscheint auf dem Formular eine Sprachauswahl. Ankreuzen lässt sich eine Sprache erst, wenn alle Formulartexte in ihr vorliegen.
+- Wechselt der Kunde die Sprache, bleiben Angaben und Gesundheitsantworten erhalten; Erklärungen, Foto-Auswahl und Unterschrift beginnen neu. Das PDF entsteht in der Sprache des Kunden und vermerkt sie mit dem optionalen Hinweis, z. B. „Maßgeblich ist die deutsche Fassung“.
+- Übersetzungen bearbeiten: auf Formular & Texte, Gesundheitsfragen, Einwilligungen und Datenschutz oben die Sprache umschalten. Unter jedem Feld steht der deutsche Text als Vorlage.
+- Englisch ist als Entwurf enthalten, nicht juristisch geprüft, und wird Kunden erst nach dem Ankreuzen angeboten. Nach der Prüfung neben der Sprache „Juristisch geprüft“ ankreuzen.
+- Wird ein deutscher Text geändert, bleibt die Übersetzung stehen, wird aber markiert, und die Sprache wird Kunden nicht angeboten. Der Hinweis „… Texte prüfen“ führt zu den Feldern und zeigt den alten und den neuen deutschen Text. Übersetzung anpassen oder „Übersetzung passt“ tippen, dann speichern.
+- Die Währung steht ebenfalls unter Sprachen und Währung. Bereits erfasste Einnahmen behalten ihre Währung; Beträge werden nie umgerechnet.
 
 # 5. Einnahmen je Artist auswerten
 
