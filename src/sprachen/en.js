@@ -405,6 +405,7 @@ export default {
     "ipad.detailAddress": "Address",
     "ipad.detailBlockers": "Holding up the update",
     "ipad.detailController": "Controls this page",
+    "ipad.detailChecks": "Last update checks",
     "ipad.detailCopies": "Offline copies",
     "ipad.detailWaiting": "Waiting version",
     "ipad.details": "Offline details",

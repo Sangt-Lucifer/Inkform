@@ -1299,6 +1299,12 @@ async function offlineDetails() {
     ["ipad.detailWaiting", worker(registration?.waiting || registration?.installing)],
     ["ipad.detailCopies", (copies || []).filter((k) => k.startsWith("inkform-app-")).join(", ") || "–"],
     ["ipad.detailBlockers", updateBlockers().join(", ") || "–"],
+    [
+      "ipad.detailChecks",
+      (window.inkformUpdateChecks?.() || [])
+        .map((c) => `${new Date(c.at).toLocaleTimeString()} ${c.reason} ${c.online ? "online" : "offline"}`)
+        .join(" · ") || "–",
+    ],
   ];
 }
 async function showOfflineDetails() {

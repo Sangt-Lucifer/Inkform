@@ -1,5 +1,23 @@
 import { t } from "./i18n.js";
 
+// The last update checks with the network state the browser reported, for „Offline-Details“.
+const UPDATE_CHECKS_KEY = "inkform.update-checks.v1";
+function noteUpdateCheck(reason) {
+  try {
+    const checks = JSON.parse(localStorage.getItem(UPDATE_CHECKS_KEY) || "[]");
+    checks.push({ at: new Date().toISOString(), reason, online: navigator.onLine });
+    localStorage.setItem(UPDATE_CHECKS_KEY, JSON.stringify(checks.slice(-5)));
+  } catch {}
+}
+// Only the hosted app has this script; the single file reads none.
+window.inkformUpdateChecks = () => {
+  try {
+    return JSON.parse(localStorage.getItem(UPDATE_CHECKS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+};
+
 if ("serviceWorker" in navigator && window.isSecureContext && location.protocol !== "file:") {
   const updateStatus = (ready, text) => {
     document.documentElement.dataset.offlineReady = String(ready);
@@ -28,12 +46,15 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
       // Safari does not look for a new worker by itself when the app starts or returns from the
       // background; without asking, an installed app would never get an update. Not while
       // offline: in airplane mode iPadOS would answer the request with its own notice.
-      const lookForUpdate = () => navigator.onLine && registered.update().catch(() => {});
+      const lookForUpdate = (reason) => {
+        noteUpdateCheck(reason);
+        if (navigator.onLine) registered.update().catch(() => {});
+      };
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") lookForUpdate();
+        if (document.visibilityState === "visible") lookForUpdate("visible");
       });
-      window.addEventListener("online", lookForUpdate);
-      lookForUpdate();
+      window.addEventListener("online", () => lookForUpdate("online"));
+      lookForUpdate("start");
       setInterval(takeOver, 15000);
       takeOver();
       navigator.serviceWorker.addEventListener("controllerchange", () =>
