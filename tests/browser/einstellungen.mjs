@@ -124,11 +124,12 @@ await ev(`window.confirm=(m)=>{window.__question=m;return false}`);
 await ev(`window.__studioText=${JSON.stringify(json)}`);
 await pick(`window.__studioText`);
 await until(`!!window.__question`);
-const question = await ev(`window.__question`);
+const question = await ev(`window.__question`),
+  studioName = file.settings.studio.name;
 check(
   "Rückfrage nennt Datum, was ersetzt wird und was unberührt bleibt",
   /Studio-Einstellungen vom .* übernehmen\?/.test(question) &&
-    question.includes("Ersetzt werden: Studioangaben (Musterstudio") &&
+    question.includes(`Ersetzt werden: Studioangaben (${studioName}`) &&
     question.includes("Farbschema: hell") &&
     question.includes("Logo: das Logo aus der Datei") &&
     question.includes("Fristen: PDFs 10 Jahre, Namen in der Einnahmenliste 3 Jahre") &&
