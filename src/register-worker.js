@@ -25,6 +25,13 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
       registered.addEventListener("updatefound", () =>
         registered.installing?.addEventListener("statechange", takeOver),
       );
+      // Safari does not look for a new worker by itself when the app starts or returns from the
+      // background; without asking, an installed app would never get an update.
+      const lookForUpdate = () => registered.update().catch(() => {});
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") lookForUpdate();
+      });
+      lookForUpdate();
       setInterval(takeOver, 15000);
       takeOver();
       navigator.serviceWorker.addEventListener("controllerchange", () =>

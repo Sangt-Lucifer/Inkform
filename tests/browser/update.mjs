@@ -38,7 +38,8 @@ try {
   // Customer starts filling in the form, then a new version is published.
   await ev(`document.getElementById('firstName').value='Halb';document.getElementById('firstName').dispatchEvent(new Event('input',{bubbles:true}))`);
   await writeFile(swFile, original.replace(/inkform-app-[0-9a-f]+/, "inkform-app-testupdate"));
-  await ev(`navigator.serviceWorker.getRegistration().then(r=>r.update())`);
+  // The app asks for the new worker itself when it returns to the foreground (Safari does not).
+  await ev(`document.dispatchEvent(new Event('visibilitychange'))`);
   await until(`navigator.serviceWorker.getRegistration().then(r=>!!r.waiting)`);
   await new Promise((r) => setTimeout(r, 1500));
   check("Während ein Formular in Arbeit ist, wartet das Update", await ev(`navigator.serviceWorker.getRegistration().then(r=>!!r.waiting&&document.getElementById('firstName').value==='Halb')`));
