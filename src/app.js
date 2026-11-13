@@ -1717,7 +1717,7 @@ function renderAdminSection() {
     content = `${adminPanel(
       th("setup.welcome"),
       `<p class="ad-section-copy">${th("setup.copy")}</p>
-      <div class="ad-fields">${adminField("studio.name", t("studio.name"), { placeholder: t("studio.namePlaceholder"), max: 160 })}${adminField("studio.contact", t("studio.contact"), { type: "email", placeholder: t("studio.contactPlaceholder"), max: 160 })}${adminField("studio.address", t("studio.address"), { area: true, rows: 2, placeholder: t("studio.addressPlaceholder"), max: 300 })}${adminField("studio.location", t("studio.location"), { placeholder: t("studio.locationPlaceholder"), max: 100 })}
+      <div class="ad-fields">${adminField("studio.name", t("studioPage.name"), { placeholder: t("studioPage.namePlaceholder"), max: 160 })}${adminField("studio.contact", t("studioPage.contact"), { type: "email", placeholder: t("studioPage.contactPlaceholder"), max: 160 })}${adminField("studio.address", t("studioPage.address"), { area: true, rows: 2, placeholder: t("studioPage.addressPlaceholder"), max: 300 })}${adminField("studio.location", t("studioPage.location"), { placeholder: t("studioPage.locationPlaceholder"), max: 100 })}
       <div class="ad-field"><label for="setup-pdf-years">${th("setup.pdfYears")}</label><input id="setup-pdf-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().pdfYears))}"></div>
       <div class="ad-field"><label for="setup-income-years">${th("setup.incomeYears")}</label><input id="setup-income-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().incomeYears))}"></div></div>
       <p class="ad-preview-note">${th("setup.note")}</p>
@@ -1777,31 +1777,31 @@ function renderAdminSection() {
         ${adminPanel(
           th("admin.page.studio.title"),
           /* HTML */ `<div class="ad-fields">
-            ${adminField("studio.name", t("studio.name"), {
-              placeholder: t("studio.namePlaceholder"),
+            ${adminField("studio.name", t("studioPage.name"), {
+              placeholder: t("studioPage.namePlaceholder"),
               max: 160,
-              help: th("studio.nameHelp"),
-            })}${adminField("studio.contact", t("studio.contact"), {
+              help: th("studioPage.nameHelp"),
+            })}${adminField("studio.contact", t("studioPage.contact"), {
               type: "email",
-              placeholder: t("studio.contactPlaceholder"),
+              placeholder: t("studioPage.contactPlaceholder"),
               max: 160,
-            })}${adminField("studio.address", t("studio.address"), {
+            })}${adminField("studio.address", t("studioPage.address"), {
               area: true,
               rows: 2,
-              placeholder: t("studio.addressPlaceholder"),
+              placeholder: t("studioPage.addressPlaceholder"),
               max: 300,
-            })}${adminField("studio.location", t("studio.location"), {
-              placeholder: t("studio.locationPlaceholder"),
+            })}${adminField("studio.location", t("studioPage.location"), {
+              placeholder: t("studioPage.locationPlaceholder"),
               max: 100,
-            })}${adminField("app.defaultArtist", t("studio.defaultArtist"), {
+            })}${adminField("app.defaultArtist", t("studioPage.defaultArtist"), {
               placeholder: t("tattoo.artistPlaceholder"),
               max: 100,
-              help: th("studio.defaultArtistHelp"),
+              help: th("studioPage.defaultArtistHelp"),
             })}
           </div>`,
         )}
         <div class="ad-notice">
-          ${th("studio.privacyHint", {
+          ${th("studioPage.privacyHint", {
             link: markup(`<button
             class="text-button"
             type="button"

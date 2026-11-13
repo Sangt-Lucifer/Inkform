@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { LANGUAGE_DIR, buildProfile, readLanguages, root } from "../scripts/build.mjs";
 import { checkKeyUsage, checkLanguages, languagesForApp, loadLanguages } from "../scripts/sprachen.mjs";
-import { languageCodes, markup, registerLanguages, setLanguage, t, th, translator } from "../src/i18n.js";
+import { languageCodes, markup, registerLanguages, setCurrency, setLanguage, t, textsInAllLanguages, th, translator } from "../src/i18n.js";
 import { PSEUDO, writePseudoLanguages } from "./lib/pseudo.mjs";
 
 const real = await loadLanguages(LANGUAGE_DIR);
@@ -41,6 +41,7 @@ test("language files: missing, extra and mismatched texts are errors", () => {
   assert.match(checkLanguages({ ...base({ Bad: "x" }) }).join(), /Schlüssel "Bad" hat nicht die Form/);
   assert.match(checkLanguages({ en: lang(ok) }).join(), /Grundsprache fehlt/);
   assert.match(checkLanguages({ ...base(de), "Englisch!": lang(ok) }).join(), /kein Sprachcode/);
+  assert.match(errors({ ...ok, "a.count": { one: 1, other: "{anzahl} entries" } }), /ungültige Mehrzahlformen/);
 });
 
 test("language files: a key written twice is an error, even though JavaScript keeps the last one", () => {
@@ -50,16 +51,18 @@ test("language files: a key written twice is an error, even though JavaScript ke
 
 test("key usage: unknown keys in the code and unused keys in the base language", () => {
   const texts = { "a.used": "x", "a.listed": "y", "a.unused": "z" };
-  const sources = { "x.js": `t("a.used"); const MAP = { k: "a.listed" }; th("a.missing"); <p data-t="b.missing"></p>` };
+  const sources = {
+    "x.js": `t("a.used"); const MAP = { k: "a.listed", typo: "a.lsted" }; th("a.missing"); <p data-t="b.missing"></p> load("other.v1")`,
+  };
   const errors = checkKeyUsage(texts, sources).join("\n");
-  assert.match(errors, /nicht in de\.js: a\.missing, b\.missing/);
+  assert.match(errors, /nicht in de\.js: a\.lsted, a\.missing, b\.missing$/m);
   assert.match(errors, /Ungenutzte Schlüssel in de\.js: a\.unused$/m);
 });
 
 test("t() and th(): placeholders, plurals, markup and the fallback to German", () => {
   registerLanguages({
-    de: { name: "Deutsch", locale: "de-DE", dir: "ltr", texts: { "x.hi": "Hallo {name}", "x.n": { one: "{anzahl} Datei", other: "{anzahl} Dateien" }, "x.b": "<b>Fett</b> {wert}", "x.only": "Nur deutsch" } },
-    en: { name: "English", locale: "en-GB", dir: "ltr", texts: { "x.hi": "Hello {name}", "x.n": { one: "{anzahl} file", other: "{anzahl} files" }, "x.b": "<b>Bold</b> {wert}" } },
+    de: { name: "Deutsch", locale: "de-DE", dir: "ltr", texts: { "x.hi": "Hallo {name}", "x.n": { one: "{anzahl} Datei", other: "{anzahl} Dateien" }, "x.b": "<b>Fett</b> {wert}", "x.only": "Nur deutsch", "x.cur": "Preis ({waehrungszeichen}) in {waehrung}" } },
+    en: { name: "English", locale: "en-GB", dir: "ltr", texts: { "x.hi": "Hello {name}", "x.n": { one: "{anzahl} file", other: "{anzahl} files" }, "x.b": "<b>Bold</b> {wert}", "x.cur": "Price ({waehrungszeichen}) in {waehrung}" } },
   });
   try {
     setLanguage("en");
@@ -68,13 +71,20 @@ test("t() and th(): placeholders, plurals, markup and the fallback to German", (
     assert.equal(t("x.n", { anzahl: 1 }), "1 file");
     assert.equal(t("x.n", { anzahl: 3 }), "3 files");
     assert.equal(t("x.b", { wert: 1 }), "Bold 1");
+    assert.equal(t("x.hi", { name: "<b>Ann</b>" }), "Hello <b>Ann</b>");
+    assert.equal(t("x.cur"), "Price (€) in EUR");
+    assert.deepEqual(textsInAllLanguages("x.hi"), ["Hallo {name}", "Hello {name}"]);
     assert.equal(th("x.b", { wert: markup("<button>ok</button>") }), "<b>Bold</b> <button>ok</button>");
     assert.equal(t("x.only"), "Nur deutsch");
     assert.equal(translator("en").money(123456), "€1,234.56");
     assert.equal(translator("de").money(123456), "1.234,56\u00a0€");
     assert.equal(translator("de").date("2026-03-05", { day: "2-digit", month: "2-digit", year: "numeric" }), "05.03.2026");
     assert.equal(setLanguage("xx").code, "de");
+    setCurrency("CHF");
+    assert.equal(t("x.cur"), "Preis (CHF) in CHF");
+    assert.equal(translator("de").money(1050), "10,50\u00a0CHF");
   } finally {
+    setCurrency("EUR");
     registerLanguages(languagesForApp(real, (text) => text));
     setLanguage("de");
   }

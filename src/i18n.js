@@ -4,11 +4,24 @@
 export const BASE_LANGUAGE = "de";
 export const LANGUAGE_KEY = "inkform.language.v1";
 let LANGUAGES = {},
-  active = null;
+  active = null,
+  currency = "EUR",
+  everywhere = new Map();
 
 export function registerLanguages(languages) {
   LANGUAGES = languages;
+  everywhere = new Map();
   active = translator(active?.code);
+}
+// ISO 4217 code for money() and the placeholders {waehrung} (code) and {waehrungszeichen} (symbol).
+export function setCurrency(code) {
+  currency = code;
+}
+// The distinct texts of one key over all languages (e.g. to recognize generated file names).
+export function textsInAllLanguages(key) {
+  if (!everywhere.has(key))
+    everywhere.set(key, [...new Set(languageCodes().map((code) => translator(code).t(key)))]);
+  return everywhere.get(key);
 }
 export const languageCodes = () => Object.keys(LANGUAGES);
 export const hasLanguage = (code) => Object.hasOwn(LANGUAGES, code ?? "");
@@ -43,8 +56,15 @@ export function translator(code) {
     if (typeof text === "object") text = text[plurals.select(Number(vars.anzahl))] ?? text.other;
     return text;
   }
-  const fill = (text, vars, wrap = String) =>
-    text.replace(/\{(\w+)\}/g, (match, name) => (Object.hasOwn(vars, name) ? wrap(vars[name]) : match));
+  const symbol = () =>
+    new Intl.NumberFormat(locale, { style: "currency", currency })
+      .formatToParts(0)
+      .find((part) => part.type === "currency").value;
+  const fill = (text, own, wrap = String) => {
+    const vars = { waehrung: currency, ...own };
+    if (text.includes("{waehrungszeichen}")) vars.waehrungszeichen ??= symbol();
+    return text.replace(/\{(\w+)\}/g, (match, name) => (Object.hasOwn(vars, name) ? wrap(vars[name]) : match));
+  };
   return {
     code: own,
     name: lang.name,
@@ -52,7 +72,7 @@ export function translator(code) {
     dir: lang.dir,
     pdfFont: lang.pdfFont,
     // Plain text, for textContent, attributes and PDFs: markup tags are removed.
-    t: (key, vars = {}) => fill(template(key, vars), vars).replace(RICH, ""),
+    t: (key, vars = {}) => fill(template(key, vars).replace(RICH, ""), vars),
     // HTML: the text keeps <b>, <strong> and <code>; every value is escaped unless made by markup().
     th: (key, vars = {}) =>
       fill(escapeMarkup(template(key, vars)).replace(/&lt;(\/?)(b|strong|code)&gt;/g, "<$1$2>"), vars, (value) =>
@@ -62,8 +82,7 @@ export function translator(code) {
     date: (iso, options) => new Intl.DateTimeFormat(locale, options).format(new Date(iso + "T12:00:00")),
     dateTime: (date, options) => new Intl.DateTimeFormat(locale, options).format(date),
     number: (value, options) => new Intl.NumberFormat(locale, options).format(value),
-    money: (cents, currency = "EUR") =>
-      new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 100),
+    money: (cents) => new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 100),
   };
 }
 

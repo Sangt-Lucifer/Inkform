@@ -1,5 +1,5 @@
 // Only financial references are persisted. No health answers, signatures or PDFs.
-import { language, markup, t, th } from "./i18n.js";
+import { BASE_LANGUAGE, language, markup, t, th, translator } from "./i18n.js";
 import {
   ANONYMIZED,
   anonymizeRecord,
@@ -213,8 +213,8 @@ export function selectIncome(
     .sort(
       (a, b) =>
         a.date.localeCompare(b.date) ||
-        a.artist.localeCompare(b.artist, language().locale) ||
-        a.customer.localeCompare(b.customer, language().locale),
+        a.artist.localeCompare(b.artist, translator(BASE_LANGUAGE).locale) ||
+        a.customer.localeCompare(b.customer, translator(BASE_LANGUAGE).locale),
     );
 }
 

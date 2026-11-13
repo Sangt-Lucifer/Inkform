@@ -27,7 +27,7 @@ Ein Profil besteht aus `profile.json`, `logo.png`, `icons/`, `manifest.webmanife
 
 ## Sprachen
 
-Jede Sprache ist eine Datei `src/sprachen/<code>.js` mit `name` (in der eigenen Sprache), `locale` (für Datum, Zahlen, Geld und Mehrzahl über `Intl`), `dir` (`ltr` oder `rtl`), `pdfFont` und `texts`. Welche Sprachen es gibt, ergibt sich nur aus diesen Dateien. Deutsch ist die Grundsprache: Jede andere Sprache braucht genau dieselben Schlüssel, dieselben Platzhalter (`{wert}` setzt die App ein, `%%name%%` der Build aus dem Profil) und die Mehrzahlformen ihrer Sprache (`{ one: "…", other: "…" }`, Zahl in `{anzahl}`). Erlaubt sind nur `<b>`, `<strong>` und `<code>`. Build und Tests brechen ab bei fehlenden, überzähligen, doppelten oder ungenutzten Schlüsseln. Im HTML stehen Texte als `data-t="schlüssel"`, Attribute als `data-t-<attribut>`, im Code als `t()` (Text) und `th()` (HTML).
+Jede Sprache ist eine Datei `src/sprachen/<code>.js` mit `name` (in der eigenen Sprache), `locale` (für Datum, Zahlen, Geld und Mehrzahl über `Intl`), `dir` (`ltr` oder `rtl`), `pdfFont` und `texts`. Welche Sprachen es gibt, ergibt sich nur aus diesen Dateien. Deutsch ist die Grundsprache: Jede andere Sprache braucht genau dieselben Schlüssel, dieselben Platzhalter (`{wert}` setzt die App ein, `%%name%%` der Build aus dem Profil; `{waehrung}` und `{waehrungszeichen}` gibt es überall) und die Mehrzahlformen ihrer Sprache (`{ one: "…", other: "…" }`, Zahl in `{anzahl}`). Erlaubt sind nur `<b>`, `<strong>` und `<code>`. Build und Tests brechen ab bei fehlenden, überzähligen, doppelten oder ungenutzten Schlüsseln. Im HTML stehen Texte als `data-t="schlüssel"`, Attribute als `data-t-<attribut>`, im Code als `t()` (Text) und `th()` (HTML).
 
 ## Bauen und prüfen
 

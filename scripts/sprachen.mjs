@@ -19,13 +19,14 @@ export async function loadLanguages(dir) {
   for (const file of files) {
     const code = file.slice(0, -3);
     const source = await readFile(path.join(dir, file), "utf8");
-    const { default: lang } = await import(`${pathToFileURL(path.join(dir, file)).href}?${Date.now()}`);
+    // Imported from its text: a changed file is read anew, an unchanged one stays a single module.
+    const { default: lang } = await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
     languages[code] = { ...lang, source };
   }
   return languages;
 }
 
-const forms = (value) => (typeof value === "string" ? [value] : Object.values(value));
+const forms = (value) => (typeof value === "string" ? [value] : Object.values(value).filter((f) => typeof f === "string"));
 const placeholders = (value) =>
   [...new Set(forms(value).flatMap((text) => [...text.matchAll(PLACEHOLDER)].map((m) => m[0])))].sort().join(" ");
 
@@ -104,15 +105,20 @@ export function checkLanguages(languages) {
   return errors;
 }
 
-// Keys the code names but the base language lacks, and base keys nothing names. A key counts as
-// used wherever it appears as a quoted string, so maps of keys are fine; built keys are not.
+// Keys the code names but the base language lacks, and base keys nothing names. Every quoted
+// string in the form of a key whose first part is a text area of the base language counts as a
+// key, so keys in maps and conditions are checked too; keys built at runtime are not.
 export function checkKeyUsage(baseTexts, sources) {
   const all = Object.values(sources).join("\n");
+  const areas = new Set(Object.keys(baseTexts).map((k) => k.split(".")[0]));
   const used = new Set([...all.matchAll(/["'`]([a-z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9]+)+)["'`]/g)].map((m) => m[1]));
   const named = new Set(
-    [...all.matchAll(/(?:\bt|\bth|\.t|\.th|\.raw)\(\s*["'`]([^"'`]+)["'`]|\bdata-t(?:-[\w-]+)?="([^"]+)"/g)]
-      .map((m) => m[1] ?? m[2])
-      .filter((k) => KEY.test(k)),
+    [
+      ...[...used].filter((k) => areas.has(k.split(".")[0])),
+      ...[...all.matchAll(/(?:\bt|\bth|\.t|\.th|\.raw)\(\s*["'`]([^"'`]+)["'`]|\bdata-t(?:-[\w-]+)?="([^"]+)"/g)].map(
+        (m) => m[1] ?? m[2],
+      ),
+    ].filter((k) => KEY.test(k)),
   );
   const errors = [];
   const unknown = [...named].filter((k) => !Object.hasOwn(baseTexts, k));

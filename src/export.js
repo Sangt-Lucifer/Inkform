@@ -2,7 +2,7 @@
 // The PDFs live in their own IndexedDB database, keyed by the income entry's id; a PDF is kept only
 // while its entry may still have a PDF (see exportable), sync() removes all others.
 import { fileSlug } from "./consent.js";
-import { applyTexts, language, languageCodes, t, th, translator } from "./i18n.js";
+import { BASE_LANGUAGE, applyTexts, language, t, textsInAllLanguages, th, translator } from "./i18n.js";
 import { incomeCsv } from "./income.js";
 import { pdfMayExist } from "./retention.js";
 import { createZip } from "./zip.js";
@@ -68,11 +68,17 @@ export function addRemovedIds(storage, ids) {
 }
 
 // Generated PDF names start with the file name of any language the app has.
-const generated = () => {
-  const prefixes = new Set(languageCodes().map((code) => translator(code).t("file.consent")));
-  const alternatives = [...prefixes].map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-  return new RegExp(`^(?:${alternatives})_(.+)_\\d{4}-\\d{2}-\\d{2}_\\d{6}_[A-Z0-9]{4}\\.pdf$`, "u");
-};
+let generatedFor = null,
+  generatedRegex = null;
+function generated() {
+  const prefixes = textsInAllLanguages("file.consent");
+  if (prefixes !== generatedFor) {
+    const alternatives = prefixes.map((p) => p.normalize("NFC").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    generatedRegex = new RegExp(`^(?:${alternatives})_(.+)_\\d{4}-\\d{2}-\\d{2}_\\d{6}_[A-Z0-9]{4}\\.pdf$`, "u");
+    generatedFor = prefixes;
+  }
+  return generatedRegex;
+}
 // "JJJJ-MM-TT_Nachname_Vorname.pdf": the name part of the generated PDF name (as signed), otherwise
 // the income entry's "Vorname Nachname".
 export function consentFileName(record) {
@@ -98,7 +104,7 @@ export function uniqueNames(names) {
 export function exportPlan(records, archivedIds, period, type) {
   const inPeriod = records
     .filter((r) => r.date >= period.from && r.date <= period.to)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.customer.localeCompare(b.customer, language().locale) || a.id.localeCompare(b.id));
+    .sort((a, b) => a.date.localeCompare(b.date) || a.customer.localeCompare(b.customer, translator(BASE_LANGUAGE).locale) || a.id.localeCompare(b.id));
   const consents = type === "income" ? [] : inPeriod.filter((r) => exportable(r) && archivedIds.has(r.id)),
     names = uniqueNames(consents.map(consentFileName));
   return {
@@ -138,8 +144,8 @@ export function unexportedMonths(records, archivedIds, log, today) {
 }
 
 export function formatSize(bytes) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
-  return `${language().number(bytes / 1024 / 1024, { maximumFractionDigits: 1 })} MB`;
+  if (bytes < 1024 * 1024) return t("size.kb", { wert: Math.max(1, Math.ceil(bytes / 1024)) });
+  return t("size.mb", { wert: language().number(bytes / 1024 / 1024, { maximumFractionDigits: 1 }) });
 }
 
 export function createExportFeature({
@@ -339,7 +345,7 @@ export function createExportFeature({
         sizes = [...(await archive.sizes())].filter(([id]) => ok.has(id)),
         bytes = sizes.reduce((sum, [, size]) => sum + size, 0);
       host.textContent = [
-        t("export.usage", { anzahl: sizes.length, groesse: sizes.length ? formatSize(bytes) : "0 KB" }),
+        t("export.usage", { anzahl: sizes.length, groesse: sizes.length ? formatSize(bytes) : t("size.kb", { wert: 0 }) }),
         bytes >= COPY_HINT_BYTES && t("export.usageHigh"),
       ]
         .filter(Boolean)
