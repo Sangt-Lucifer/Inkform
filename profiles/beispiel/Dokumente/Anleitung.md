@@ -89,7 +89,7 @@ Admin-Konsole wählen und die Inhaber-PIN eingeben. Bei offenem Admin hat der In
 | Aufbewahrung | Fristen festlegen, Löschliste für fällige PDFs und Anonymisieren alter Namen in der Einnahmenliste. |
 | Datenschutz | Aufbewahrungs- und Löschkriterien, Zugriff / Empfänger und vollständige Datenschutzhinweise bearbeiten. Angaben müssen dem realen Ablauf entsprechen. |
 | iPad & Dateien | Offline-Verfügbarkeit und PDF-Funktion prüfen, Home-Bildschirm-Anleitung öffnen und eine Test-PDF ohne Kundendaten erzeugen. |
-| Design & Sicherung | Light- oder Darkmode wählen, Studioeinstellungen als JSON oder vollständige App als HTML exportieren, Einstellungen importieren und die Standardvorlage laden. |
+| Design & Sicherung | Light- oder Darkmode wählen, Studio-Einstellungen (Studioangaben, Logo, Texte, Sprachen, Farbschema, Fristen; ohne Kundendaten) exportieren und importieren, die App als HTML exportieren, nachsehen, was in welcher Datei steckt, und die Standardvorlage laden. Der Import zeigt vorher, was ersetzt wird; Einnahmen, PDFs und PIN bleiben unberührt. |
 
 ## Änderungen zuverlässig übernehmen
 

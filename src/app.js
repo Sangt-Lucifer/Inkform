@@ -53,13 +53,16 @@ import {
   BACKUP_INTERVAL_KEY,
   applyRemovals,
   createFullBackup,
+  createStudioSettings,
   fromBase64,
   readBackupDays,
   readFullBackup,
+  readStudioSettings,
 } from "./backup.js";
 import {
   LAST_BACKUP_KEY,
   PENDING_REMINDER_DAYS,
+  RETENTION_KEY,
   daysBetween,
   dueForPdfDeletion,
   readRetention,
@@ -1754,9 +1757,8 @@ backupPicker.addEventListener("change", async () => {
   backupPicker.value = "";
   if (!file || !adminAccess.isUnlocked()) return;
   try {
-    if ((pendingConsent && !pendingConsent.confirmed) || pendingStore.read())
-      throw Error(t("restore.pendingFirst"));
-    if (adminChanged()) throw Error(t("restore.unsaved"));
+    const blocker = replaceBlocker();
+    if (blocker) throw Error(blocker);
     const data = readFullBackup(JSON.parse(await file.text()), validateSettings),
       { removed, records, pdfs, skipped } = applyRemovals(data, readRemovedIds(localStorage), incomeFeature.list(), localDate());
     if (
@@ -1770,24 +1772,17 @@ backupPicker.addEventListener("change", async () => {
       )
     )
       return;
-        // The logo first: if writing it fails, nothing has changed. If a later step fails, the
-    // device's own logo is put back.
-    const previousLogo = data.logo === undefined ? undefined : await logoStore.get(LOGO_KEY);
-    await writeLogo(data.logo);
-    try {
-      await exportFeature.restore(pdfs);
-      localStorage.setItem(PDF_REMOVED_KEY, JSON.stringify([...removed]));
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
-      localStorage.setItem(THEME_KEY, data.theme);
-      writeRetention(localStorage, data.retention);
-      localStorage.setItem(BACKUP_INTERVAL_KEY, String(data.backupDays));
-      localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(data.exports));
-      localStorage.setItem(INCOME_KEY, JSON.stringify({ schemaVersion: 1, records }));
-      localStorage.setItem(LAST_BACKUP_KEY, data.createdAt);
-    } catch (error) {
-      await writeLogo(previousLogo).catch(() => {});
-      throw error;
-    }
+    await writeCustomisations(data, {
+      before: async () => {
+        await exportFeature.restore(pdfs);
+        localStorage.setItem(PDF_REMOVED_KEY, JSON.stringify([...removed]));
+      },
+      after: () => {
+        localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(data.exports));
+        localStorage.setItem(INCOME_KEY, JSON.stringify({ schemaVersion: 1, records }));
+        localStorage.setItem(LAST_BACKUP_KEY, data.createdAt);
+      },
+    });
     await exportFeature.sync();
     sessionStorage.setItem("inkform.restored", data.createdAt);
     location.reload();
@@ -1799,6 +1794,7 @@ backupPicker.addEventListener("change", async () => {
 const logoStore = createIndexedDbFiles(globalThis.indexedDB, LOGO_DB),
   BUILT_IN_LOGO = document.querySelector(".studio-logo").getAttribute("src");
 let logoUrl = null,
+  ownLogo = null,
   pdfLogo = null;
 // The logo for PDFs as PNG bytes with its size; null if the built-in one is no complete PNG.
 function logoForPdf(bytes) {
@@ -1838,6 +1834,7 @@ function drawPdfLogo(doc, x, y, size) {
 function showLogo(bytes) {
   if (logoUrl) URL.revokeObjectURL(logoUrl);
   logoUrl = bytes ? URL.createObjectURL(new Blob([bytes], { type: "image/png" })) : null;
+  ownLogo = bytes;
   pdfLogo = bytes ? logoForPdf(bytes) : builtInPdfLogo;
   const src = logoUrl || BUILT_IN_LOGO;
   document.querySelectorAll(".studio-logo").forEach((img) => (img.src = src));
@@ -1849,6 +1846,39 @@ function showLogo(bytes) {
 async function writeLogo(logo) {
   if (logo === null) await logoStore.delete(LOGO_KEY);
   else if (logo) await logoStore.put(LOGO_KEY, logo instanceof Blob ? logo : new Blob([logo], { type: "image/png" }));
+}
+// Why the customisations or a whole backup cannot replace what is on the device right now, or "".
+function replaceBlocker() {
+  if ((pendingConsent && !pendingConsent.confirmed) || pendingStore.read()) return t("restore.pendingFirst");
+  if (dirty) return t("restore.formFirst");
+  if (adminChanged()) return t("restore.unsaved");
+  return "";
+}
+// Writes the customisations of a studio settings file or a full backup; what is undefined stays
+// as it is. A restore adds its PDFs and list of deleted copies (before) and its income list and
+// log (after). The logo first: if writing it fails, nothing has changed. If a later step fails,
+// the logo and every key written here are put back; PDFs already written stay in the app's store.
+const REPLACED_KEYS = [PDF_REMOVED_KEY, SETTINGS_KEY, THEME_KEY, RETENTION_KEY, BACKUP_INTERVAL_KEY, EXPORT_LOG_KEY, INCOME_KEY, LAST_BACKUP_KEY];
+async function writeCustomisations(data, { before = async () => {}, after = () => {} } = {}) {
+  const previousLogo = data.logo === undefined ? undefined : await logoStore.get(LOGO_KEY),
+    previous = REPLACED_KEYS.map((key) => [key, localStorage.getItem(key)]);
+  await writeLogo(data.logo);
+  try {
+    await before();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
+    if (data.theme) localStorage.setItem(THEME_KEY, data.theme);
+    if (data.retention) writeRetention(localStorage, data.retention);
+    if (data.backupDays) localStorage.setItem(BACKUP_INTERVAL_KEY, String(data.backupDays));
+    after();
+  } catch (error) {
+    for (const [key, value] of previous)
+      try {
+        if (value === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+      } catch (_) {}
+    await writeLogo(previousLogo).catch(() => {});
+    throw error;
+  }
 }
 async function storedLogo() {
   const blob = await logoStore.get(LOGO_KEY);
@@ -2183,7 +2213,17 @@ function renderAdminSection() {
       <div class="ad-field"><label for="setup-income-years">${th("setup.incomeYears")}</label><input id="setup-income-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().incomeYears))}"></div></div>
       <p class="ad-preview-note">${th("setup.note")}</p>
       <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="setup-finish">${adminIcon("check")}${th("setup.finish")}</button></div>`,
-    )}${logoPanel()}${samplePanel()}`;
+    )}${logoPanel()}${adminPanel(
+      th("setup.transferTitle"),
+      /* HTML */ `<p class="ad-section-copy">${th("setup.transferCopy")}</p>
+        <div class="ad-actions-row">
+          <button class="ad-button" type="button" data-admin-action="import-json">
+            ${adminIcon("upload")}${th("appearance.importJson")}</button
+          ><button class="ad-button" type="button" data-admin-action="backup-restore">
+            ${adminIcon("upload")}${th("backup.restore")}
+          </button>
+        </div>`,
+    )}${samplePanel()}`;
   } else if (adminPage === "export") {
     content = `<div id="export-content">${exportFeature.view()}</div>`;
   } else if (adminPage === "retention") {
@@ -2510,9 +2550,6 @@ function renderAdminSection() {
       th("appearance.transfer"),
       /* HTML */ `<p class="ad-section-copy">${th("appearance.transferCopy")}</p>
         <div class="ad-actions-row">
-          <button class="ad-button" type="button" data-admin-page="overview">
-            ${adminIcon("download")}${th("appearance.toBackup")}</button
-          >
           <button class="ad-button" type="button" data-admin-action="export-json">
             ${adminIcon("download")}${th("appearance.exportJson")}</button
           ><button class="ad-button" type="button" data-admin-action="import-json">
@@ -2522,6 +2559,21 @@ function renderAdminSection() {
           </button>
         </div>
         <p class="ad-preview-note">${th("appearance.transferNote")}</p>`,
+    )}${adminPanel(
+      th("contents.title"),
+      /* HTML */ `<dl class="contents-list">
+          <dt>${th("contents.backup")}</dt>
+          <dd>${th("contents.backupItems")}</dd>
+          <dt>${th("contents.studio")}</dt>
+          <dd>${th("contents.studioItems")}</dd>
+          <dt>${th("contents.nowhere")}</dt>
+          <dd>${th("contents.nowhereItems")}</dd>
+        </dl>
+        <div class="ad-actions-row">
+          <button class="ad-button" type="button" data-admin-page="overview">
+            ${adminIcon("download")}${th("appearance.toBackup")}
+          </button>
+        </div>`,
     )}${adminPanel(
       th("appearance.defaults"),
       /* HTML */ `<div class="ad-reset-row">
@@ -2815,37 +2867,57 @@ function downloadFile(blob, name) {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
-function exportSettings(kind) {
+// The studio settings file is built synchronously (the logo is kept in memory), so the share
+// sheet opens within the tap, as Safari requires.
+function exportStudioSettings() {
+  if (adminChanged()) {
+    configError(t("exportSettings.unsaved"));
+    return;
+  }
+  const file = new File(
+    [
+      JSON.stringify(
+        createStudioSettings({
+          settings: validateSettings(settings),
+          theme: document.documentElement.dataset.theme,
+          logo: ownLogo,
+          retention: readRetention(localStorage),
+          backupDays: readBackupDays(localStorage),
+        }),
+        null,
+        2,
+      ),
+    ],
+    `${t("file.studioSettings")}_${localDate()}.json`,
+    { type: "application/json" },
+  );
+  saveFile(file).then(
+    () => toast(t("studioFile.saved", { datei: file.name })),
+    (error) => toast(t(error.name === "AbortError" ? "save.aborted" : "save.failed")),
+  );
+}
+// The app as one HTML file with the saved settings; it keeps the built-in logo (an own logo travels
+// in the studio settings file).
+function exportHtml() {
   if (adminChanged()) {
     configError(t("exportSettings.unsaved"));
     return;
   }
   const payload = { ...clone(settings), theme: document.documentElement.dataset.theme };
-  if (kind === "json")
-    downloadFile(
-      new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
-      `${t("file.settings")}_${localDate()}.json`,
-    );
-  else {
-    const doc = new DOMParser().parseFromString(APP_SOURCE_HTML, "text/html");
-    doc.getElementById("inkform-config").textContent = JSON.stringify(payload).replace(
-      /</g,
-      "\\u003c",
-    );
-    doc.documentElement.dataset.theme = payload.theme;
-    doc.querySelectorAll("[data-hosted-only]").forEach((node) => node.remove());
-    downloadFile(
-      new Blob(["<!DOCTYPE html>\n" + doc.documentElement.outerHTML], {
-        type: "text/html;charset=utf-8",
-      }),
-      `${t("file.studioHtml")}_${localDate()}.html`,
-    );
-  }
-  toast(
-    kind === "json"
-      ? t("exportSettings.json")
-      : t("exportSettings.html"),
+  const doc = new DOMParser().parseFromString(APP_SOURCE_HTML, "text/html");
+  doc.getElementById("inkform-config").textContent = JSON.stringify(payload).replace(
+    /</g,
+    "\\u003c",
   );
+  doc.documentElement.dataset.theme = payload.theme;
+  doc.querySelectorAll("[data-hosted-only]").forEach((node) => node.remove());
+  downloadFile(
+    new Blob(["<!DOCTYPE html>\n" + doc.documentElement.outerHTML], {
+      type: "text/html;charset=utf-8",
+    }),
+    `${t("file.studioHtml")}_${localDate()}.html`,
+  );
+  toast(t("exportSettings.html"));
 }
 function setTheme(theme, persist = true) {
   if (!["light", "dark"].includes(theme)) theme = "dark";
@@ -3115,10 +3187,10 @@ $("admin-app").addEventListener("click", (event) => {
       else toast(t("ipad.noLink"));
       break;
     case "export-json":
-      exportSettings("json");
+      exportStudioSettings();
       break;
     case "export-html":
-      exportSettings("html");
+      exportHtml();
       break;
     case "import-json":
       $("admin-import-file").click();
@@ -3128,22 +3200,48 @@ $("admin-app").addEventListener("click", (event) => {
       break;
   }
 });
+// Studio settings: checked as a whole, shown with what they replace, written after a yes; income,
+// PDFs, export log and PIN stay as they are.
 $("admin-import-file").addEventListener("change", async (event) => {
   const file = event.target.files[0];
-  if (!file) return;
+  event.target.value = "";
+  if (!file || !adminAccess.isUnlocked()) return;
   try {
-    if (file.size > 1024 * 1024)
-      throw new Error(t("import.tooLarge"));
-    const data = JSON.parse(await file.text());
-    adminDraft = validateSettings(data);
-    renderAdminSection();
-    toast(t("import.done"));
+    if (file.size > 2 * 1024 * 1024) throw new Error(t("import.tooLarge"));
+    const blocker = replaceBlocker();
+    if (blocker) throw new Error(blocker);
+    const data = readStudioSettings(JSON.parse(await file.text()), validateSettings);
+    if (!window.confirm(studioPreview(data))) return;
+    await writeCustomisations(data);
+    sessionStorage.setItem("inkform.studioImported", "1");
+    location.reload();
   } catch (error) {
     configError(t("import.failed", { fehler: error instanceof SyntaxError ? t("import.badJson") : error.message }));
-  } finally {
-    event.target.value = "";
   }
 });
+function studioPreview(data) {
+  const s = data.settings,
+    unchanged = t("studioFile.unchanged"),
+    years = (n) => (n ? t("studioFile.years", { anzahl: n }) : t("studioFile.noYears"));
+  return [
+    data.createdAt ? t("studioFile.question", { datum: timeFormat(new Date(data.createdAt)) }) : t("studioFile.questionOld"),
+    t("studioFile.replaces", {
+      studio: s.studio.name || "–",
+      fragen: s.medical.length,
+      texte: s.legal.length,
+      sprachen: s.locale.customer.map((code) => (hasLanguage(code) ? translator(code).name : code)).join(", "),
+    }),
+    [
+      t("studioFile.theme", { wert: data.theme ? t(data.theme === "dark" ? "studioFile.themeDark" : "studioFile.themeLight") : unchanged }),
+      t("studioFile.logo", { wert: data.logo === undefined ? unchanged : t(data.logo ? "studioFile.logoOwn" : "studioFile.logoBuiltIn") }),
+      t("studioFile.retention", {
+        wert: data.retention ? t("studioFile.retentionYears", { pdf: years(data.retention.pdfYears), namen: years(data.retention.incomeYears) }) : unchanged,
+      }),
+      t("studioFile.interval", { wert: data.backupDays ? t("backup.days", { anzahl: data.backupDays }) : unchanged }),
+    ].join("\n"),
+    t("studioFile.untouched"),
+  ].join("\n\n");
+}
 window.addEventListener("keydown", (event) => {
   if (adminOpen && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
     event.preventDefault();
@@ -3245,6 +3343,10 @@ loadLogo();
 if (configLoadError) toast(configLoadError);
 if (BLANK_EDITION) document.querySelectorAll("[data-studio-only]").forEach((node) => (node.hidden = true));
 if (!OWNER_GUIDE_BASE64) document.querySelectorAll('[data-admin-action="guide"]').forEach((node) => (node.hidden = true));
+if (sessionStorage.getItem("inkform.studioImported")) {
+  sessionStorage.removeItem("inkform.studioImported");
+  toast(t("studioFile.done"));
+}
 if (sessionStorage.getItem("inkform.restored")) {
   sessionStorage.removeItem("inkform.restored");
   toast(t("restore.done"));

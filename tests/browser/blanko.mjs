@@ -45,6 +45,7 @@ await ev(`(async()=>{const c=document.createElement('canvas');c.width=c.height=6
 await until(`document.querySelector('.studio-logo').src.startsWith('blob:')`);
 check("Logo schon im Assistenten hochladbar, gilt sofort", await ev(`adminPage==='setup'&&!!document.querySelector('[data-admin-action="logo-remove"]')&&document.querySelector('.ad-brand .studio-logo').src.startsWith('blob:')`));
 await screenshot("blanko-einrichtung");
+check("Assistent bietet Studio-Einstellungen importieren und Wiederherstellen an", await ev(`adminPage==='setup'&&!!document.querySelector('#admin-app [data-admin-action="import-json"]')&&!!document.querySelector('#admin-app [data-admin-action="backup-restore"]')`));
 await ev(`openAdminAuthorized('export')`);
 check("Vor der Einrichtung führt jede Admin-Seite zum Assistenten", await ev(`adminPage==='setup'`));
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);

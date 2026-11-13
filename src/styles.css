@@ -3055,3 +3055,15 @@ html[data-theme="dark"] dialog::backdrop {
 .logo-setting .ad-section-copy {
   margin-top: 0;
 }
+.contents-list {
+  margin: 0 0 16px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.contents-list dt {
+  font-weight: 600;
+}
+.contents-list dd {
+  margin: 0 0 10px;
+  color: var(--ad-muted);
+}

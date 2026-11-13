@@ -86,7 +86,7 @@ await ev(`document.querySelector('[data-income-action="pdf"]').click()`);
 check('Filtered PDF report does not create another consent entry',await ev(`pdfArtifact.isReport&&document.getElementById('pdf-next').hidden&&document.getElementById('income-capture-note').hidden&&JSON.parse(localStorage.getItem(INCOME_KEY)).records.length===3`));
 await ev(`document.getElementById('pdf-dialog').close();document.querySelector('[data-income-action="backup"]').click()`);
 check('Financial JSON backup includes all years and no medical data',await ev(`(async()=>{const data=JSON.parse(await window.__downloadBlob.text());return data.records.length===3&&!('medical' in data.records[0])})()`));
-await ev(`exportSettings('html')`);
+await ev(`exportHtml()`);
 check('App HTML export excludes persisted ledger, PIN hash and customer names',await ev(`(async()=>{const text=await window.__downloadBlob.text();return !text.includes('OLD-LEDGER')&&!text.includes('LEDGER-TEST PERSON')&&!text.includes(JSON.parse(localStorage.getItem(ADMIN_PIN_KEY)).hash)})()`));
 await ev(`window.__incoming={schemaVersion:1,records:[{id:'import-extra',date:'2026-11-07',artist:'Alex',customer:'Import-Test',totalCents:30000,depositCents:null,source:'import.pdf',updatedAt:new Date().toISOString()}]};const dt=new DataTransfer();dt.items.add(new File([JSON.stringify(window.__incoming)],'income.json',{type:'application/json'}));document.getElementById('income-import-file').files=dt.files;document.getElementById('income-import-file').dispatchEvent(new Event('change',{bubbles:true}));`);
 await until(`JSON.parse(localStorage.getItem(INCOME_KEY)).records.length===4`);

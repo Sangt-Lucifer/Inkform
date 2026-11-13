@@ -75,7 +75,7 @@ await ev(`(()=>{const chunk=(type,data)=>{const body=new Uint8Array([...new Text
 result = await logoPdf();
 check('Unlesbares Logo: PDF entsteht ohne Logo, ohne schwarzes Feld, Marke am Rand', result.pages >= 2 && !result.calls.some((c) => /^(logo|feld)/.test(c)) && result.calls.includes('marke1@18'));
 await ev(`showLogo(null)`);
-await ev(`window.__exported=null;window.__exported=null;window.__createObjectURL=URL.createObjectURL;URL.createObjectURL=(blob)=>{window.__exported=blob;return window.__createObjectURL(blob)};exportSettings('html')`);
+await ev(`window.__exported=null;window.__exported=null;window.__createObjectURL=URL.createObjectURL;URL.createObjectURL=(blob)=>{window.__exported=blob;return window.__createObjectURL(blob)};exportHtml()`);
 check('Configured HTML export embeds all libraries and logo',await ev(`(async()=>{const text=await window.__exported.text();return !/<script\\b[^>]*\\bsrc\\s*=/i.test(text)&&text.includes('data:image/png;base64,')&&text.includes(${JSON.stringify(P.studioName)})&&!text.includes('data-cdn-src')&&!text.includes('QA-SENTINEL-4892')&&!text.includes('value="450.50"')})()`));
 for(const width of [320,390,768]){
  await cmd('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:true});

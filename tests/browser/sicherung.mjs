@@ -179,7 +179,14 @@ await ev(`window.__restorePdfs=exportFeature.restore;exportFeature.restore=()=>P
 await restore(`window.__backupText`);
 await toastSays("Testfehler");
 check("Scheitert das Wiederherstellen nach dem Logo, bleibt das Logo des Geräts", (await ownLogo()) === "keins" && (await unchanged()));
-await ev(`exportFeature.restore=window.__restorePdfs;window.confirm=window.__c2`);
+await ev(`exportFeature.restore=window.__restorePdfs`);
+// Storage full while the settings are written, after PDFs and the list of deleted copies: every
+// key goes back, so the income list does not change without its settings.
+await ev(`window.__set=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k===SETTINGS_KEY&&!window.__failed){window.__failed=true;throw new DOMException('voll','QuotaExceededError')}return window.__set.call(this,k,v)}`);
+await restore(`window.__backupText`);
+await toastSays("voll");
+check("Speicher voll beim Wiederherstellen: Einnahmen, Einstellungen und Logo wie vorher", (await unchanged()) && (await ownLogo()) === "keins");
+await ev(`Storage.prototype.setItem=window.__set;window.confirm=window.__c2`);
 
 // Confirmed restore: everything replaced, page reloads, PIN unchanged.
 await restore(`window.__backupText`);
