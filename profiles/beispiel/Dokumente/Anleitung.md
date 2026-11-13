@@ -80,7 +80,7 @@ Admin-Konsole wählen und die Inhaber-PIN eingeben. Bei offenem Admin hat der In
 
 | Reiter | Was dort bearbeitet oder geprüft wird |
 | Übersicht | Einstieg, Erinnerungen, Gesamtsicherung und Wiederherstellen, Status des Studio-Profils und Verknüpfungen zu den wichtigsten Bereichen. |
-| Studio & Kontakt | Studio / verantwortliche Person, vollständige Anschrift, Kontakt-E-Mail, Unterschriftsort, optional der vorbelegte Artist und ein eigenes Logo (PNG oder JPEG, wird sofort gespeichert; Symbol und Name auf dem Home-Bildschirm ändern sich dadurch nicht). |
+| Studio & Kontakt | Studio / verantwortliche Person, vollständige Anschrift, Kontakt-E-Mail, Unterschriftsort, optional der vorbelegte Artist und ein eigenes Logo (PNG oder JPEG, wird sofort gespeichert und erscheint auch in neuen PDFs; Symbol und Name auf dem Home-Bildschirm ändern sich dadurch nicht). |
 | Formular & Texte | Begrüßung, Überschrift, Formularversion, Fotoeinwilligung sowie die Erklärung bei der Unterschrift. Eine Vorschau zeigt den Entwurf. |
 | Gesundheitsfragen | Vorhandene Fragen anpassen und bei tatsächlichem Bedarf eigene Fragen ergänzen. Nur für den Termin relevante Angaben erheben. |
 | Einwilligungen | Erklärungen zu Aufklärung, Motiv, Nachsorge und Gesundheitsdaten bearbeiten. Eine Checkbox ersetzt kein stattgefundenes Gespräch. |

@@ -279,6 +279,7 @@ export function incomeCsv(records) {
 export function createIncomeFeature({
   storage,
   createPdf,
+  drawLogo = () => false,
   unsupportedChars,
   escape,
   money,
@@ -601,7 +602,7 @@ export function createIncomeFeature({
     if (missing.length)
       throw Error(t("report.unsupportedChars", { zeichen: missing.join(" ") }));
     const doc = createPdf({ unit: "mm", format: "a4" });
-    let y = 20;
+    let y = drawLogo(doc, 19, 10, 16) ? 34 : 20;
     const line = (text, bold = false) => {
       for (const part of doc.splitTextToSize(text, 172)) {
         if (y > 275) {

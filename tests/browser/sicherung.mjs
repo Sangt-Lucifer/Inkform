@@ -77,12 +77,19 @@ const ownLogo = () =>
   ev(`storedLogo().then(b=>{const s=b&&pngSize(b);const shown=[...document.querySelectorAll('.studio-logo')].every(i=>i.src.startsWith('blob:'))&&document.querySelector('link[rel="icon"]').href.startsWith('blob:');return s?s.width+'x'+s.height+(shown?' sichtbar':' unsichtbar'):'keins'})`);
 await ev(`openAdminAuthorized('studio')`);
 check("Logo-Bereich unter Studio & Kontakt mit Hinweis zum Home-Bildschirm", await ev(`!!document.querySelector('[data-admin-action="logo-choose"]')&&document.getElementById('admin-app').textContent.includes('Home-Bildschirm gehören zur installierten App')`));
+// Report with the logo drawn on page 1 (addImage with the logo alias), and the image it embeds.
+const reportLogo = (width, height) =>
+  ev(`(async()=>{let drawn=false;const Original=window.jspdf.jsPDF;window.jspdf.jsPDF=function(...args){const doc=new Original(...args);const add=doc.addImage.bind(doc);doc.addImage=(...a)=>{if(a[6]==='studio-logo'&&doc.getCurrentPageInfo().pageNumber===1)drawn=true;return add(...a)};return doc};try{const t=await incomeFeature.reportPdf(incomeRecords(),'Test').text();return drawn&&t.includes('/Width '+${width})&&t.includes('/Height '+${height})}finally{window.jspdf.jsPDF=Original}})()`);
+check("Einnahmenübersicht zeigt das eingebaute Logo", await reportLogo("builtInPdfLogo.width", "builtInPdfLogo.height"));
 await chooseLogo(`new File(['%PDF-1.7 kein Bild'],'logo.png',{type:'image/png'})`);
 await toastSays("Logo nicht übernommen");
 check("Falsche Datei als Logo abgelehnt", (await ev(`document.getElementById('toast').textContent.includes('PNG- oder JPEG')`)) && (await ownLogo()) === "keins");
 await chooseLogo(`new Promise(r=>{const c=document.createElement('canvas');c.width=900;c.height=300;const g=c.getContext('2d');g.fillStyle='#c33';g.fillRect(0,0,900,300);g.fillStyle='#fff';g.fillRect(100,100,300,100);c.toBlob(b=>r(new File([b],'logo.jpg',{type:'image/jpeg'})),'image/jpeg',0.9)})`);
 await toastSays("Logo gespeichert");
 check("Logo verkleinert gespeichert und überall angezeigt", (await ownLogo()) === "512x171 sichtbar" && (await ev(`!!document.querySelector('[data-admin-action="logo-remove"]')`)));
+check("Einnahmenübersicht zeigt das eigene Logo", await reportLogo(512, 171));
+await writeFile(`${OUT}/einnahmen-mit-logo.pdf`, Buffer.from(await ev(`blobBase64(incomeFeature.reportPdf(incomeRecords(),'Test'))`), "base64"));
+await writeFile(`${OUT}/einwilligung-eingebautes-logo.pdf`, Buffer.from(await ev(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>createIndexedDbFiles(indexedDB, ARCHIVE_DB).get(k[0])).then(blobBase64)`), "base64"));
 await ev(`document.querySelector('.logo-setting').closest('.ad-panel').scrollIntoView({block:'start'});new Promise(r=>setTimeout(r,300))`);
 await screenshot("logo-studio");
 await reload();

@@ -476,7 +476,7 @@ export default {
     "leave.title": "Apply changes?",
     "logo.builtIn": "The logo built into the app is shown.",
     "logo.choose": "Upload Logo",
-    "logo.custom": "Your own logo is shown. It replaces the built-in logo in the customer form, in the admin area and as the browser tab icon.",
+    "logo.custom": "Your own logo is shown. It replaces the built-in logo in the customer form, in the admin area, in new PDFs and as the browser tab icon.",
     "logo.failed": "Logo not applied: {fehler}",
     "logo.fileTooLarge": "The file is larger than {mb} MB.",
     "logo.notPng": "The logo is not a complete PNG image.",

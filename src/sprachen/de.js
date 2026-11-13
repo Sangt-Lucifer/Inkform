@@ -477,7 +477,7 @@ export default {
     "leave.title": "Änderungen übernehmen?",
     "logo.builtIn": "Angezeigt wird das Logo, das in die App eingebaut ist.",
     "logo.choose": "Logo hochladen",
-    "logo.custom": "Angezeigt wird dein eigenes Logo. Es ersetzt das eingebaute Logo im Kundenformular, in der Verwaltung und als Symbol im Browser-Tab.",
+    "logo.custom": "Angezeigt wird dein eigenes Logo. Es ersetzt das eingebaute Logo im Kundenformular, in der Verwaltung, in neuen PDFs und als Symbol im Browser-Tab.",
     "logo.failed": "Logo nicht übernommen: {fehler}",
     "logo.fileTooLarge": "Die Datei ist größer als {mb} MB.",
     "logo.notPng": "Das Logo ist kein vollständiges PNG-Bild.",

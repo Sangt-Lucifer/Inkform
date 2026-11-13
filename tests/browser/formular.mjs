@@ -59,6 +59,22 @@ check('Customer price values included in gathered PDF data',await ev(`gatherData
 await ev(`window.__pdfLines=[];const Original=window.jspdf.jsPDF;window.jspdf.jsPDF=function(...args){const doc=new Original(...args);const originalText=doc.text.bind(doc);doc.text=(...args)=>{window.__pdfLines.push(String(args[0]));return originalText(...args)};return doc;};createPdf(gatherData());void 0;`);
 check('PDF includes total, deposit and remainder',await ev(`window.__pdfLines.some(t=>t.includes('450,50'))&&window.__pdfLines.some(t=>t.includes('100,25'))&&window.__pdfLines.some(t=>t.includes('350,25'))`));
 check('Complete form creates a multipage PDF offline',await ev(`(()=>{const result=createPdf(gatherData());return result.pages>=2 && result.doc.output('arraybuffer').byteLength>10000})()`));
+// Logo in the PDF header: the built-in one, or the owner's own (an invented 64 × 32 PNG), drawn on
+// every page; one jsPDF cannot read leaves no square and no shifted text.
+const builtInWidth = await ev(`builtInPdfLogo.width`);
+const logoPdf = () =>
+  ev(`(()=>{const calls=[];const Original=window.jspdf.jsPDF;window.jspdf.jsPDF=function(...args){const doc=new Original(...args);const page=()=>doc.getCurrentPageInfo().pageNumber;const add=doc.addImage.bind(doc),rect=doc.roundedRect.bind(doc),text=doc.text.bind(doc);doc.addImage=(...a)=>{if(a[6]==='studio-logo')calls.push('logo'+page());return add(...a)};doc.roundedRect=(...a)=>{if(a[1]===5&&a[2]===22)calls.push('feld'+page());return rect(...a)};doc.text=(...a)=>{if(a[0]===(settings.app.brand))calls.push('marke'+page()+'@'+a[1]);return text(...a)};return doc};try{const r=createPdf(gatherData());return {calls,pages:r.pages,pdf:r.doc.output()}}finally{window.jspdf.jsPDF=Original}})()`);
+const onEveryPage = ({ calls, pages }, kind) => Array.from({ length: pages }, (_, i) => `${kind}${i + 1}`).every((c) => calls.includes(c));
+let result = await logoPdf();
+check('Einwilligungs-PDF: eingebautes Logo auf jeder Seite im Kopf, Marke rechts daneben', result.pages >= 2 && onEveryPage(result, "logo") && onEveryPage(result, "feld") && result.calls.includes('marke1@45') && result.pdf.includes(`/Width ${builtInWidth}`));
+await ev(`(async()=>{const c=document.createElement('canvas');c.width=64;c.height=32;c.getContext('2d').fillRect(4,4,56,24);const b=await new Promise(r=>c.toBlob(r,'image/png'));showLogo(new Uint8Array(await b.arrayBuffer()))})()`);
+result = await logoPdf();
+check('Mit eigenem Logo steht dieses auf jeder Seite, nicht das eingebaute', onEveryPage(result, "logo") && result.pdf.includes('/Width 64') && result.pdf.includes('/Height 32') && (builtInWidth === 64 || !result.pdf.includes(`/Width ${builtInWidth}`)));
+// Valid structure and checksums, but image data jsPDF cannot inflate.
+await ev(`(()=>{const chunk=(type,data)=>{const body=new Uint8Array([...new TextEncoder().encode(type),...data]),out=new Uint8Array(body.length+8),v=new DataView(out.buffer);v.setUint32(0,data.length);out.set(body,4);v.setUint32(body.length+4,crc32(body));return out};const head=new Uint8Array(13),h=new DataView(head.buffer);h.setUint32(0,64);h.setUint32(4,32);head.set([8,6,0,0,0],8);showLogo(new Uint8Array([137,80,78,71,13,10,26,10,...chunk('IHDR',head),...chunk('IDAT',new TextEncoder().encode('kein zlib')),...chunk('IEND',[])]))})()`);
+result = await logoPdf();
+check('Unlesbares Logo: PDF entsteht ohne Logo, ohne schwarzes Feld, Marke am Rand', result.pages >= 2 && !result.calls.some((c) => /^(logo|feld)/.test(c)) && result.calls.includes('marke1@18'));
+await ev(`showLogo(null)`);
 await ev(`window.__exported=null;window.__exported=null;window.__createObjectURL=URL.createObjectURL;URL.createObjectURL=(blob)=>{window.__exported=blob;return window.__createObjectURL(blob)};exportSettings('html')`);
 check('Configured HTML export embeds all libraries and logo',await ev(`(async()=>{const text=await window.__exported.text();return !/<script\\b[^>]*\\bsrc\\s*=/i.test(text)&&text.includes('data:image/png;base64,')&&text.includes(${JSON.stringify(P.studioName)})&&!text.includes('data-cdn-src')&&!text.includes('QA-SENTINEL-4892')&&!text.includes('value="450.50"')})()`));
 for(const width of [320,390,768]){

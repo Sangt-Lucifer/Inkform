@@ -47,12 +47,13 @@ import {
   readRemovedIds,
 } from "./export.js";
 import { isSample, sampleRecords } from "./sample.js";
-import { LOGO_DB, LOGO_EDGE, LOGO_KEY, checkLogo, shrinkLogo } from "./logo.js";
+import { LOGO_DB, LOGO_EDGE, LOGO_KEY, checkLogo, pngSize, shrinkLogo } from "./logo.js";
 import {
   BACKUP_INTERVALS,
   BACKUP_INTERVAL_KEY,
   applyRemovals,
   createFullBackup,
+  fromBase64,
   readBackupDays,
   readFullBackup,
 } from "./backup.js";
@@ -835,10 +836,11 @@ function createPdf(data) {
   function header() {
     doc.setFillColor(244, 245, 248);
     doc.rect(0, 0, 210, 32, "F");
+    const left = drawPdfLogo(doc, margin, 5, 22) ? margin + 27 : margin;
     font(16, true);
-    doc.text(data.template?.brand || settings.app.brand, margin, 15);
+    doc.text(data.template?.brand || settings.app.brand, left, 15);
     font(8, false, grey);
-    doc.text(t("pdf.headerLabel"), margin, 22);
+    doc.text(t("pdf.headerLabel"), left, 22);
     font(8, false, grey);
     doc.text(reference, 192, 15, { align: "right" });
     doc.text(t("pdf.formVersion", { version }), 192, 22, { align: "right" });
@@ -1796,11 +1798,47 @@ backupPicker.addEventListener("change", async () => {
 // The studio logo chosen on this device (see logo.js); shown wherever the built-in one is.
 const logoStore = createIndexedDbFiles(globalThis.indexedDB, LOGO_DB),
   BUILT_IN_LOGO = document.querySelector(".studio-logo").getAttribute("src");
-let logoUrl = null;
-// Also redraws the logo panel, so its buttons match once the stored logo has loaded.
-function showLogo(blob) {
+let logoUrl = null,
+  pdfLogo = null;
+// The logo for PDFs as PNG bytes with its size; null if the built-in one is no complete PNG.
+function logoForPdf(bytes) {
+  const size = pngSize(bytes);
+  return size && { bytes, ...size };
+}
+try {
+  pdfLogo = logoForPdf(fromBase64(BUILT_IN_LOGO.split(",")[1]));
+} catch (_) {}
+const builtInPdfLogo = pdfLogo;
+// On a black square, as in the app; returns whether a logo was drawn. Whether jsPDF can read the
+// logo is tried once per logo, before anything is drawn: one it cannot read leaves the PDF
+// without a logo rather than failing it or leaving an empty square.
+function drawPdfLogo(doc, x, y, size) {
+  if (!pdfLogo) return false;
+  if (pdfLogo.readable === undefined) {
+    try {
+      doc.getImageProperties(pdfLogo.bytes);
+      pdfLogo.readable = true;
+    } catch (error) {
+      pdfLogo.readable = false;
+      console.info("Logo nicht im PDF:", error.message);
+    }
+  }
+  if (!pdfLogo.readable) return false;
+  const inner = size * 0.88,
+    scale = inner / Math.max(pdfLogo.width, pdfLogo.height),
+    width = pdfLogo.width * scale,
+    height = pdfLogo.height * scale;
+  doc.setFillColor(0, 0, 0);
+  doc.roundedRect(x, y, size, size, 1.5, 1.5, "F");
+  doc.addImage(pdfLogo.bytes, "PNG", x + (size - width) / 2, y + (size - height) / 2, width, height, "studio-logo", "FAST");
+  return true;
+}
+// PNG bytes of the own logo, or null for the built-in one. Also redraws the logo panel, so its
+// buttons match once the stored logo has loaded.
+function showLogo(bytes) {
   if (logoUrl) URL.revokeObjectURL(logoUrl);
-  logoUrl = blob ? URL.createObjectURL(blob) : null;
+  logoUrl = bytes ? URL.createObjectURL(new Blob([bytes], { type: "image/png" })) : null;
+  pdfLogo = bytes ? logoForPdf(bytes) : builtInPdfLogo;
   const src = logoUrl || BUILT_IN_LOGO;
   document.querySelectorAll(".studio-logo").forEach((img) => (img.src = src));
   document.querySelector('link[rel="icon"]')?.setAttribute("href", src);
@@ -1818,7 +1856,7 @@ async function storedLogo() {
 }
 function loadLogo() {
   return storedLogo().then(
-    (bytes) => showLogo(bytes && new Blob([bytes], { type: "image/png" })),
+    (bytes) => showLogo(bytes),
     (error) => console.info("Eigenes Logo nicht geladen:", error.message),
   );
 }
@@ -1856,7 +1894,7 @@ logoPicker.addEventListener("change", async () => {
   try {
     const blob = await shrinkLogo(file);
     await logoStore.put(LOGO_KEY, blob);
-    showLogo(blob);
+    showLogo(new Uint8Array(await blob.arrayBuffer()));
     toast(t("logo.saved"));
   } catch (error) {
     toast(t("logo.failed", { fehler: error.message }));
@@ -3131,6 +3169,7 @@ adminAccess = createAdminAccess({
 incomeFeature = createIncomeFeature({
   isUnlocked: () => adminAccess.isUnlocked(),
   createPdf: (options) => createPdfDocument(window.jspdf.jsPDF, options),
+  drawLogo: drawPdfLogo,
   unsupportedChars: unsupportedPdfChars,
   storage: {
     getItem: (key) => localStorage.getItem(key),
