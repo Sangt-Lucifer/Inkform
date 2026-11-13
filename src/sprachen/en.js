@@ -232,6 +232,7 @@ export default {
     "export.documents": "Documents",
     "export.downloaded": "{datei} handed to the browser. Check the file in the Files app in the downloads folder.",
     "export.empty": "There are no documents in the chosen period. No ZIP file is created.",
+    "export.emptyMonths": "There are entries in: {monate}.",
     "export.emptyRemoved": { one: "{anzahl} entry has the note “PDF no longer in the app”.", other: "{anzahl} entries have the note “PDF no longer in the app”." },
     "export.files": { one: "{anzahl} PDF, {groesse}.", other: "{anzahl} PDFs, {groesse}." },
     "export.filesCsv": { one: "{anzahl} PDF and 1 CSV, {groesse}.", other: "{anzahl} PDFs and 1 CSV, {groesse}." },

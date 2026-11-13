@@ -233,6 +233,7 @@ export default {
     "export.documents": "Dokumente",
     "export.downloaded": "{datei} an den Browser übergeben. Prüfe die Datei in der Dateien-App im Downloadordner.",
     "export.empty": "Im gewählten Zeitraum gibt es keine Dokumente. Es wird keine ZIP-Datei erstellt.",
+    "export.emptyMonths": "Einträge gibt es in: {monate}.",
     "export.emptyRemoved": { one: "{anzahl} Eintrag hat den Vermerk „PDF nicht mehr in der App“.", other: "{anzahl} Einträge haben den Vermerk „PDF nicht mehr in der App“." },
     "export.files": { one: "{anzahl} PDF, {groesse}.", other: "{anzahl} PDFs, {groesse}." },
     "export.filesCsv": { one: "{anzahl} PDF und 1 CSV, {groesse}.", other: "{anzahl} PDFs und 1 CSV, {groesse}." },

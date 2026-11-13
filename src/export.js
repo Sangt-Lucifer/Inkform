@@ -227,8 +227,19 @@ export function createExportFeature({
   }
 
   function summary({ files, consents, withoutPdf, removed, note }) {
-    if (!files.length)
-      return [t("export.empty"), removed && t("export.emptyRemoved", { anzahl: removed })].filter(Boolean).join(" ");
+    if (!files.length) {
+      const months = [...new Set(records().map((r) => r.date.slice(0, 7)))].sort().slice(-3);
+      return [
+        t("export.empty"),
+        removed && t("export.emptyRemoved", { anzahl: removed }),
+        months.length &&
+          t("export.emptyMonths", {
+            monate: months.map((m) => language().date(`${m}-15`, { month: "long", year: "numeric" })).join(", "),
+          }),
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
     const pdfs = files.filter((f) => f.name.endsWith(".pdf")).length,
       csv = files.length - pdfs,
       size = files.reduce((sum, f) => sum + f.data.length, 0);

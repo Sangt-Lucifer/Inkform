@@ -78,6 +78,8 @@ await screenshot("export-vorschau");
 await set("export-month", "2025-01");
 text = await preview();
 check("Leerer Monat: klare Meldung, kein Knopf", text.startsWith("Im gewählten Zeitraum gibt es keine Dokumente") && (await ev(`document.getElementById('export-save').disabled`)));
+check("Leerer Monat: nennt die letzten Monate mit Einträgen", /Einträge gibt es in: \p{L}+ \d{4}(, \p{L}+ \d{4}){0,2}\.$/u.test(text));
+check("Monatsfeld so breit wie seine Spalte", await ev(`(()=>{const m=document.getElementById('export-month'),k=document.getElementById('export-kind');return m.getBoundingClientRect().width<=k.getBoundingClientRect().width+1&&Math.abs(m.getBoundingClientRect().height-k.getBoundingClientRect().height)<2})()`));
 await set("export-month", "2026-04");
 await set("export-type", "consents");
 check("April, nur Einwilligungen: 1 PDF", (await preview()).startsWith("1 PDF, "));
