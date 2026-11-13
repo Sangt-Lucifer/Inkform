@@ -6,8 +6,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { HELPERS, ORIGIN, connect } from "./lib.mjs";
 
-const swFile = path.join(path.dirname(fileURLToPath(process.env.INKFORM_FILE_URL)), "dist", "sw.js");
-const original = await readFile(swFile, "utf8");
+const dist = path.join(path.dirname(fileURLToPath(process.env.INKFORM_FILE_URL)), "dist");
+const swFile = path.join(dist, "sw.js"),
+  indexFile = path.join(dist, "index.html");
+const original = await readFile(swFile, "utf8"),
+  originalIndex = await readFile(indexFile, "utf8");
 const { cmd, ev, until, check, navigate, reload, errors } = await connect();
 try {
   const reset = await cmd("Page.addScriptToEvaluateOnNewDocument", {
@@ -18,6 +21,13 @@ try {
   await until(`navigator.serviceWorker.ready.then(() => !!navigator.serviceWorker.controller || (location.reload(), false))`);
   await reload();
   await until(`!!navigator.serviceWorker.controller`);
+
+  // A changed page on the server does not reach a started app: it starts from its cache.
+  await writeFile(indexFile, originalIndex.replace("</body>", '<i id="vom-server"></i></body>'));
+  await navigate(ORIGIN + "/");
+  await until(`!!navigator.serviceWorker.controller`);
+  check("Start aus dem Offline-Speicher, auch wenn der Server erreichbar ist", await ev(`!document.getElementById('vom-server')&&!!document.getElementById('customer-app')`));
+  await writeFile(indexFile, originalIndex);
   await ev(HELPERS);
   await ev(`document.getElementById('admin-pin').value='839274';document.getElementById('admin-pin-repeat').value='839274';document.getElementById('admin-pin-form').requestSubmit()`);
   await until(`adminAccess.isUnlocked()`);
@@ -41,5 +51,6 @@ try {
   check("Keine JavaScript-Fehler", errors.length === 0);
 } finally {
   await writeFile(swFile, original);
+  await writeFile(indexFile, originalIndex);
 }
 process.exit(0);

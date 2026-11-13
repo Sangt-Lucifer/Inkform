@@ -50,24 +50,13 @@ self.addEventListener("fetch", (event) => {
   url.search = "";
   url.hash = "";
   if (request.method !== "GET" || !(URLS.includes(url.href) || url.href === BASE)) return;
-  if (request.mode === "navigate") {
-    event.respondWith(
-      (async () => {
-        try {
-          return await fetch(request);
-        } catch (error) {
-          const cached = await caches.match(INDEX, { cacheName: CACHE });
-          if (cached) return cached;
-          throw error;
-        }
-      })(),
-    );
-  } else
-    event.respondWith(
-      (async () => {
-        return (await caches.match(url.href, { cacheName: CACHE })) || fetch(request);
-      })(),
-    );
+  // The app always starts from its cache, also online: no request leaves the device, so iPadOS
+  // neither waits for an unreachable network nor shows its airplane mode notice. Updates arrive
+  // through a new worker (see above); the network is only asked for files not in the cache.
+  const key = url.href === BASE ? INDEX : url.href;
+  event.respondWith(
+    (async () => (await caches.match(key, { cacheName: CACHE })) || fetch(request))(),
+  );
 });
 
 // Confirm readiness only after every required static file is actually cached.
