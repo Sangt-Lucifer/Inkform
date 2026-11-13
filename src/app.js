@@ -1591,8 +1591,10 @@ backupPicker.addEventListener("change", async () => {
       )
     )
       return;
-    localStorage.setItem(PDF_REMOVED_KEY, JSON.stringify([...removed]));
+    // The PDFs first: if writing them fails, nothing else (also not the list of deleted copies)
+    // has changed yet.
     await exportFeature.restore(pdfs);
+    localStorage.setItem(PDF_REMOVED_KEY, JSON.stringify([...removed]));
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
     localStorage.setItem(THEME_KEY, data.theme);
     writeRetention(localStorage, data.retention);

@@ -171,6 +171,13 @@ await ev(`localStorage.setItem(PDF_REMOVED_KEY,'[]');incomeFeature.refresh()`);
 check("Vermerke werden in die dauerhafte Liste übernommen", await ev(`readRemovedIds(localStorage).size===6`));
 await ev(`localStorage.setItem(PDF_REMOVED_KEY,'[]')`);
 
+// A restore whose PDFs cannot be written changes nothing, also not the list of deleted copies.
+await ev(`openAdminAuthorized('overview');window.__restore=exportFeature.restore;exportFeature.restore=()=>Promise.reject(Error('Speicher voll (Test)'))`);
+await ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([window.__backup],'sicherung.json',{type:'application/json'}));const i=document.getElementById('backup-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
+await until(`document.getElementById('toast').textContent.includes('Wiederherstellen nicht möglich')`);
+check("Gescheitertes Wiederherstellen: Löschliste und Einträge unverändert", await ev(`localStorage.getItem(PDF_REMOVED_KEY)==='[]'&&incomeRecords().length===6`));
+await ev(`exportFeature.restore=window.__restore`);
+
 // Restoring the older backup brings nothing back, even without the id list -------------------------
 await ev(`openAdminAuthorized('overview')`);
 await ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([window.__backup],'sicherung.json',{type:'application/json'}));const i=document.getElementById('backup-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);

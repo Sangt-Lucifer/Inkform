@@ -6,7 +6,7 @@ Mit Inkform füllt der Kunde seine Tattoo-Einwilligung aus und unterschreibt auf
 
 ## Jetzt auf dem Mac testen
 
-- Im Ordner Inkform die Datei index.html per Doppelklick im Browser öffnen. Alle Bibliotheken und das Logo sind enthalten; Internet ist nicht erforderlich.
+- Im Ordner Inkform nach npm run build die Datei build/beispiel/index.html per Doppelklick im Browser öffnen. Alle Bibliotheken und das Logo sind enthalten; Internet ist nicht erforderlich.
 - Beim ersten Start als Inhaber eine eigene PIN mit 6 bis 12 Ziffern (nur Zahlen 0–9) eingeben und wiederholen. Andere Zeichen nimmt das Feld nicht an; eine zu kurze oder zu lange PIN meldet die App. Die PIN sicher verwahren und nicht an Kunden weitergeben.
 - Es öffnet sich die Admin-Konsole. Zuerst Studio & Kontakt und Datenschutz prüfen. Eigene Änderungen mit Änderungen speichern übernehmen.
 - Über Zum Formular den Kundenmodus öffnen. Dadurch wird der gesamte Admin-Bereich wieder gesperrt. Zum erneuten Öffnen der Admin-Konsole ist die PIN nötig.
