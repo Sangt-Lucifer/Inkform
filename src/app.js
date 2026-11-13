@@ -1302,7 +1302,10 @@ async function offlineDetails() {
     [
       "ipad.detailChecks",
       (window.inkformUpdateChecks?.() || [])
-        .map((c) => `${new Date(c.at).toLocaleTimeString()} ${c.reason} ${c.online ? "online" : "offline"}`)
+        .map(
+          (c) =>
+            `${new Date(c.at).toLocaleTimeString()} ${c.reason} ${c.online ? "online" : "offline"}${c.asked ? "" : " –"}`,
+        )
         .join(" · ") || "–",
     ],
   ];

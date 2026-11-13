@@ -2,10 +2,10 @@ import { t } from "./i18n.js";
 
 // The last update checks with the network state the browser reported, for „Offline-Details“.
 const UPDATE_CHECKS_KEY = "inkform.update-checks.v1";
-function noteUpdateCheck(reason) {
+function noteUpdateCheck(reason, asked) {
   try {
     const checks = JSON.parse(localStorage.getItem(UPDATE_CHECKS_KEY) || "[]");
-    checks.push({ at: new Date().toISOString(), reason, online: navigator.onLine });
+    checks.push({ at: new Date().toISOString(), reason, online: navigator.onLine, asked });
     localStorage.setItem(UPDATE_CHECKS_KEY, JSON.stringify(checks.slice(-5)));
   } catch {}
 }
@@ -45,10 +45,12 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
       );
       // Safari does not look for a new worker by itself when the app starts or returns from the
       // background; without asking, an installed app would never get an update. Not while
-      // offline: in airplane mode iPadOS would answer the request with its own notice.
+      // offline, and not during a customer's turn (e.g. back from the share sheet): in airplane
+      // mode iPadOS answers the request with its own notice, and an update would wait anyway.
       const lookForUpdate = (reason) => {
-        noteUpdateCheck(reason);
-        if (navigator.onLine) registered.update().catch(() => {});
+        const asked = navigator.onLine && window.inkformIdle?.() !== false;
+        noteUpdateCheck(reason, asked);
+        if (asked) registered.update().catch(() => {});
       };
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") lookForUpdate("visible");

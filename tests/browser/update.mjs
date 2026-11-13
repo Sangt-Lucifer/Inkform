@@ -38,8 +38,12 @@ try {
   // Customer starts filling in the form, then a new version is published.
   await ev(`document.getElementById('firstName').value='Halb';document.getElementById('firstName').dispatchEvent(new Event('input',{bubbles:true}))`);
   await writeFile(swFile, original.replace(/inkform-app-[0-9a-f]+/, "inkform-app-testupdate"));
-  // The app asks for the new worker itself when it returns to the foreground (Safari does not).
+  // Back in the foreground during the customer's turn (e.g. from the share sheet): no request.
   await ev(`document.dispatchEvent(new Event('visibilitychange'))`);
+  await new Promise((r) => setTimeout(r, 1500));
+  check("Während ein Formular in Arbeit ist, fragt die App nicht nach Updates", await ev(`navigator.serviceWorker.getRegistration().then(r=>!r.waiting&&!r.installing)`));
+  // An update found just before the customer started waits until the form is cleared.
+  await ev(`navigator.serviceWorker.getRegistration().then(r=>r.update())`);
   await until(`navigator.serviceWorker.getRegistration().then(r=>!!r.waiting)`);
   await new Promise((r) => setTimeout(r, 1500));
   check("Während ein Formular in Arbeit ist, wartet das Update", await ev(`navigator.serviceWorker.getRegistration().then(r=>!!r.waiting&&document.getElementById('firstName').value==='Halb')`));
@@ -48,6 +52,12 @@ try {
   await ev(`resetCustomerForm()`);
   await until(`caches.keys().then(k=>k.includes('inkform-app-testupdate')&&!k.includes(${JSON.stringify(oldCache)}))`, 200);
   check("Leeres Formular: neue Version übernimmt, alte Version ist aus dem Offline-Speicher gelöscht", await ev(`navigator.serviceWorker.getRegistration().then(r=>!r.waiting&&r.active.scriptURL.endsWith('/sw.js'))`));
+
+  // Idle and back in the foreground, the app asks for a new version itself (Safari does not).
+  await writeFile(swFile, original.replace(/inkform-app-[0-9a-f]+/, "inkform-app-testupdate2"));
+  await ev(`document.dispatchEvent(new Event('visibilitychange'))`);
+  await until(`caches.keys().then(k=>k.includes('inkform-app-testupdate2')&&!k.includes('inkform-app-testupdate'))`, 200);
+  check("Leere App im Vordergrund: fragt selbst nach der neuen Version", true);
   check("Ohne Neuladen: Seite bleibt bedienbar", await ev(`!document.getElementById('customer-app').hidden&&typeof adminAccess!=='undefined'`));
   check("Keine JavaScript-Fehler", errors.length === 0);
 } finally {
