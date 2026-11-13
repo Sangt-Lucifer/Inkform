@@ -430,7 +430,7 @@ export default {
     "ipad.step3Copy": "Erzeuge eine Test-PDF ohne Kundendaten. Im Systemdialog „In Dateien sichern“ wählen, deinen Studioordner öffnen und auf „Sichern“ tippen. Prüfe danach in der Dateien-App, ob der Speichertest dort liegt.",
     "ipad.test": "iPad-Speicherung testen",
     "languages.badCurrency": "„{waehrung}“ ist kein bekannter Währungscode (z. B. EUR, CHF, USD).",
-    "languages.badTranslation": "Eine Übersetzung der Formulartexte ist ungültig, zu lang oder enthält spitze Klammern.",
+    "languages.badTranslation": "{sprache}, „{feld}“: Die Übersetzung ist ungültig, zu lang oder enthält spitze Klammern.",
     "languages.copy": "Die Studiosprache ist die Sprache, in der das Formular startet. Kundinnen und Kunden können auf dem Formular zwischen den hier gewählten Sprachen wechseln; danach startet das nächste Formular wieder in der Studiosprache. Eine Sprache lässt sich nur wählen, wenn alle Texte des Formulars in ihr vorliegen.",
     "languages.currency": "Währung",
     "languages.currencyHelp": "Dreistelliger Währungscode, z. B. EUR, CHF oder USD. Gilt für das Formular und für neue Einnahmen; bereits erfasste Einnahmen behalten ihre Währung, Beträge werden nie umgerechnet. Am besten vor der ersten Einnahme festlegen.",

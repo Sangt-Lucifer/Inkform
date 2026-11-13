@@ -198,6 +198,38 @@ test("translations: a base text edited while its translation stayed the same mar
   });
 });
 
+test("translations: a base text and translation that belong together again are not stale", async () => {
+  await withPseudo(() => {
+    const previous = { ...base, locale: FALLBACK, translations: validateTranslations({ [PSEUDO]: full }, base, "de") };
+    const edited = { ...previous, legal: [{ ...base.legal[0], text: "Neuer Text" }] };
+    const stale = markStale(edited, previous);
+    assert.deepEqual(stale.translations[PSEUDO].stale, ["legal.privacy.text"]);
+    // The base text set back to the one the translation was made from.
+    assert.equal(markStale({ ...previous, translations: stale.translations }, stale).translations[PSEUDO].stale, undefined);
+
+    // Loading the profile defaults: the profile's base text with the profile's translation.
+    const defaults = { ...base, locale: FALLBACK, translations: validateTranslations({ [PSEUDO]: full }, base, "de") };
+    const custom = { ...previous, legal: [{ ...base.legal[0], text: "Eigener Text" }] };
+    assert.equal(markStale(defaults, custom, defaults).translations[PSEUDO].stale, undefined);
+    // An own translation next to the profile's base text is still checked.
+    const own = { ...custom, translations: { [PSEUDO]: { ...full, legal: { privacy: { title: "Privacy", text: "Own" } } } } };
+    const back = { ...defaults, translations: own.translations };
+    assert.deepEqual(markStale(back, own, defaults).translations[PSEUDO].stale, ["legal.privacy.text"]);
+  });
+});
+
+test("translations: an invalid translation names its language and field", async () => {
+  await withPseudo(() => {
+    try {
+      validateTranslations({ [PSEUDO]: { legal: { privacy: { text: "a < b" } } } }, base, "de");
+      assert.fail("no error");
+    } catch (error) {
+      assert.deepEqual(error.translation, { code: PSEUDO, field: "legal.privacy.text" });
+      assert.match(error.message, /Datenschutz/);
+    }
+  });
+});
+
 test("translations: with stale texts in the studio language the form starts in the content language", async () => {
   await withPseudo(() => {
     const settings = { ...base, locale: { ...FALLBACK, studio: PSEUDO, customer: [PSEUDO] }, translations: validateTranslations({ [PSEUDO]: full }, base, "de") };

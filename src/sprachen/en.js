@@ -429,7 +429,7 @@ export default {
     "ipad.step3Copy": "Create a test PDF with no customer data. In the system dialogue, choose “Save to Files”, open your studio folder and tap “Save”. Then check in the Files app that the storage test is there.",
     "ipad.test": "Test iPad Storage",
     "languages.badCurrency": "“{waehrung}” is not a known currency code (e.g. EUR, CHF, USD).",
-    "languages.badTranslation": "A translation of the form texts is invalid, too long or contains angle brackets.",
+    "languages.badTranslation": "{sprache}, “{feld}”: the translation is invalid, too long or contains angle brackets.",
     "languages.copy": "The studio language is the language the form starts in. Customers can switch between the languages chosen here on the form; the next form then starts in the studio language again. A language can only be chosen once every text of the form exists in it.",
     "languages.currency": "Currency",
     "languages.currencyHelp": "Three-letter currency code, e.g. EUR, CHF or USD. Applies to the form and to new income; income already recorded keeps its own currency, amounts are never converted. Best set before the first income entry.",

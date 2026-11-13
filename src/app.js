@@ -18,6 +18,7 @@ import {
   fieldLimit,
   fieldOf,
   hasAllTexts,
+  markField,
   markStale,
   offeredLanguages,
   setField,
@@ -1850,6 +1851,9 @@ function securityChecklist() {
 }
 // ---------- texts in other languages ----------
 const TEXT_PAGES = ["content", "medical", "legal", "privacy"];
+// Stale fields whose translation is being edited, with the base text they were marked against: going
+// back to the saved translation before saving marks them again, so type-and-undo confirms nothing.
+const parkedStale = new Map();
 const pageOfField = (field) =>
   field.startsWith("medical.") ? "medical" : field.startsWith("legal.") ? "legal" : /^(studio\.|app\.privacyTemplate$)/.test(field) ? "privacy" : "content";
 const fieldId = (code, field) => `admin-tr-${code}-${field.replaceAll(".", "-")}`;
@@ -1877,11 +1881,11 @@ function staleNotice() {
     ? /* HTML */ `<div class="ad-notice review ad-stale-notice" data-stale-notice><p>${th("translate.staleIntro")}</p>${buttons.join("")}</div>`
     : "";
 }
-function translationField(field, label, rows = 3) {
+function translationField(bases, field, label, rows = 3) {
   const code = editLanguage,
     content = translator(adminDraft.locale.content),
     tr = adminDraft.translations[code] ?? {},
-    base = translatedFields(adminDraft).get(field) ?? "",
+    base = bases.get(field) ?? "",
     stale = !!tr.stale?.includes(field),
     id = fieldId(code, field);
   return /* HTML */ `<div class="ad-field full${stale ? " stale" : ""}">
@@ -1903,7 +1907,8 @@ ${escapeHtml(fieldOf(tr, field) ?? "")}</textarea
   </div>`;
 }
 function translationPage() {
-  const field = translationField;
+  const bases = translatedFields(adminDraft),
+    field = (...args) => translationField(bases, ...args);
   if (adminPage === "content")
     return (
       adminPanel(
@@ -1941,16 +1946,16 @@ function translationPage() {
     })
     .join("")}</div></div>`;
 }
-function showStaleField(code) {
-  const field = adminDraft.translations[code]?.stale?.[0];
-  if (!field) return;
+function showTranslationField(code, field) {
   editLanguage = code;
   adminPage = pageOfField(field);
   renderAdminSection();
   const input = $(fieldId(code, field));
+  if (!input) return;
   input.closest("details")?.setAttribute("open", "");
   input.closest(".ad-field").scrollIntoView({ block: "start", behavior: "instant" });
   input.focus({ preventScroll: true });
+  return input;
 }
 
 function renderAdminSection() {
@@ -1972,7 +1977,9 @@ function renderAdminSection() {
     )
     .join("");
   let content = "";
-  if (adminPage === "income") {
+  if (editLanguage && TEXT_PAGES.includes(adminPage)) {
+    content = translationPage();
+  } else if (adminPage === "income") {
     content = `<div id="income-content">${incomeFeature.view()}</div>`;
   } else if (adminPage === "setup") {
     content = `${adminPanel(
@@ -2322,8 +2329,7 @@ function renderAdminSection() {
       </div>`,
     )}<div class="ad-notice">${th("appearance.pinNotice")}</div>`;
   }
-  if (TEXT_PAGES.includes(adminPage))
-    content = staleNotice() + languageSwitch() + (editLanguage ? translationPage() : content);
+  if (TEXT_PAGES.includes(adminPage)) content = staleNotice() + languageSwitch() + content;
   else if (adminPage === "overview") content = staleNotice() + content;
   $("admin-section").innerHTML = content;
   if (adminPage === "export") {
@@ -2473,11 +2479,17 @@ $("customer-language").addEventListener("change", (event) => switchCustomerLangu
 function saveAdmin() {
   let next;
   try {
-    next = validateSettings(markStale(validateSettings(adminDraft), settings));
+    next = validateSettings(markStale(validateSettings(adminDraft), settings, DEFAULT_SETTINGS));
   } catch (error) {
-    configError(error.message);
+    const input = error.translation && showTranslationField(error.translation.code, error.translation.field);
+    if (!input) configError(error.message);
+    else {
+      input.setAttribute("aria-invalid", "true");
+      input.insertAdjacentHTML("afterend", `<small class="ad-field-error" role="alert">${escapeHtml(error.message)}</small>`);
+    }
     return false;
   }
+  parkedStale.clear();
   const changed = JSON.stringify(next) !== JSON.stringify(settings);
   if (changed) next.savedAt = new Date().toISOString();
   try {
@@ -2717,11 +2729,30 @@ $("admin-app").addEventListener("input", (event) => {
     const tr = (adminDraft.translations[editLanguage] ??= emptyTranslation());
     if (event.target.value.trim()) setField(tr, translated, event.target.value);
     else dropField(tr, translated);
-    if (tr.stale?.includes(translated)) {
+    const key = `${editLanguage}|${translated}`,
+      edited = event.target.value.normalize("NFC").trim() !== (fieldOf(settings.translations[editLanguage], translated) ?? ""),
+      box = event.target.closest(".ad-field");
+    box.querySelector(".ad-field-error")?.remove();
+    event.target.removeAttribute("aria-invalid");
+    let changed = false;
+    if (edited && tr.stale?.includes(translated)) {
+      parkedStale.set(key, tr.staleBase[translated]);
       settleField(tr, translated);
-      const box = event.target.closest(".ad-field");
-      box.classList.remove("stale");
-      box.querySelector(".ad-stale")?.remove();
+      changed = true;
+    } else if (!edited && parkedStale.has(key)) {
+      markField(tr, translated, parkedStale.get(key));
+      parkedStale.delete(key);
+      changed = true;
+    }
+    if (changed) {
+      const stale = !!tr.stale?.includes(translated);
+      const notice = box.querySelector(".ad-stale");
+      box.classList.toggle("stale", stale);
+      if (notice) notice.hidden = !stale;
+      else if (stale) {
+        renderAdminSection();
+        $(event.target.id)?.focus();
+      }
       document.querySelectorAll("[data-stale-notice]").forEach((n) => n.replaceWith(...htmlNodes(staleNotice())));
       document.querySelector(".ad-lang-switch")?.replaceWith(...htmlNodes(languageSwitch()));
     }
@@ -2763,9 +2794,13 @@ $("admin-app").addEventListener("click", (event) => {
     editLanguage = button.dataset.editLanguage === adminDraft.locale.content ? null : button.dataset.editLanguage;
     renderAdminSection();
   }
-  if (button.dataset.staleJump) showStaleField(button.dataset.staleJump);
+  if (button.dataset.staleJump) {
+    const field = adminDraft.translations[button.dataset.staleJump]?.stale?.[0];
+    if (field) showTranslationField(button.dataset.staleJump, field);
+  }
   if (button.dataset.settleField) {
     const field = button.dataset.settleField;
+    parkedStale.delete(`${editLanguage}|${field}`);
     settleField(adminDraft.translations[editLanguage], field);
     renderAdminSection();
     $(fieldId(editLanguage, field))?.closest(".ad-field").scrollIntoView({ block: "center", behavior: "instant" });

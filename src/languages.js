@@ -2,7 +2,7 @@
 // app starts in (studio), the languages customers may choose and the currency. Texts of the form
 // in other languages live in settings.translations; a language is offered to customers only when
 // every text the form shows exists in it, never with German as a stand-in.
-import { BASE_LANGUAGE, hasLanguage, t } from "./i18n.js";
+import { BASE_LANGUAGE, hasLanguage, t, translator } from "./i18n.js";
 
 export const TRANSLATED = {
   app: ["documentTitle", "eyebrow", "headline", "description", "photoText", "photoDeniedText", "signatureText", "privacyTemplate"],
@@ -73,6 +73,24 @@ export function dropField(tr, field) {
   }
 }
 export const emptyTranslation = () => ({ app: {}, studio: {}, medical: {}, legal: {} });
+const FIELD_LABELS = {
+  "app.eyebrow": "content.eyebrow",
+  "app.documentTitle": "content.documentTitle",
+  "app.headline": "content.headline",
+  "app.description": "content.description",
+  "app.photoText": "content.photoText",
+  "app.photoDeniedText": "content.photoDenied",
+  "app.signatureText": "content.signatureText",
+  "app.privacyTemplate": "privacyPage.template",
+  "studio.retention": "privacyPage.retentionField",
+  "studio.recipients": "privacyPage.recipients",
+};
+// A translated field as the admin area names it: the field label, or the item's base title.
+export function fieldLabel(field, base) {
+  if (FIELD_LABELS[field]) return t(FIELD_LABELS[field]);
+  const [part, id] = field.split(".");
+  return base[part]?.find((item) => item.id === id)?.title || field;
+}
 export const fieldLimit = (field) => (/^(app|studio)\./.test(field) ? 18000 : 8000);
 
 // One language of settings.translations with the fields of base only; `text` checks each value.
@@ -100,16 +118,26 @@ export function readTranslation(tr, base, text) {
 export function validateTranslations(value, base, content) {
   const output = {};
   if (!value || typeof value !== "object") return output;
-  const text = (input, max) => {
-    if (input === undefined || input === "") return undefined;
-    if (typeof input !== "string" || input.length > max || /[<>]/.test(input)) throw new Error(t("languages.badTranslation"));
-    return input.normalize("NFC").trim() || undefined;
-  };
-  for (const [code, tr] of Object.entries(value))
-    if (hasLanguage(code) && code !== content && tr && typeof tr === "object") output[code] = readTranslation(tr, base, text);
+  for (const [code, tr] of Object.entries(value)) {
+    if (!hasLanguage(code) || code === content || !tr || typeof tr !== "object") continue;
+    output[code] = readTranslation(tr, base, (input, max, field) => {
+      if (input === undefined || input === "") return undefined;
+      if (typeof input !== "string" || input.length > max || /[<>]/.test(input))
+        throw Object.assign(new Error(t("languages.badTranslation", { sprache: translator(code).name, feld: fieldLabel(field, base) })), {
+          translation: { code, field },
+        });
+      return input.normalize("NFC").trim() || undefined;
+    });
+  }
   return output;
 }
 
+// Puts a field on the stale list with the base text its translation was made from.
+export function markField(tr, field, base) {
+  if (tr.stale?.includes(field)) return;
+  tr.stale = [...(tr.stale ?? []), field];
+  tr.staleBase = { ...tr.staleBase, [field]: base };
+}
 // Takes a field off the stale list: its translation was edited or confirmed as still fitting.
 export function settleField(tr, field) {
   if (!tr?.stale?.includes(field)) return;
@@ -121,21 +149,26 @@ export function settleField(tr, field) {
   }
 }
 
+const same = (a, b) => String(a).normalize("NFC").trim() === String(b).normalize("NFC").trim();
+
 // A translation that stayed the same while its base text changed may no longer say the same thing.
 // It is kept but marked stale, with the base text it was translated from, until it is edited or
-// confirmed; a language with stale texts is not offered to customers.
-export function markStale(next, previous) {
+// confirmed; a language with stale texts is not offered to customers. A field is not stale where
+// base text and translation are the pair it was made from again: the text it was marked against,
+// or the profile's own text with the profile's translation.
+export function markStale(next, previous, defaults = null) {
   const before = translatedFields(previous),
+    shipped = defaults?.locale.content === next.locale.content ? translatedFields(defaults) : new Map(),
     translations = structuredClone(next.translations ?? {});
   for (const [code, tr] of Object.entries(translations)) {
     const old = previous.translations?.[code];
     for (const [field, text] of translatedFields(next)) {
-      const value = fieldOf(tr, field);
-      if (value === undefined || !text || value !== fieldOf(old, field)) settleField(tr, field);
-      else if (before.has(field) && before.get(field) !== text && !tr.stale?.includes(field)) {
-        tr.stale = [...(tr.stale ?? []), field];
-        tr.staleBase = { ...tr.staleBase, [field]: before.get(field) };
-      }
+      const value = fieldOf(tr, field),
+        paired =
+          (tr.staleBase && Object.hasOwn(tr.staleBase, field) && same(tr.staleBase[field], text)) ||
+          (shipped.has(field) && same(shipped.get(field), text) && value === fieldOf(defaults.translations?.[code], field));
+      if (value === undefined || !text || value !== fieldOf(old, field) || paired) settleField(tr, field);
+      else if (before.has(field) && before.get(field) !== text) markField(tr, field, before.get(field));
     }
   }
   return { ...next, translations };
@@ -147,7 +180,6 @@ export function markStale(next, previous) {
 export function withDefaultTranslations(settings, defaults) {
   if (settings.locale.content !== defaults.locale.content) return settings;
   const shippedBase = translatedFields(defaults),
-    same = (a, b) => String(a).normalize("NFC").trim() === String(b).normalize("NFC").trim(),
     translations = structuredClone(settings.translations);
   for (const [code, shipped] of Object.entries(defaults.translations ?? {})) {
     if (code === settings.locale.content || !hasLanguage(code)) continue;

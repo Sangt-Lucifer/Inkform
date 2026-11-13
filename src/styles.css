@@ -1927,7 +1927,12 @@ html[data-theme="dark"] .ad-notice.review {
   margin: 0 0 10px;
 }
 .ad-stale-notice .ad-button {
-  margin: 0 8px 0 0;
+  margin-block: 4px;
+  margin-inline-end: 8px;
+}
+.ad-field .ad-field-error {
+  color: #c46977;
+  font-weight: 600;
 }
 .ad-field.stale {
   scroll-margin-top: 16px;

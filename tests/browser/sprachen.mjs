@@ -148,6 +148,19 @@ check(
 );
 check("Übersetzungsseite nicht breiter als der Bildschirm", await fits("Smartphone admin/content en"));
 await screenshot("sprachen-uebersetzung-375");
+check(
+  "Tippen und Rückgängig bestätigt nichts",
+  await ev(`(() => {
+    const input = document.activeElement, saved = input.value, box = input.closest('.ad-field');
+    input.value = saved + 'x';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const cleared = !box.classList.contains('stale') && box.querySelector('.ad-stale').hidden;
+    input.value = saved;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return cleared && box.classList.contains('stale') && !box.querySelector('.ad-stale').hidden
+      && adminDraft.translations.en.stale.includes('app.headline');
+  })()`),
+);
 await ev(`(() => {
   const input = document.activeElement;
   input.value += ' New';
@@ -173,6 +186,28 @@ check(
     saveAdmin();
     return offeredLanguages(settings).includes('en') && settings.translations.en.app.headline.endsWith(' New')
       && [...document.getElementById('customer-language').options].some((o) => o.value === 'en');
+  })()`),
+);
+check(
+  "Ungültige Übersetzung: Speichern nennt Sprache und Feld und springt hin",
+  await ev(`(() => {
+    adminDraft.translations.en.app.signatureText = 'a < b';
+    const saved = saveAdmin();
+    const ok = !saved && adminPage === 'content' && document.activeElement.dataset.translationField === 'app.signatureText'
+      && document.activeElement.closest('.ad-field').querySelector('.ad-field-error')?.textContent.includes('English');
+    adminDraft = JSON.parse(JSON.stringify(settings));
+    return ok;
+  })()`),
+);
+check(
+  "Standardvorlage geladen: Englisch des Profils wird nicht als veraltet markiert",
+  await ev(`(() => {
+    adminDraft.app.headline += ' Eigen';
+    saveAdmin();
+    adminDraft = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    adminDraft.locale.customer = [adminDraft.locale.studio, 'en'];
+    saveAdmin();
+    return !settings.translations.en.stale && offeredLanguages(settings).includes('en');
   })()`),
 );
 await ev(`editLanguage = null`);
