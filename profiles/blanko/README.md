@@ -39,7 +39,7 @@ Damit der Speicher nicht dauerhaft wächst, lassen sich die PDF-Kopien in der Ap
 
 ## Updates
 
-Eine neue Version erscheint unter derselben Adresse. Die App lädt sie, wenn sie mit Internet geöffnet ist, und übernimmt sie erst, wenn nichts in Arbeit ist (kein Formular, keine offene Einwilligung). Die Daten bleiben erhalten. Vor einem Update ist eine Gesamtsicherung sinnvoll. Alle Geräte möglichst gemeinsam aktualisieren.
+Eine neue Version erscheint unter derselben Adresse. Die App sucht einmal am Tag beim ersten Öffnen mit Internet danach, jederzeit über „Nach Update suchen“ unter „iPad & Dateien“, lädt sie und übernimmt sie erst, wenn nichts in Arbeit ist (kein Formular, keine offene Einwilligung). Die Daten bleiben erhalten. Vor einem Update ist eine Gesamtsicherung sinnvoll. Alle Geräte möglichst gemeinsam aktualisieren.
 
 ## English
 

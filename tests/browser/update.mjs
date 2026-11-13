@@ -38,8 +38,9 @@ try {
   // Customer starts filling in the form, then a new version is published.
   await ev(`document.getElementById('firstName').value='Halb';document.getElementById('firstName').dispatchEvent(new Event('input',{bubbles:true}))`);
   await writeFile(swFile, original.replace(/inkform-app-[0-9a-f]+/, "inkform-app-testupdate"));
-  // Back in the foreground during the customer's turn (e.g. from the share sheet): no request.
-  await ev(`document.dispatchEvent(new Event('visibilitychange'))`);
+  // Back in the foreground during the customer's turn (e.g. from the share sheet): no request,
+  // even if the app has not asked yet today.
+  await ev(`localStorage.removeItem('inkform.update-day.v1');document.dispatchEvent(new Event('visibilitychange'))`);
   await new Promise((r) => setTimeout(r, 1500));
   check("Während ein Formular in Arbeit ist, fragt die App nicht nach Updates", await ev(`navigator.serviceWorker.getRegistration().then(r=>!r.waiting&&!r.installing)`));
   // An update found just before the customer started waits until the form is cleared.
@@ -53,11 +54,19 @@ try {
   await until(`caches.keys().then(k=>k.includes('inkform-app-testupdate')&&!k.includes(${JSON.stringify(oldCache)}))`, 200);
   check("Leeres Formular: neue Version übernimmt, alte Version ist aus dem Offline-Speicher gelöscht", await ev(`navigator.serviceWorker.getRegistration().then(r=>!r.waiting&&r.active.scriptURL.endsWith('/sw.js'))`));
 
-  // Idle and back in the foreground, the app asks for a new version itself (Safari does not).
+  // Idle and back in the foreground: the app asks by itself once a day (Safari does not).
   await writeFile(swFile, original.replace(/inkform-app-[0-9a-f]+/, "inkform-app-testupdate2"));
-  await ev(`document.dispatchEvent(new Event('visibilitychange'))`);
+  await ev(`localStorage.setItem('inkform.update-day.v1',new Date().toDateString());document.dispatchEvent(new Event('visibilitychange'))`);
+  await new Promise((r) => setTimeout(r, 1500));
+  check("Am selben Tag fragt die App nicht noch einmal von selbst", await ev(`navigator.serviceWorker.getRegistration().then(r=>!r.waiting&&!r.installing)`));
+  await ev(`localStorage.setItem('inkform.update-day.v1',new Date(Date.now()-864e5).toDateString());document.dispatchEvent(new Event('visibilitychange'))`);
   await until(`caches.keys().then(k=>k.includes('inkform-app-testupdate2')&&!k.includes('inkform-app-testupdate'))`, 200);
-  check("Leere App im Vordergrund: fragt selbst nach der neuen Version", true);
+  check("Erster Start eines neuen Tages: fragt selbst nach der neuen Version", await ev(`localStorage.getItem('inkform.update-day.v1')===new Date().toDateString()`));
+
+  // „Nach Update suchen“ asks at any time.
+  await writeFile(swFile, original.replace(/inkform-app-[0-9a-f]+/, "inkform-app-testupdate3"));
+  check("Knopf „Nach Update suchen“ findet die neue Version", (await ev(`window.inkformLookForUpdate()`)) === "found");
+  await until(`caches.keys().then(k=>k.includes('inkform-app-testupdate3')&&!k.includes('inkform-app-testupdate2'))`, 200);
   check("Ohne Neuladen: Seite bleibt bedienbar", await ev(`!document.getElementById('customer-app').hidden&&typeof adminAccess!=='undefined'`));
   check("Keine JavaScript-Fehler", errors.length === 0);
 } finally {

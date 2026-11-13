@@ -2290,7 +2290,15 @@ function renderAdminSection() {
           </div>
         </div>`,
       ) +
-      adminPanel(th("ipad.details"), `<div class="ipad-checks ipad-details" data-offline-details></div>`) +
+      adminPanel(
+        th("ipad.details"),
+        /* HTML */ `<div class="ipad-checks ipad-details" data-offline-details></div>
+          <div class="ad-actions-row" style="margin-top:20px">
+            <button class="ad-button" type="button" data-admin-action="look-for-update">
+              ${adminIcon("download")}${th("ipad.lookForUpdate")}
+            </button>
+          </div>`,
+      ) +
       adminPanel(
         th("ipad.step1"),
         /* HTML */ `<p class="ad-section-copy">${th("ipad.step1Copy")}</p>
@@ -2925,6 +2933,15 @@ $("admin-app").addEventListener("click", (event) => {
       break;
     case "test-files":
       runFilesTest();
+      break;
+    case "look-for-update":
+      if (!window.inkformLookForUpdate) toast(t("ipad.updateUnavailable"));
+      else
+        window
+          .inkformLookForUpdate()
+          .then((result) => toast(t(result === "found" ? "ipad.updateFound" : "ipad.updateNone")))
+          .catch(() => toast(t("ipad.updateFailed")))
+          .finally(showOfflineDetails);
       break;
     case "install":
       showDialog("install-dialog");

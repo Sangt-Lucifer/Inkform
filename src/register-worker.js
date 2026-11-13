@@ -2,6 +2,16 @@ import { t } from "./i18n.js";
 
 // The last update checks with the network state the browser reported, for „Offline-Details“.
 const UPDATE_CHECKS_KEY = "inkform.update-checks.v1";
+// Day of the last automatic check: the app asks by itself only once a day.
+const UPDATE_DAY_KEY = "inkform.update-day.v1";
+const today = () => new Date().toDateString();
+function askedToday() {
+  try {
+    return localStorage.getItem(UPDATE_DAY_KEY) === today();
+  } catch {
+    return false;
+  }
+}
 function noteUpdateCheck(reason, asked) {
   try {
     const checks = JSON.parse(localStorage.getItem(UPDATE_CHECKS_KEY) || "[]");
@@ -43,20 +53,30 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
       registered.addEventListener("updatefound", () =>
         registered.installing?.addEventListener("statechange", takeOver),
       );
-      // Safari does not look for a new worker by itself when the app starts or returns from the
-      // background; without asking, an installed app would never get an update. Not while
-      // offline, and not during a customer's turn (e.g. back from the share sheet): in airplane
-      // mode iPadOS answers the request with its own notice, and an update would wait anyway.
+      // Safari does not look for a new worker by itself; without asking, an installed app would
+      // never get an update. Each request shows iPadOS's airplane mode notice when offline, and
+      // navigator.onLine stays true there. So the app asks by itself only at its first start of
+      // the day, and only between customers; otherwise via „Nach Update suchen“.
       const lookForUpdate = (reason) => {
+        if (askedToday()) return;
         const asked = navigator.onLine && window.inkformIdle?.() !== false;
         noteUpdateCheck(reason, asked);
-        if (asked) registered.update().catch(() => {});
+        if (!asked) return;
+        try {
+          localStorage.setItem(UPDATE_DAY_KEY, today());
+        } catch {}
+        registered.update().catch(() => {});
       };
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") lookForUpdate("visible");
       });
-      window.addEventListener("online", () => lookForUpdate("online"));
       lookForUpdate("start");
+      // „Nach Update suchen“: "found", "none", or a rejection without connection.
+      window.inkformLookForUpdate = async () => {
+        noteUpdateCheck("button", true);
+        await registered.update();
+        return registered.installing || registered.waiting ? "found" : "none";
+      };
       setInterval(takeOver, 15000);
       takeOver();
       navigator.serviceWorker.addEventListener("controllerchange", () =>
