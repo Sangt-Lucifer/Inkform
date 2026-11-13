@@ -1,5 +1,5 @@
 import { BASE_LANGUAGE } from "./i18n.js";
-import { contentIn } from "./languages.js";
+import { hasAllTexts } from "./languages.js";
 
 // Languages and currency of the studio profile, filled in by the build (profile.json "languages",
 // "currency"); unbuilt sources use the base language and euro.
@@ -183,7 +183,7 @@ Die App verarbeitet deine Angaben und deine Unterschrift auf diesem Gerät und e
 // A profile can only start in a studio language other than its content language once the shipped
 // default translations fully cover it; otherwise the studio language falls back to the content
 // language, so the app never starts in a language that is missing some of its texts.
-if (!contentIn(DEFAULT_SETTINGS, DEFAULT_SETTINGS.locale.studio)) {
+if (!hasAllTexts(DEFAULT_SETTINGS, DEFAULT_SETTINGS.locale.studio)) {
   PROFILE_LOCALE.studio = PROFILE_LOCALE.content;
   PROFILE_LOCALE.customer = [...new Set([PROFILE_LOCALE.studio, ...PROFILE_LOCALE.customer])];
 }

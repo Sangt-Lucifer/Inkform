@@ -11,7 +11,24 @@ import {
   th,
   translator,
 } from "./i18n.js";
-import { contentIn, offeredLanguages, validateLocale, validateTranslations, withDefaultTranslations, withoutStale } from "./languages.js";
+import {
+  contentIn,
+  dropField,
+  emptyTranslation,
+  fieldLimit,
+  fieldOf,
+  hasAllTexts,
+  markStale,
+  offeredLanguages,
+  setField,
+  settleField,
+  staleCount,
+  startLanguage,
+  translatedFields,
+  validateLocale,
+  validateTranslations,
+  withDefaultTranslations,
+} from "./languages.js";
 import { createAdminAccess } from "./access.js";
 import { INCOME_KEY, createIncomeFeature, incomeId } from "./income.js";
 import { PROFILE_LOCALE, STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
@@ -213,7 +230,7 @@ function validateSettings(value) {
     translations: validateTranslations(value.translations, { medical, legal }, locale.content),
   }, DEFAULT_SETTINGS);
   // The studio language needs all texts of the form, like every language offered to customers.
-  if (!contentIn(result, locale.studio)) {
+  if (!hasAllTexts(result, locale.studio)) {
     locale.studio = locale.content;
     locale.customer = [...new Set([locale.studio, ...locale.customer])];
   }
@@ -266,6 +283,11 @@ function escapeHtml(value) {
     /[&<>"']/g,
     (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch],
   );
+}
+function htmlNodes(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  return [...template.content.childNodes];
 }
 function renderQuestionnaire() {
   $("medical-questions").innerHTML = MEDICAL.map(
@@ -712,8 +734,8 @@ function resetCustomerForm() {
   }
   consentIncomeId = incomeId();
   form.reset();
-  if (customerLanguage !== settings.locale.studio) {
-    customerLanguage = settings.locale.studio;
+  if (customerLanguage !== startLanguage(settings)) {
+    customerLanguage = startLanguage(settings);
     useLanguage(customerLanguage);
     renderShown();
   }
@@ -1362,6 +1384,7 @@ const ADMIN_PAGES = {
 };
 let adminDraft = null,
   adminPage = "overview",
+  editLanguage = null,
   adminOpen = false,
   storageWorking = true;
 const adminIcon = (name) =>
@@ -1411,7 +1434,7 @@ function languageSelect(id, codes, selected) {
 }
 // Only languages with every text of the form can be the studio language.
 function studioLanguageField() {
-  const complete = languageCodes().filter((code) => contentIn(adminDraft, code));
+  const complete = languageCodes().filter((code) => hasAllTexts(adminDraft, code));
   if (complete.length < 2) return "";
   return /* HTML */ `<div class="ad-field">
     <label for="locale-studio">${th("languages.studio")}</label
@@ -1422,7 +1445,8 @@ function languagePanel() {
   const locale = adminDraft.locale;
   const boxes = languageCodes()
     .map((code) => {
-      const complete = !!contentIn(adminDraft, code),
+      const complete = hasAllTexts(adminDraft, code),
+        stale = staleCount(adminDraft, code),
         draft = complete && !!adminDraft.translations[code]?.draft;
       return /* HTML */ `<label class="income-check"
         ><input
@@ -1431,7 +1455,7 @@ function languagePanel() {
           ${locale.customer.includes(code) ? "checked" : ""}
           ${code === locale.studio || !complete ? "disabled" : ""}
         />
-        <span lang="${code}">${escapeHtml(translator(code).name)}</span>${complete ? "" : ` <small>${th("languages.missingTexts")}</small>`}${draft ? ` <small>${th("languages.draft")}</small>` : ""}</label
+        <span lang="${code}">${escapeHtml(translator(code).name)}</span>${complete ? "" : ` <small>${th("languages.missingTexts")}</small>`}${complete && stale ? ` <small>${th("translate.staleShort", { anzahl: stale })}</small>` : ""}${draft ? ` <small>${th("languages.draft")}</small>` : ""}</label
       >${
         draft
           ? `<label class="income-check"
@@ -1453,7 +1477,7 @@ function languagePanel() {
     .join("");
   return adminPanel(
     th("languages.title"),
-    /* HTML */ `<p class="ad-section-copy">${th("languages.copy")}</p>
+    /* HTML */ `${staleNotice()}<p class="ad-section-copy">${th("languages.copy")}</p>
       <div class="ad-fields">
         ${studioLanguageField()}
         <fieldset class="ad-field full">
@@ -1824,6 +1848,111 @@ function securityChecklist() {
     th("security.note"),
   );
 }
+// ---------- texts in other languages ----------
+const TEXT_PAGES = ["content", "medical", "legal", "privacy"];
+const pageOfField = (field) =>
+  field.startsWith("medical.") ? "medical" : field.startsWith("legal.") ? "legal" : /^(studio\.|app\.privacyTemplate$)/.test(field) ? "privacy" : "content";
+const fieldId = (code, field) => `admin-tr-${code}-${field.replaceAll(".", "-")}`;
+function languageSwitch() {
+  const content = adminDraft.locale.content,
+    codes = languageCodes();
+  if (codes.length < 2) return "";
+  return /* HTML */ `<div class="ad-lang-switch" role="group" aria-label="${escapeHtml(t("translate.switch"))}">
+    ${codes
+      .map((code) => {
+        const stale = code === content ? 0 : staleCount(adminDraft, code);
+        return `<button type="button" class="ad-button" data-edit-language="${code}" lang="${code}" aria-pressed="${String((editLanguage ?? content) === code)}">${escapeHtml(translator(code).name)}${stale ? ` <span class="ad-chip">${stale}</span>` : ""}</button>`;
+      })
+      .join("")}
+  </div>`;
+}
+function staleNotice() {
+  const buttons = languageCodes()
+    .filter((code) => code !== adminDraft.locale.content && staleCount(adminDraft, code))
+    .map(
+      (code) =>
+        `<button type="button" class="ad-button" data-stale-jump="${code}">${th("translate.staleNotice", { sprache: translator(code).name, anzahl: staleCount(adminDraft, code) })}</button>`,
+    );
+  return buttons.length
+    ? /* HTML */ `<div class="ad-notice review ad-stale-notice" data-stale-notice><p>${th("translate.staleIntro")}</p>${buttons.join("")}</div>`
+    : "";
+}
+function translationField(field, label, rows = 3) {
+  const code = editLanguage,
+    content = translator(adminDraft.locale.content),
+    tr = adminDraft.translations[code] ?? {},
+    base = translatedFields(adminDraft).get(field) ?? "",
+    stale = !!tr.stale?.includes(field),
+    id = fieldId(code, field);
+  return /* HTML */ `<div class="ad-field full${stale ? " stale" : ""}">
+    <label for="${id}">${escapeHtml(label)}</label
+    ><textarea id="${id}" data-translation-field="${field}" lang="${code}" dir="${translator(code).dir}" rows="${rows}" maxlength="${fieldLimit(field)}">
+${escapeHtml(fieldOf(tr, field) ?? "")}</textarea
+    >${
+      stale
+        ? /* HTML */ `<div class="ad-notice review ad-stale">
+            <p><b>${th("translate.staleTitle")}</b></p>
+            <div class="ad-compare">
+              <div><small>${th("translate.before", { sprache: content.name })}</small><p lang="${content.code}">${escapeHtml(tr.staleBase?.[field] ?? "")}</p></div>
+              <div><small>${th("translate.now", { sprache: content.name })}</small><p lang="${content.code}">${escapeHtml(base)}</p></div>
+            </div>
+            <button type="button" class="ad-button" data-settle-field="${field}">${th("translate.fits")}</button>
+          </div>`
+        : /* HTML */ `<details class="ad-source"><summary>${th("translate.source", { sprache: content.name })}</summary><p lang="${content.code}">${base ? escapeHtml(base) : th("translate.sourceEmpty")}</p></details>`
+    }
+  </div>`;
+}
+function translationPage() {
+  const field = translationField;
+  if (adminPage === "content")
+    return (
+      adminPanel(
+        th("content.identity"),
+        /* HTML */ `<div class="ad-fields">
+          ${field("app.eyebrow", t("content.eyebrow"), 2)}${field("app.documentTitle", t("content.documentTitle"), 2)}${field("app.headline", t("content.headline"), 2)}${field("app.description", t("content.description"), 3)}
+        </div><p class="ad-section-copy">${th("translate.shared")}</p>`,
+      ) +
+      adminPanel(th("content.photo"), `<div class="ad-fields">${field("app.photoText", t("content.photoText"), 7)}${field("app.photoDeniedText", t("content.photoDenied"), 4)}</div>`) +
+      adminPanel(th("content.signature"), `<div class="ad-fields">${field("app.signatureText", t("content.signatureText"), 4)}</div>`)
+    );
+  if (adminPage === "privacy")
+    return (
+      adminPanel(th("privacyPage.retention"), `<div class="ad-fields">${field("studio.retention", t("privacyPage.retentionField"), 4)}${field("studio.recipients", t("privacyPage.recipients"), 4)}</div>`) +
+      adminPanel(th("privacyPage.edit"), `<div class="ad-fields">${field("app.privacyTemplate", t("privacyPage.template"), 20)}</div>`)
+    );
+  const medical = adminPage === "medical",
+    key = adminPage,
+    tr = adminDraft.translations[editLanguage] ?? {};
+  return `${medical ? "" : `<div class="ad-notice review">${th("editor.legalNotice")}</div>`}<div class="ad-panel"><div class="ad-panel-header"><h2>${th(medical ? "editor.medicalTitle" : "editor.legalTitle")}</h2></div><div class="ad-panel-body">${adminDraft[key]
+    .map((item, index) => {
+      const fields = [`${key}.${item.id}.title`, `${key}.${item.id}.${medical ? "hint" : "text"}`],
+        open = index === 0 || fields.some((f) => tr.stale?.includes(f));
+      return /* HTML */ `<details class="ad-editor" ${open ? "open" : ""}>
+        <summary>
+          <span class="ad-editor-num">${String(index + 1).padStart(2, "0")}</span
+          ><span class="ad-editor-name">${escapeHtml(fieldOf(tr, fields[0]) || item.title)}</span>${adminIcon("chevron")}
+        </summary>
+        <div class="ad-editor-body">
+          <div class="ad-fields">
+            ${field(fields[0], t(medical ? "editor.question" : "settings.itemTitle"), 2)}${field(fields[1], t(medical ? "editor.hint" : "editor.text"), medical ? 3 : 5)}
+          </div>
+        </div>
+      </details>`;
+    })
+    .join("")}</div></div>`;
+}
+function showStaleField(code) {
+  const field = adminDraft.translations[code]?.stale?.[0];
+  if (!field) return;
+  editLanguage = code;
+  adminPage = pageOfField(field);
+  renderAdminSection();
+  const input = $(fieldId(code, field));
+  input.closest("details")?.setAttribute("open", "");
+  input.closest(".ad-field").scrollIntoView({ block: "start", behavior: "instant" });
+  input.focus({ preventScroll: true });
+}
+
 function renderAdminSection() {
   const page = ADMIN_PAGES[adminPage];
   $("admin-page-title").textContent = t(page.title);
@@ -2193,6 +2322,9 @@ function renderAdminSection() {
       </div>`,
     )}<div class="ad-notice">${th("appearance.pinNotice")}</div>`;
   }
+  if (TEXT_PAGES.includes(adminPage))
+    content = staleNotice() + languageSwitch() + (editLanguage ? translationPage() : content);
+  else if (adminPage === "overview") content = staleNotice() + content;
   $("admin-section").innerHTML = content;
   if (adminPage === "export") {
     exportFeature.preview();
@@ -2254,7 +2386,7 @@ function applySettings(next, { initial = false } = {}) {
   }
   settings = next;
   setCurrency(next.locale.currency);
-  if (!customerLanguage || !offeredLanguages(next).includes(customerLanguage)) customerLanguage = next.locale.studio;
+  if (!customerLanguage || !offeredLanguages(next).includes(customerLanguage)) customerLanguage = startLanguage(next);
   const previousShown = shown ?? previous;
   renderShown();
   if (initial || !dirty || $("artist").value === previous.app.defaultArtist)
@@ -2341,7 +2473,7 @@ $("customer-language").addEventListener("change", (event) => switchCustomerLangu
 function saveAdmin() {
   let next;
   try {
-    next = validateSettings(withoutStale(validateSettings(adminDraft), settings));
+    next = validateSettings(markStale(validateSettings(adminDraft), settings));
   } catch (error) {
     configError(error.message);
     return false;
@@ -2373,7 +2505,10 @@ function openAdminAuthorized(page = "overview") {
   if (!adminAccess.isUnlocked()) return;
   useLanguage(operatorLanguage());
   $("completion-screen").hidden = true;
-  if (!adminOpen) adminDraft = clone(settings);
+  if (!adminOpen) {
+    adminDraft = clone(settings);
+    editLanguage = null;
+  }
   adminPage = needsSetup() ? "setup" : ADMIN_PAGES[page] ? page : "overview";
   adminOpen = true;
   $("customer-app").hidden = true;
@@ -2577,6 +2712,23 @@ $("admin-app").addEventListener("change", (event) => {
 $("admin-app").addEventListener("input", (event) => {
   if (["setup-pdf-years", "setup-income-years"].includes(event.target.id))
     setupYears = { pdfYears: $("setup-pdf-years").value, incomeYears: $("setup-income-years").value };
+  const translated = event.target.dataset.translationField;
+  if (translated) {
+    const tr = (adminDraft.translations[editLanguage] ??= emptyTranslation());
+    if (event.target.value.trim()) setField(tr, translated, event.target.value);
+    else dropField(tr, translated);
+    if (tr.stale?.includes(translated)) {
+      settleField(tr, translated);
+      const box = event.target.closest(".ad-field");
+      box.classList.remove("stale");
+      box.querySelector(".ad-stale")?.remove();
+      document.querySelectorAll("[data-stale-notice]").forEach((n) => n.replaceWith(...htmlNodes(staleNotice())));
+      document.querySelector(".ad-lang-switch")?.replaceWith(...htmlNodes(languageSwitch()));
+    }
+    updateAdminChrome();
+    $("admin-error").hidden = true;
+    return;
+  }
   const path = event.target.dataset.configPath;
   if (!path) return;
   const keys = path.split("."),
@@ -2607,6 +2759,18 @@ $("admin-app").addEventListener("click", (event) => {
     window.scrollTo(0, 0);
   }
   if (button.dataset.setTheme) setTheme(button.dataset.setTheme);
+  if (button.dataset.editLanguage) {
+    editLanguage = button.dataset.editLanguage === adminDraft.locale.content ? null : button.dataset.editLanguage;
+    renderAdminSection();
+  }
+  if (button.dataset.staleJump) showStaleField(button.dataset.staleJump);
+  if (button.dataset.settleField) {
+    const field = button.dataset.settleField;
+    settleField(adminDraft.translations[editLanguage], field);
+    renderAdminSection();
+    $(fieldId(editLanguage, field))?.closest(".ad-field").scrollIntoView({ block: "center", behavior: "instant" });
+    updateAdminChrome();
+  }
   if (button.dataset.addKind) {
     const key = button.dataset.addKind;
     if (adminDraft[key].length >= 40) {

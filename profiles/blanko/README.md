@@ -59,7 +59,8 @@ Inkform is a tattoo consent form with signature, PDF filing and an income list f
 - The admin area follows the language chosen under “Appearance & Backup” → “Language of this Device”. This applies to this iPad only and is not part of the backup.
 - The customer form starts in the studio language. Under “Studio & Contact” → “Languages and Currency”, tick further **Languages for Customers**; a language selector then appears on the form.
 - English form texts are included as a **draft, not legally reviewed**, also after updating an existing installation. They are not offered to customers until you tick English. Have them reviewed first, then tick “Legally reviewed” next to the language.
-- English texts cannot be edited in the app. If you change a German text or add a health question or declaration, English is no longer offered, because the English version would no longer match.
+- To edit the English texts, use the “Deutsch | English” switch on the text pages (Form & Texts, Health Questions, Consent, Privacy). The German text is shown below each field as a reference.
+- If you change a German text, its English version is kept but marked, and English is not offered until you have checked it: the admin area shows “English: check 2 texts”, jumps to each one and shows the old and the new German text. Edit the English text or tap “Translation fits”. A new health question or declaration needs its English text before English is offered again.
 - Switching the language keeps the customer's details and health answers; declarations, photo choice and signature start again. The PDF is created in the customer's language.
 
 **Data and backup**

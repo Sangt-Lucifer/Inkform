@@ -7,7 +7,18 @@ import test from "node:test";
 import { buildProfile, root } from "../scripts/build.mjs";
 import { languagesForApp, loadLanguages } from "../scripts/sprachen.mjs";
 import { registerLanguages } from "../src/i18n.js";
-import { contentIn, offeredLanguages, validCurrency, validateLocale, validateTranslations, withDefaultTranslations, withoutStale } from "../src/languages.js";
+import {
+  contentIn,
+  hasAllTexts,
+  markStale,
+  offeredLanguages,
+  settleField,
+  startLanguage,
+  validCurrency,
+  validateLocale,
+  validateTranslations,
+  withDefaultTranslations,
+} from "../src/languages.js";
 import { PSEUDO, writePseudoLanguages } from "./lib/pseudo.mjs";
 
 const FALLBACK = { content: "de", studio: "de", customer: ["de"], currency: "EUR", note: {} };
@@ -65,7 +76,7 @@ test("translations: only known languages, parts and ids; a language is offered o
     assert.equal(translations[PSEUDO].draft, undefined);
     assert.equal(validateTranslations({ [PSEUDO]: { ...full, draft: true } }, base, "de")[PSEUDO].draft, true);
     assert.equal(validateTranslations({ [PSEUDO]: { ...full, draft: "yes" } }, base, "de")[PSEUDO].draft, undefined);
-    assert.throws(() => validateTranslations({ [PSEUDO]: { app: { headline: 5 } } }, base, "de"), /ungültig oder zu lang/);
+    assert.throws(() => validateTranslations({ [PSEUDO]: { app: { headline: 5 } } }, base, "de"), /ungültig, zu lang/);
 
     const settings = { ...base, locale: { ...FALLBACK, customer: ["de", PSEUDO] }, translations };
     const shown = contentIn(settings, PSEUDO);
@@ -146,22 +157,62 @@ test("profiles: shipped English drafts are complete but only offered once the ow
   }
 });
 
-test("translations: a base text edited while its translation stayed the same drops that translation", async () => {
+test("translations: a base text edited while its translation stayed the same marks it stale, nothing is deleted", async () => {
   await withPseudo(() => {
     const previous = { ...base, locale: { ...FALLBACK, customer: ["de", PSEUDO] }, translations: validateTranslations({ [PSEUDO]: full }, base, "de") };
     assert.ok(contentIn(previous, PSEUDO));
     const edited = { ...previous, legal: [{ ...base.legal[0], text: "Neuer Text" }] };
-    const next = withoutStale(edited, previous);
-    assert.equal(next.translations[PSEUDO].legal.privacy.text, undefined);
-    assert.equal(next.translations[PSEUDO].legal.privacy.title, "Privacy");
-    assert.equal(contentIn(next, PSEUDO), null);
-    assert.deepEqual(offeredLanguages(next), ["de"]);
-    assert.equal(previous.translations[PSEUDO].legal.privacy.text, "Text", "the previous settings are not changed");
+    const next = markStale(edited, previous);
+    const tr = next.translations[PSEUDO];
+    assert.equal(tr.legal.privacy.text, "Text", "the old translation stays");
+    assert.deepEqual(tr.stale, ["legal.privacy.text"]);
+    assert.deepEqual(tr.staleBase, { "legal.privacy.text": "Text" });
+    assert.equal(previous.translations[PSEUDO].stale, undefined, "the previous settings are not changed");
 
-    // Translated anew together with the base text (e.g. a restored backup): kept.
+    // Stale texts are never shown to customers, but the language still has every text.
+    assert.equal(contentIn(next, PSEUDO), null);
+    assert.ok(hasAllTexts(next, PSEUDO));
+    assert.deepEqual(offeredLanguages(next), ["de"]);
+
+    // A second change keeps the text the translation was made from.
+    const again = markStale({ ...next, legal: [{ ...base.legal[0], text: "Dritter Text" }] }, next);
+    assert.deepEqual(again.translations[PSEUDO].staleBase, { "legal.privacy.text": "Text" });
+
+    // Survives validation, as in a backup and its restore.
+    const restored = validateTranslations(JSON.parse(JSON.stringify(again.translations)), again, "de");
+    assert.deepEqual(restored[PSEUDO].stale, ["legal.privacy.text"]);
+    assert.deepEqual(restored[PSEUDO].staleBase, { "legal.privacy.text": "Text" });
+
+    // Confirming the translation takes it off the list; the language is offered again.
+    const confirmed = structuredClone(again);
+    settleField(confirmed.translations[PSEUDO], "legal.privacy.text");
+    assert.equal(confirmed.translations[PSEUDO].stale, undefined);
+    assert.deepEqual(offeredLanguages(confirmed), ["de", PSEUDO]);
+
+    // Editing the translation in the same save, or later, also clears it.
     const retranslated = { ...edited, translations: { [PSEUDO]: { ...full, legal: { privacy: { title: "Privacy", text: "New text" } } } } };
-    assert.equal(withoutStale(retranslated, previous).translations[PSEUDO].legal.privacy.text, "New text");
-    assert.deepEqual(withoutStale(previous, previous), previous);
+    assert.equal(markStale(retranslated, previous).translations[PSEUDO].stale, undefined);
+    const later = { ...next, translations: { [PSEUDO]: { ...tr, legal: { privacy: { title: "Privacy", text: "New text" } } } } };
+    assert.equal(markStale(later, next).translations[PSEUDO].stale, undefined);
+    assert.deepEqual(markStale(previous, previous), previous);
+  });
+});
+
+test("translations: with stale texts in the studio language the form starts in the content language", async () => {
+  await withPseudo(() => {
+    const settings = { ...base, locale: { ...FALLBACK, studio: PSEUDO, customer: [PSEUDO] }, translations: validateTranslations({ [PSEUDO]: full }, base, "de") };
+    assert.equal(startLanguage(settings), PSEUDO);
+    assert.deepEqual(offeredLanguages(settings), [PSEUDO]);
+    const stale = markStale({ ...settings, legal: [{ ...base.legal[0], text: "Neu" }] }, settings);
+    assert.equal(startLanguage(stale), "de");
+    assert.deepEqual(offeredLanguages(stale), ["de"]);
+    assert.equal(stale.locale.studio, PSEUDO, "the chosen studio language is kept");
+  });
+});
+
+test("translations: < and > are refused at runtime too", async () => {
+  await withPseudo(() => {
+    assert.throws(() => validateTranslations({ [PSEUDO]: { app: { headline: "a <b> c" } } }, base, "de"), /spitze Klammern/);
   });
 });
 
@@ -183,6 +234,10 @@ test("translations: missing texts come from the profile's defaults only where th
     assert.equal(kept.translations[PSEUDO].app.headline, "Own");
     assert.equal(kept.translations[PSEUDO].draft, undefined, "nothing added, so a reviewed translation stays reviewed");
     assert.equal(withDefaultTranslations({ ...installed, locale: { ...FALLBACK, content: PSEUDO } }, defaults).translations[PSEUDO], undefined);
+    const staleOwn = { ...own, translations: { [PSEUDO]: { ...own.translations[PSEUDO], stale: ["app.headline"], staleBase: { "app.headline": "H" } } } };
+    const afterDefaults = withDefaultTranslations(staleOwn, defaults).translations[PSEUDO];
+    assert.equal(afterDefaults.app.headline, "Own");
+    assert.deepEqual(afterDefaults.stale, ["app.headline"]);
   });
 });
 

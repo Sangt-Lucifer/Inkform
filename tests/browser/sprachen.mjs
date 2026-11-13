@@ -112,17 +112,70 @@ check(
     return settings.translations.en.draft === undefined && !document.querySelector('[data-locale-reviewed="en"]');
   })()`),
 );
+// A German text changed: the English one stays but is marked, English is not offered and the admin
+// area points to it. Adjusting one and confirming the other makes English selectable again.
+await ev(`(() => {
+  adminDraft.locale.customer = [adminDraft.locale.studio, 'en'];
+  saveAdmin();
+  adminDraft.app.headline += ' Neu';
+  adminDraft.legal.find((item) => item.id === 'privacy').text += ' Geändert.';
+  saveAdmin();
+  renderAdminSection();
+})()`);
 check(
-  "Deutscher Text geändert: Englisch wird nicht mehr angeboten",
+  "Deutscher Text geändert: Übersetzung bleibt, ist markiert, Englisch nicht angeboten",
   await ev(`(() => {
-    adminDraft.locale.customer = [adminDraft.locale.studio, 'en'];
-    saveAdmin();
-    const before = offeredLanguages(settings).includes('en');
-    adminDraft.legal.find((item) => item.id === 'privacy').text += ' Geändert.';
-    saveAdmin();
-    return before && !offeredLanguages(settings).includes('en') && settings.translations.en.legal.privacy.text === undefined;
+    const tr = settings.translations.en;
+    return !!tr.legal.privacy.text && tr.stale.length === 2 && !offeredLanguages(settings).includes('en')
+      && !![...document.getElementById('customer-language').options].every((o) => o.value !== 'en');
   })()`),
 );
+check(
+  "Hinweis „2 Texte prüfen“ auf der Studio-Seite",
+  await ev(`!!document.querySelector('[data-stale-jump="en"]')
+    && document.querySelector('[data-locale-customer="en"]').closest('label').textContent.includes(t('translate.staleShort', { anzahl: 2 }))`),
+);
+await ev(`document.querySelector('[data-stale-jump="en"]').click()`);
+check(
+  "Sprung zum markierten Feld: alter und neuer deutscher Text stehen daneben",
+  await ev(`(() => {
+    const input = document.activeElement, box = input.closest('.ad-field');
+    const [before, now] = [...box.querySelectorAll('.ad-compare p')].map((p) => p.textContent);
+    return adminPage === 'content' && editLanguage === 'en' && input.dataset.translationField === 'app.headline'
+      && box.classList.contains('stale') && now === before + ' Neu'
+      && input.getBoundingClientRect().top >= 0 && input.getBoundingClientRect().bottom <= innerHeight;
+  })()`),
+);
+check("Übersetzungsseite nicht breiter als der Bildschirm", await fits("Smartphone admin/content en"));
+await screenshot("sprachen-uebersetzung-375");
+await ev(`(() => {
+  const input = document.activeElement;
+  input.value += ' New';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+})()`);
+check(
+  "Englisch angepasst: Markierung weg, Hinweis zählt einen Text",
+  await ev(`!document.activeElement.closest('.ad-field').classList.contains('stale')
+    && document.querySelector('[data-stale-jump="en"]').textContent.includes(t('translate.staleNotice', { sprache: 'English', anzahl: 1 }))`),
+);
+await ev(`document.querySelector('[data-stale-jump="en"]').click()`);
+check(
+  "Zweiter Text auf der Einwilligungsseite, „Übersetzung passt“ bestätigt ihn",
+  await ev(`(() => {
+    if (adminPage !== 'legal' || document.activeElement.dataset.translationField !== 'legal.privacy.text') return false;
+    document.activeElement.closest('.ad-field').querySelector('[data-settle-field]').click();
+    return !document.querySelector('[data-stale-notice]') && !adminDraft.translations.en.stale;
+  })()`),
+);
+check(
+  "Gespeichert: Englisch wieder wählbar, eigene Übersetzung erhalten",
+  await ev(`(() => {
+    saveAdmin();
+    return offeredLanguages(settings).includes('en') && settings.translations.en.app.headline.endsWith(' New')
+      && [...document.getElementById('customer-language').options].some((o) => o.value === 'en');
+  })()`),
+);
+await ev(`editLanguage = null`);
 
 // Form texts in the pseudo language, offered to customers next to the studio language.
 await ev(`(() => {

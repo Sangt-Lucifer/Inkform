@@ -1912,6 +1912,62 @@ html[data-theme="dark"] .ad-notice.review {
   border-color: #673543;
   background: #311e27;
 }
+.ad-lang-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.ad-lang-switch .ad-button[aria-pressed="true"] {
+  border-color: var(--ad-blue);
+  box-shadow: 0 0 0 1px var(--ad-blue);
+}
+.ad-stale-notice p,
+.ad-stale p {
+  margin: 0 0 10px;
+}
+.ad-stale-notice .ad-button {
+  margin: 0 8px 0 0;
+}
+.ad-field.stale {
+  scroll-margin-top: 16px;
+}
+.ad-field.stale textarea {
+  border-color: #c46977;
+}
+.ad-stale {
+  margin: 10px 0 0;
+}
+.ad-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+@media (min-width: 720px) {
+  .ad-compare {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+.ad-compare p,
+.ad-source p {
+  margin: 4px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ad-text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.ad-source {
+  margin-top: 7px;
+  font-size: 10px;
+  color: var(--ad-muted);
+}
+.ad-source summary {
+  cursor: pointer;
+}
 .ad-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;

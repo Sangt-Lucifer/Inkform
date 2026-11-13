@@ -58,7 +58,7 @@ export function fieldOf(tr, field) {
   const [part, a, b] = field.split(".");
   return b === undefined ? tr?.[part]?.[a] : tr?.[part]?.[a]?.[b];
 }
-function setField(tr, field, value) {
+export function setField(tr, field, value) {
   const [part, a, b] = field.split(".");
   tr[part] ??= {};
   if (b === undefined) tr[part][a] = value;
@@ -72,16 +72,28 @@ export function dropField(tr, field) {
     if (!Object.keys(tr[part][a]).length) delete tr[part][a];
   }
 }
-const emptyTranslation = () => ({ app: {}, studio: {}, medical: {}, legal: {} });
+export const emptyTranslation = () => ({ app: {}, studio: {}, medical: {}, legal: {} });
+export const fieldLimit = (field) => (/^(app|studio)\./.test(field) ? 18000 : 8000);
 
 // One language of settings.translations with the fields of base only; `text` checks each value.
+// stale lists translated fields whose base text changed since; staleBase keeps that earlier text.
 export function readTranslation(tr, base, text) {
   const own = emptyTranslation();
   for (const field of translatedFields(base).keys()) {
-    const v = text(fieldOf(tr, field), /^(app|studio)\./.test(field) ? 18000 : 8000, field);
+    const v = text(fieldOf(tr, field), fieldLimit(field), field);
     if (v !== undefined) setField(own, field, v);
   }
   if (tr.draft === true) own.draft = true;
+  const stale = [...new Set(Array.isArray(tr.stale) ? tr.stale : [])].filter((f) => typeof f === "string" && fieldOf(own, f) !== undefined);
+  if (stale.length) {
+    own.stale = stale;
+    own.staleBase = Object.fromEntries(
+      stale.map((f) => {
+        const old = tr.staleBase?.[f];
+        return [f, typeof old === "string" && old.length <= fieldLimit(f) ? old.normalize("NFC") : ""];
+      }),
+    );
+  }
   return own;
 }
 
@@ -90,7 +102,7 @@ export function validateTranslations(value, base, content) {
   if (!value || typeof value !== "object") return output;
   const text = (input, max) => {
     if (input === undefined || input === "") return undefined;
-    if (typeof input !== "string" || input.length > max) throw new Error(t("languages.badTranslation"));
+    if (typeof input !== "string" || input.length > max || /[<>]/.test(input)) throw new Error(t("languages.badTranslation"));
     return input.normalize("NFC").trim() || undefined;
   };
   for (const [code, tr] of Object.entries(value))
@@ -98,16 +110,32 @@ export function validateTranslations(value, base, content) {
   return output;
 }
 
-// A translation that stayed the same while its base text changed no longer says the same thing. It
-// is removed, so the language counts as incomplete and is not offered until it is translated again.
-export function withoutStale(next, previous) {
+// Takes a field off the stale list: its translation was edited or confirmed as still fitting.
+export function settleField(tr, field) {
+  if (!tr?.stale?.includes(field)) return;
+  tr.stale = tr.stale.filter((f) => f !== field);
+  delete tr.staleBase?.[field];
+  if (!tr.stale.length) {
+    delete tr.stale;
+    delete tr.staleBase;
+  }
+}
+
+// A translation that stayed the same while its base text changed may no longer say the same thing.
+// It is kept but marked stale, with the base text it was translated from, until it is edited or
+// confirmed; a language with stale texts is not offered to customers.
+export function markStale(next, previous) {
   const before = translatedFields(previous),
     translations = structuredClone(next.translations ?? {});
-  for (const [field, text] of translatedFields(next)) {
-    if (!before.has(field) || before.get(field) === text) continue;
-    for (const [code, tr] of Object.entries(translations)) {
+  for (const [code, tr] of Object.entries(translations)) {
+    const old = previous.translations?.[code];
+    for (const [field, text] of translatedFields(next)) {
       const value = fieldOf(tr, field);
-      if (value !== undefined && value === fieldOf(previous.translations?.[code], field)) dropField(tr, field);
+      if (value === undefined || !text || value !== fieldOf(old, field)) settleField(tr, field);
+      else if (before.has(field) && before.get(field) !== text && !tr.stale?.includes(field)) {
+        tr.stale = [...(tr.stale ?? []), field];
+        tr.staleBase = { ...tr.staleBase, [field]: before.get(field) };
+      }
     }
   }
   return { ...next, translations };
@@ -115,6 +143,7 @@ export function withoutStale(next, previous) {
 
 // Missing translated texts come from the profile's default translations wherever the base text is
 // still the profile's own, so an installation from before a language was shipped gets it too.
+// Own translations and the stale list are never touched.
 export function withDefaultTranslations(settings, defaults) {
   if (settings.locale.content !== defaults.locale.content) return settings;
   const shippedBase = translatedFields(defaults),
@@ -137,9 +166,7 @@ export function withDefaultTranslations(settings, defaults) {
   return { ...settings, translations };
 }
 
-// The settings as the form shows them in one language, or null if a text is missing there.
-export function contentIn(settings, code) {
-  if (code === settings.locale.content) return settings;
+function filledIn(settings, code) {
   const tr = settings.translations?.[code];
   if (!tr) return null;
   const filled = (part, base, keys) => keys.every((key) => !base[key] || tr[part]?.[key]);
@@ -156,4 +183,18 @@ export function contentIn(settings, code) {
   return { ...settings, app: { ...settings.app, ...tr.app }, studio: { ...settings.studio, ...tr.studio }, medical, legal };
 }
 
-export const offeredLanguages = (settings) => settings.locale.customer.filter((code) => contentIn(settings, code));
+// Every text of the form exists in this language, stale or not.
+export const hasAllTexts = (settings, code) => code === settings.locale.content || !!filledIn(settings, code);
+export const staleCount = (settings, code) => settings.translations?.[code]?.stale?.length ?? 0;
+
+// The settings as the form shows them in one language, or null if a text is missing or stale there.
+export function contentIn(settings, code) {
+  if (code === settings.locale.content) return settings;
+  return staleCount(settings, code) ? null : filledIn(settings, code);
+}
+
+// The form starts in the studio language, or in the content language while that cannot be shown.
+export const startLanguage = (settings) => (contentIn(settings, settings.locale.studio) ? settings.locale.studio : settings.locale.content);
+export const offeredLanguages = (settings) => [
+  ...new Set([startLanguage(settings), ...settings.locale.customer.filter((code) => contentIn(settings, code))]),
+];

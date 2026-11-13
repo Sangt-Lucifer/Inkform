@@ -188,6 +188,8 @@ function profileTranslations(profile, languages, content) {
         throw new Error(`${where}: translations.${code}.${field} ist ungültig, zu lang oder enthält < oder >.`);
       return input.normalize("NFC").trim() || undefined;
     });
+    delete own.stale;
+    delete own.staleBase;
     const basedOn = tr.basedOn ?? {};
     if (typeof basedOn !== "object" || Array.isArray(basedOn))
       throw new Error(`${where}: translations.${code}.basedOn muss ein Objekt sein.`);
