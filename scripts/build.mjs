@@ -21,6 +21,7 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { loadPdfFonts } from "./fonts.mjs";
+import { validCurrency } from "../src/languages.js";
 import { BASE_LANGUAGE, checkKeyUsage, checkLanguages, languagesForApp, loadLanguages } from "./sprachen.mjs";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
@@ -31,6 +32,7 @@ export const UNSAFE = /["`\\<>\r\n]|\$\{/;
 const TEMPLATED = [
   "src/index.html",
   "src/i18n.js",
+  "src/languages.js",
   "src/styles.css",
   "src/defaults.js",
   "src/income.js",
@@ -130,6 +132,35 @@ export async function readLanguages(dir = LANGUAGE_DIR) {
   return languages;
 }
 
+// profile.json "languages" ({ content, studio, customer, note }) and "currency", checked against the
+// language files. content: language of the profile's own texts; studio: language the app starts in.
+function profileLocale(profile, languages, manifest) {
+  const where = `${profile.id}: profile.json`;
+  const input = profile.languages ?? {};
+  const known = (code, field) => {
+    if (!Object.hasOwn(languages, code))
+      throw new Error(`${where}: languages.${field} "${code}" hat keine Sprachdatei in src/sprachen/.`);
+    return code;
+  };
+  const content = known(input.content ?? BASE_LANGUAGE, "content");
+  const studio = known(input.studio ?? content, "studio");
+  if (input.customer !== undefined && !Array.isArray(input.customer))
+    throw new Error(`${where}: languages.customer muss eine Liste sein.`);
+  const customer = [...new Set([studio, ...(input.customer ?? []).map((c) => known(c, "customer"))])];
+  const note = input.note ?? {};
+  for (const [code, text] of Object.entries(note)) {
+    known(code, "note");
+    if (typeof text !== "string" || text.length > 500 || UNSAFE.test(text))
+      throw new Error(`${where}: languages.note.${code} muss ein kurzer Text ohne " \` \\ < > \${ sein.`);
+  }
+  const currency = profile.currency ?? "EUR";
+  if (!validCurrency(currency)) throw new Error(`${where}: currency muss ein Währungscode wie EUR sein.`);
+  const manifestLang = manifest.lang;
+  if (manifestLang !== undefined && manifestLang !== studio && !manifestLang.startsWith(studio + "-"))
+    throw new Error(`${where}: manifest.webmanifest "lang" (${manifestLang}) passt nicht zur Studiosprache ${studio}.`);
+  return { content, studio, customer, currency, note };
+}
+
 // `languages` (a folder of language files) is for tests only; a real build reads src/sprachen/.
 export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR } = {}) {
   const profile = await loadProfile(ref);
@@ -140,6 +171,11 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
   for (const name of TEMPLATED) filled[name] = fillTokens(await read(name), profile.text, name, used);
   const languages = languagesForApp(await readLanguages(languageDir), (text) =>
     fillTokens(text, profile.text, "src/sprachen", used),
+  );
+  const locale = profileLocale(
+    profile,
+    languages,
+    JSON.parse(await readFile(path.join(profile.dir, "manifest.webmanifest"), "utf8")),
   );
   const unused = Object.keys(profile.text).filter((key) => !used.has(key));
   if (unused.length) throw new Error(`${id}: ungenutzte Profiltexte: ${unused.join(", ")}`);
@@ -155,10 +191,11 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
   ]);
   const template = filled["src/index.html"],
     css = filled["src/styles.css"],
-    defaults = filled["src/defaults.js"],
+    defaults = filled["src/defaults.js"].replace('"__PROFILE_LOCALE__"', () => JSON.stringify(JSON.stringify(locale))),
     income = filled["src/income.js"],
     access = filled["src/access.js"],
     i18n = filled["src/i18n.js"],
+    studioLanguages = filled["src/languages.js"],
     fonts = filled["src/pdf-fonts.js"]
       .replace("__PDF_FONT_REGULAR__", () => pdfFonts.normal)
       .replace("__PDF_FONT_BOLD__", () => pdfFonts.bold)
@@ -178,6 +215,7 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
   const local = /^import\s*\{[^}]*\}\s*from\s*["']\.\/[\w-]+\.js["'];?\s*/gm;
   const bundledJs = [
     i18n.replace(exported, "") + `\nregisterLanguages(${JSON.stringify(languages)});`,
+    studioLanguages,
     defaults,
     access,
     retention,
@@ -193,7 +231,7 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
   ]
     .map((source) => source.replace(local, "").replace(exported, ""))
     .join("\n");
-  if (/^\s*(?:import|export)\s/m.test(bundledJs) || /__PDF_FONT_\w+__|__BLANK_EDITION__/.test(bundledJs))
+  if (/^\s*(?:import|export)\s/m.test(bundledJs) || /__PDF_FONT_\w+__|__BLANK_EDITION__|__PROFILE_LOCALE__/.test(bundledJs))
     throw new Error("Bundle enthält noch Modul-Importe/-Exporte oder Schrift-Platzhalter.");
   const escapeScript = (source) => source.replace(/<\/script/gi, "<\\/script");
   let portable = template

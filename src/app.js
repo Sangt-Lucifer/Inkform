@@ -1,7 +1,20 @@
-import { LANGUAGE_KEY, applyTexts, language, markup, setLanguage, t, th } from "./i18n.js";
+import {
+  LANGUAGE_KEY,
+  applyTexts,
+  hasLanguage,
+  language,
+  languageCodes,
+  markup,
+  setCurrency,
+  setLanguage,
+  t,
+  th,
+  translator,
+} from "./i18n.js";
+import { contentIn, offeredLanguages, validateLocale, validateTranslations } from "./languages.js";
 import { createAdminAccess } from "./access.js";
 import { INCOME_KEY, createIncomeFeature, incomeId } from "./income.js";
-import { STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
+import { PROFILE_LOCALE, STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
 import { PDF_FONT, createPdfDocument, unsupportedPdfChars } from "./pdf-fonts.js";
 import { createIndexedDbFiles, createPendingStore } from "./pending.js";
 import { birthDateValid, fileSlug, moneyCents, studioInitials } from "./consent.js";
@@ -62,6 +75,43 @@ function applyLanguage() {
   applyTexts(document);
 }
 applyLanguage();
+// The customer side shows the studio language or the one the customer chose for this consent;
+// the admin area shows the language chosen on this device (kept out of every backup).
+let customerLanguage = null,
+  shown = null;
+function operatorLanguage() {
+  try {
+    const code = localStorage.getItem(LANGUAGE_KEY);
+    if (hasLanguage(code)) return code;
+  } catch (_) {}
+  return settings.locale.studio;
+}
+// Switches the interface language; texts the app sets itself are written again afterwards.
+function useLanguage(code) {
+  setLanguage(code);
+  setCurrency(settings.locale.currency);
+  applyLanguage();
+  if (!shown) return;
+  inLanguage(customerLanguage, () => {
+    renderStudio();
+    updateProgress();
+    if (ink.signedAt) $("signature-time").textContent = timeFormat(ink.signedAt);
+  });
+  document.title = adminOpen
+    ? t("meta.adminTitle", { studio: studio.name.split(" · ")[0] })
+    : inLanguage(customerLanguage, () =>
+        t("meta.customerTitle", { studio: studio.name.split(" · ")[0], marke: shown.app.brand }),
+      );
+}
+function inLanguage(code, run) {
+  const before = language().code;
+  setLanguage(code);
+  try {
+    return run();
+  } finally {
+    setLanguage(before);
+  }
+}
 function validateSettings(value) {
   if (
     !value ||
@@ -148,7 +198,8 @@ function validateSettings(value) {
   const ids = [...medical, ...legal].map((item) => item.id);
   if (new Set(ids).size !== ids.length)
     throw new Error(t("settings.duplicateIds"));
-  return {
+  const locale = validateLocale(value.locale, PROFILE_LOCALE);
+  const result = {
     schemaVersion: 1,
     savedAt:
       typeof value.savedAt === "string" && Number.isFinite(Date.parse(value.savedAt))
@@ -158,7 +209,15 @@ function validateSettings(value) {
     app,
     medical,
     legal,
+    locale,
+    translations: validateTranslations(value.translations, { medical, legal }, locale.content),
   };
+  // The studio language needs all texts of the form, like every language offered to customers.
+  if (!contentIn(result, locale.studio)) {
+    locale.studio = locale.content;
+    locale.customer = [...new Set([locale.studio, ...locale.customer])];
+  }
+  return result;
 }
 let embeddedConfig = null,
   settings = clone(DEFAULT_SETTINGS),
@@ -268,7 +327,7 @@ $("appointment").value = localDate();
 $("birthDate").max = localDate();
 
 function privacyText() {
-  return settings.app.privacyTemplate.replace(
+  return (shown ?? settings).app.privacyTemplate.replace(
     /\{\{studio\.(name|address|contact|location|retention|recipients)\}\}/g,
     (_, key) => studio[key] || t("privacy.missingStudio"),
   );
@@ -653,6 +712,11 @@ function resetCustomerForm() {
   }
   consentIncomeId = incomeId();
   form.reset();
+  if (customerLanguage !== settings.locale.studio) {
+    customerLanguage = settings.locale.studio;
+    useLanguage(customerLanguage);
+    renderShown();
+  }
   $("appointment").value = localDate();
   clearSignature();
   dirty = false;
@@ -704,7 +768,8 @@ function gatherData() {
     photo: choiceValue("photo"),
     sober: $("sober").checked,
     studio: { ...studio },
-    template: { ...settings.app },
+    template: { ...shown.app },
+    language: customerLanguage,
     privacy: privacyText(),
     signedAt: new Date(ink.signedAt),
     createdAt: new Date(),
@@ -739,7 +804,7 @@ function createPdf(data) {
   });
   doc.setCreationDate(data.createdAt);
   function font(size = 10, bold = false, color = black) {
-    doc.setFont(PDF_FONT, bold ? "bold" : "normal");
+    doc.setFont(language().pdfFont, bold ? "bold" : "normal");
     doc.setFontSize(size);
     doc.setTextColor(...color);
   }
@@ -794,6 +859,10 @@ function createPdf(data) {
   paragraph(t("pdf.studio", { studio: data.studio.name }), { size: 10, bold: true });
   paragraph(`${data.studio.address} | ${data.studio.contact}`, { size: 9, color: grey });
   review(t("pdf.draftNotice"));
+  if (data.language && data.language !== settings.locale.content) {
+    paragraph(t("pdf.language", { sprache: translator(data.language).name }), { size: 9, color: grey, after: 1 });
+    if (settings.locale.note[data.language]) paragraph(settings.locale.note[data.language], { size: 9, color: grey });
+  }
   title(t("pdf.section1"));
   labelValue(t("pdf.fullName"), fullName);
   labelValue(t("personal.birthDate"), dateFormat(f.birthDate));
@@ -947,7 +1016,7 @@ form.addEventListener("submit", (event) => {
     const slug = fileSlug(normalizeText(`${data.fields.lastName}_${data.fields.firstName}`));
     const clock = data.createdAt.toTimeString().slice(0, 8).replaceAll(":", "");
     const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
-    const filename = `${t("file.consent")}_${slug}_${data.fields.appointment}_${clock}_${suffix}.pdf`;
+    const filename = `${translator(settings.locale.studio).t("file.consent")}_${slug}_${data.fields.appointment}_${clock}_${suffix}.pdf`;
     // Prepared now, booked only when the owner confirms the filing (pdf-next).
     const incomeEntry = incomeFeature.capture(data, filename, consentIncomeId);
     presentPdfArtifact(blob, filename, result.pages, { autoSave: true, incomeEntry });
@@ -1331,6 +1400,61 @@ ${value}</textarea>`
           />`
     }${help ? /* HTML */ `<small>${help}</small>` : ""}
   </div>`;
+}
+function languageSelect(id, codes, selected) {
+  return `<select id="${id}">${codes
+    .map(
+      (code) =>
+        `<option value="${code}" lang="${code}"${code === selected ? " selected" : ""}>${escapeHtml(translator(code).name)}</option>`,
+    )
+    .join("")}</select>`;
+}
+// Only languages with every text of the form can be the studio language.
+function studioLanguageField() {
+  const complete = languageCodes().filter((code) => contentIn(adminDraft, code));
+  if (complete.length < 2) return "";
+  return /* HTML */ `<div class="ad-field">
+    <label for="locale-studio">${th("languages.studio")}</label
+    >${languageSelect("locale-studio", complete, adminDraft.locale.studio)}<small>${th("languages.studioHelp")}</small>
+  </div>`;
+}
+function languagePanel() {
+  const locale = adminDraft.locale;
+  const boxes = languageCodes()
+    .map((code) => {
+      const complete = !!contentIn(adminDraft, code);
+      return /* HTML */ `<label class="income-check"
+        ><input
+          type="checkbox"
+          data-locale-customer="${code}"
+          ${locale.customer.includes(code) ? "checked" : ""}
+          ${code === locale.studio || !complete ? "disabled" : ""}
+        />
+        <span lang="${code}">${escapeHtml(translator(code).name)}</span>${complete ? "" : ` <small>${th("languages.missingTexts")}</small>`}</label
+      >`;
+    })
+    .join("");
+  const notes = locale.customer
+    .filter((code) => code !== locale.content)
+    .map((code) =>
+      adminField(`locale.note.${code}`, t("languages.noteFor", { sprache: translator(code).name }), {
+        max: 500,
+        help: th("languages.noteHelp"),
+      }),
+    )
+    .join("");
+  return adminPanel(
+    th("languages.title"),
+    /* HTML */ `<p class="ad-section-copy">${th("languages.copy")}</p>
+      <div class="ad-fields">
+        ${studioLanguageField()}
+        <fieldset class="ad-field full">
+          <legend>${th("languages.customer")}</legend>
+          ${boxes}<small>${th("languages.customerHelp")}</small>
+        </fieldset>
+        ${adminField("locale.currency", t("languages.currency"), { max: 3, help: th("languages.currencyHelp") })}${notes}
+      </div>`,
+  );
 }
 function adminPanel(title, content, note = "") {
   return /* HTML */ `<section class="ad-panel">
@@ -1717,7 +1841,7 @@ function renderAdminSection() {
     content = `${adminPanel(
       th("setup.welcome"),
       `<p class="ad-section-copy">${th("setup.copy")}</p>
-      <div class="ad-fields">${adminField("studio.name", t("studioPage.name"), { placeholder: t("studioPage.namePlaceholder"), max: 160 })}${adminField("studio.contact", t("studioPage.contact"), { type: "email", placeholder: t("studioPage.contactPlaceholder"), max: 160 })}${adminField("studio.address", t("studioPage.address"), { area: true, rows: 2, placeholder: t("studioPage.addressPlaceholder"), max: 300 })}${adminField("studio.location", t("studioPage.location"), { placeholder: t("studioPage.locationPlaceholder"), max: 100 })}
+      <div class="ad-fields">${studioLanguageField()}${adminField("studio.name", t("studioPage.name"), { placeholder: t("studioPage.namePlaceholder"), max: 160 })}${adminField("studio.contact", t("studioPage.contact"), { type: "email", placeholder: t("studioPage.contactPlaceholder"), max: 160 })}${adminField("studio.address", t("studioPage.address"), { area: true, rows: 2, placeholder: t("studioPage.addressPlaceholder"), max: 300 })}${adminField("studio.location", t("studioPage.location"), { placeholder: t("studioPage.locationPlaceholder"), max: 100 })}
       <div class="ad-field"><label for="setup-pdf-years">${th("setup.pdfYears")}</label><input id="setup-pdf-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().pdfYears))}"></div>
       <div class="ad-field"><label for="setup-income-years">${th("setup.incomeYears")}</label><input id="setup-income-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().incomeYears))}"></div></div>
       <p class="ad-preview-note">${th("setup.note")}</p>
@@ -1815,6 +1939,7 @@ function renderAdminSection() {
       </div>
       ${adminPreview()}
     </div>`;
+    content += languagePanel();
   } else if (adminPage === "content") {
     content = /* HTML */ `<div class="ad-columns">
       <div>
@@ -2025,6 +2150,16 @@ function renderAdminSection() {
           </button>
         </div>`,
     )}${adminPanel(
+      th("languages.operatorTitle"),
+      /* HTML */ `<div class="ad-fields">
+        <div class="ad-field">
+          <label for="operator-language">${th("languages.operator")}</label
+          >${languageSelect("operator-language", languageCodes(), operatorLanguage())}<small
+            >${th("languages.operatorHelp")}</small
+          >
+        </div>
+      </div>`,
+    )}${adminPanel(
       th("appearance.transfer"),
       /* HTML */ `<p class="ad-section-copy">${th("appearance.transferCopy")}</p>
         <div class="ad-actions-row">
@@ -2110,18 +2245,10 @@ function applySettings(next, { initial = false } = {}) {
     invalidatePdf();
   }
   settings = next;
-  studio = { ...next.studio };
-  MEDICAL.splice(0, MEDICAL.length, ...clone(next.medical));
-  LEGAL.splice(0, LEGAL.length, ...clone(next.legal));
-  renderQuestionnaire();
-  renderStudio();
-  $("customer-brand").textContent = next.app.brand;
-  document.title = t("meta.customerTitle", { studio: studio.name.split(" · ")[0], marke: next.app.brand });
-  $("customer-headline").textContent = next.app.headline;
-  $("customer-description").textContent = next.app.description;
-  $("customer-eyebrow").textContent = next.app.eyebrow;
-  $("signature-confirmation").textContent = next.app.signatureText;
-  $("photo-text").textContent = next.app.photoText;
+  setCurrency(next.locale.currency);
+  if (!customerLanguage || !offeredLanguages(next).includes(customerLanguage)) customerLanguage = next.locale.studio;
+  const previousShown = shown ?? previous;
+  renderShown();
   if (initial || !dirty || $("artist").value === previous.app.defaultArtist)
     $("artist").value = next.app.defaultArtist;
   $("artist").defaultValue = next.app.defaultArtist;
@@ -2143,13 +2270,66 @@ function applySettings(next, { initial = false } = {}) {
       )
         $(item.id).checked = answer.checked;
     });
-    if (previous.app.photoText !== next.app.photoText)
+    if (previousShown.app.photoText !== shown.app.photoText)
       form.querySelectorAll('input[name="photo"]').forEach((input) => (input.checked = false));
     $("error-summary").hidden = true;
     $("medical-notice").hidden = !MEDICAL.some((q) => choiceValue(q.id) === "yes");
-    updateProgress();
+    inLanguage(customerLanguage, updateProgress);
   }
 }
+// The form's own texts in the customer language, rendered with that language's interface texts.
+function renderShown() {
+  shown = contentIn(settings, customerLanguage);
+  studio = { ...shown.studio };
+  MEDICAL.splice(0, MEDICAL.length, ...clone(shown.medical));
+  LEGAL.splice(0, LEGAL.length, ...clone(shown.legal));
+  inLanguage(customerLanguage, () => {
+    renderQuestionnaire();
+    renderStudio();
+    renderLanguageChoice();
+    $("customer-brand").textContent = shown.app.brand;
+    document.title = t("meta.customerTitle", { studio: studio.name.split(" · ")[0], marke: shown.app.brand });
+    $("customer-headline").textContent = shown.app.headline;
+    $("customer-description").textContent = shown.app.description;
+    $("customer-eyebrow").textContent = shown.app.eyebrow;
+    $("signature-confirmation").textContent = shown.app.signatureText;
+    $("photo-text").textContent = shown.app.photoText;
+  });
+}
+function renderLanguageChoice() {
+  const offered = offeredLanguages(settings),
+    select = $("customer-language");
+  select.hidden = offered.length < 2;
+  select.innerHTML = offered
+    .map(
+      (code) =>
+        `<option value="${code}" lang="${code}"${code === customerLanguage ? " selected" : ""}>${escapeHtml(translator(code).name)}</option>`,
+    )
+    .join("");
+}
+// A new language mid-form keeps the entries and health answers; declarations, the photo choice
+// and the signature must be given again in the language the customer now reads.
+function switchCustomerLanguage(code) {
+  if (!offeredLanguages(settings).includes(code) || code === customerLanguage) return;
+  const answers = MEDICAL.map((q) => [q.id, choiceValue(q.id), $(`note-${q.id}`)?.value ?? ""]);
+  const touched = dirty;
+  customerLanguage = code;
+  useLanguage(code);
+  renderShown();
+  for (const [id, value, note] of answers) {
+    if (!value) continue;
+    form.querySelector(`input[name="${id}"][value="${value}"]`).checked = true;
+    $(`note-${id}`).value = note;
+    $(`details-${id}`).hidden = value !== "yes";
+  }
+  form.querySelectorAll('input[name="photo"]').forEach((input) => (input.checked = false));
+  $("sober").checked = false;
+  clearSignature(touched ? t("signature.languageChanged") : "");
+  $("medical-notice").hidden = !MEDICAL.some((q) => choiceValue(q.id) === "yes");
+  updatePriceBalance();
+  updateProgress();
+}
+$("customer-language").addEventListener("change", (event) => switchCustomerLanguage(event.target.value));
 function saveAdmin() {
   let next;
   try {
@@ -2183,6 +2363,7 @@ function openAdmin(page = "overview") {
 }
 function openAdminAuthorized(page = "overview") {
   if (!adminAccess.isUnlocked()) return;
+  useLanguage(operatorLanguage());
   $("completion-screen").hidden = true;
   if (!adminOpen) adminDraft = clone(settings);
   adminPage = needsSetup() ? "setup" : ADMIN_PAGES[page] ? page : "overview";
@@ -2211,6 +2392,7 @@ function finishAdminLeave() {
   $("admin-app").hidden = true;
   $("customer-app").hidden = false;
   adminDraft = null;
+  useLanguage(customerLanguage);
   history.replaceState(null, "", "#start");
   document.title = t("meta.customerTitle", { studio: studio.name.split(" · ")[0], marke: settings.app.brand });
   window.scrollTo(0, 0);
@@ -2219,6 +2401,7 @@ function finishAdminLeave() {
 }
 function showCompletion(setup = false) {
   document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+  if (adminOpen) useLanguage(customerLanguage);
   adminOpen = false;
   adminDraft = null;
   adminAccess?.lock();
@@ -2361,6 +2544,25 @@ $("admin-app").addEventListener("change", (event) => {
   if (event.target.id !== "backup-interval" || !adminAccess.isUnlocked()) return;
   localStorage.setItem(BACKUP_INTERVAL_KEY, event.target.value);
   renderAdminSection();
+});
+$("admin-app").addEventListener("change", (event) => {
+  const el = event.target;
+  if (!adminAccess.isUnlocked()) return;
+  if (el.id === "operator-language") {
+    try {
+      localStorage.setItem(LANGUAGE_KEY, el.value);
+    } catch (_) {}
+    useLanguage(el.value);
+  } else if (adminDraft && el.id === "locale-studio") {
+    adminDraft.locale.studio = el.value;
+    if (!adminDraft.locale.customer.includes(el.value)) adminDraft.locale.customer.unshift(el.value);
+  } else if (adminDraft && el.dataset.localeCustomer) {
+    const code = el.dataset.localeCustomer,
+      others = adminDraft.locale.customer.filter((c) => c !== code);
+    adminDraft.locale.customer = el.checked ? [...others, code] : others;
+  } else return;
+  renderAdminSection();
+  updateAdminChrome();
 });
 $("admin-app").addEventListener("input", (event) => {
   if (["setup-pdf-years", "setup-income-years"].includes(event.target.id))
@@ -2598,6 +2800,7 @@ try {
 }
 exportFeature.sync().catch((error) => console.error("Export-Archiv nicht abgeglichen:", error));
 applySettings(settings, { initial: true });
+useLanguage(customerLanguage);
 let initialTheme = embeddedConfig?.theme || "dark";
 try {
   initialTheme = localStorage.getItem(THEME_KEY) || initialTheme;

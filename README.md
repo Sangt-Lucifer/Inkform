@@ -24,10 +24,14 @@ Ein Profil besteht aus `profile.json`, `logo.png`, `icons/`, `manifest.webmanife
 - `text`: alle studiospezifischen Texte für die Platzhalter `%%name%%` im Code. Der Build bricht ab bei fehlenden oder ungenutzten Texten und bei Zeichen, die aus JavaScript oder HTML ausbrechen könnten (`"`, `` ` ``, `\`, `<`, `>`, `${`, Zeilenumbruch). Alle Profile haben dieselben Texte.
 - `markers`: die eigenen Kennzeichen des Studios (Name, Inhaber, Adresse, Domains …) als Text oder `{"regex": "…"}`. Die Leak-Tests lesen sie von dort; im Kern steht keine Liste echter Studios.
 - `guide`: Kopfzeile, Datum und Autor der PDF-Anleitung.
+- `languages` (optional): `content` (Sprache der Studiotexte), `studio` (Startsprache, muss zu `lang` im Manifest passen), `customer` (Sprachen, die Kunden wählen dürfen) und `note` (Hinweis je Sprache im PDF, z. B. „Maßgeblich ist die deutsche Fassung“). Ohne Angabe gilt überall Deutsch.
+- `currency` (optional): Währungscode nach ISO 4217, Standard `EUR`. Lässt sich in der App ändern.
 
 ## Sprachen
 
 Jede Sprache ist eine Datei `src/sprachen/<code>.js` mit `name` (in der eigenen Sprache), `locale` (für Datum, Zahlen, Geld und Mehrzahl über `Intl`), `dir` (`ltr` oder `rtl`), `pdfFont` und `texts`. Welche Sprachen es gibt, ergibt sich nur aus diesen Dateien. Deutsch ist die Grundsprache: Jede andere Sprache braucht genau dieselben Schlüssel, dieselben Platzhalter (`{wert}` setzt die App ein, `%%name%%` der Build aus dem Profil; `{waehrung}` und `{waehrungszeichen}` gibt es überall) und die Mehrzahlformen ihrer Sprache (`{ one: "…", other: "…" }`, Zahl in `{anzahl}`). Erlaubt sind nur `<b>`, `<strong>` und `<code>`. Build und Tests brechen ab bei fehlenden, überzähligen, doppelten oder ungenutzten Schlüsseln. Im HTML stehen Texte als `data-t="schlüssel"`, Attribute als `data-t-<attribut>`, im Code als `t()` (Text) und `th()` (HTML).
+
+Die Verwaltung erscheint in der Sprache des Geräts (Gestaltung → Sprache dieses Geräts, `inkform.language.v1`, nicht in der Gesamtsicherung), sonst in der Studiosprache. Das Kundenformular startet immer in der Studiosprache. Auf der Studio-Seite stehen Studiosprache, Kundensprachen, Währung und Hinweise; die Texte des Formulars in anderen Sprachen liegen in `settings.translations`. Eine Kundensprache wird nur angeboten, wenn jeder Text des Formulars in ihr vorliegt. Wechselt der Kunde die Sprache, bleiben Eingaben und Gesundheitsangaben, Erklärungen, Foto-Auswahl und Unterschrift werden zurückgesetzt; das nächste Formular beginnt wieder in der Studiosprache. Das PDF erscheint in der Kundensprache und vermerkt sie, wenn sie von der Sprache der Studiotexte abweicht, mit dem Hinweis dieser Sprache. Dateinamen folgen der Studiosprache, die Ordner im ZIP heißen immer `Einwilligungen/` und `Einnahmen/`.
 
 ## Bauen und prüfen
 

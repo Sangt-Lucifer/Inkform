@@ -320,6 +320,10 @@ a {
   padding: 25px 29px 23px;
   border-bottom: 1px solid #efefef;
 }
+.card-head > div {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
 .section-number {
   display: flex;
   align-items: center;
@@ -346,7 +350,7 @@ a {
   line-height: 1.5;
 }
 .section-status {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 9px;
   font-weight: 600;
   color: #898989;
@@ -2905,4 +2909,16 @@ html[data-theme="dark"] dialog::backdrop {
 }
 .ad-checklist {
   font-size: 13px;
+}
+
+.language-select {
+  min-height: 42px;
+  max-width: 12em;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 12px;
 }

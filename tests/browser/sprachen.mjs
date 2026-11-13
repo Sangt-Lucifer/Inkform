@@ -1,7 +1,8 @@
 // A language added as a file only: the test-only pseudo language (right to left, about 60 % longer
-// texts) is built next to the real ones, chosen via the stored language and must translate every
-// marked text without pushing the layout wider than the screen. Customer form, PIN dialog and every
-// admin page, on iPad portrait and a small phone.
+// texts) is built next to the real ones. As the device language it turns the admin area into that
+// language while the customer form stays in the studio language; with translated form texts it is
+// offered to customers, switches the form and goes back to the studio language for the next form.
+// Every marked text is translated and nothing gets wider than the screen (iPad portrait, phone).
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -24,16 +25,22 @@ await reload();
 await ev(HELPERS);
 
 // Elements and attributes marked for translation that still show something else.
-const UNTRANSLATED = `(() => {
-  const bad = [];
-  for (const el of document.querySelectorAll('[data-t]'))
+const UNTRANSLATED = (root) => `(() => {
+  const bad = [], root = document.querySelector('${root}');
+  // These show the studio's or the customer's name once known, not an interface text.
+  for (const el of root.querySelectorAll('[data-t]:not(#admin-workspace-name):not(#signature-name)'))
     if (!el.textContent.includes('[')) bad.push(el.dataset.t);
-  for (const el of document.querySelectorAll('*'))
+  for (const el of root.querySelectorAll('*'))
     for (const a of el.attributes)
       if (a.name.startsWith('data-t-') && !['data-t-slot', 'data-t-part', 'data-t-href'].includes(a.name) &&
           !(el.getAttribute(a.name.slice(7)) ?? '').includes('[')) bad.push(a.name + '=' + a.value);
   return bad;
 })()`;
+const translated = async (name, root) => {
+  const missing = await ev(UNTRANSLATED(root));
+  if (missing.length) console.log("Nicht übersetzt:", missing.slice(0, 20));
+  check(name, missing.length === 0);
+};
 const WIDE = `(() => {
   const out = [];
   // Inside a box that scrolls sideways (wide tables) running past the edge is intended.
@@ -41,7 +48,7 @@ const WIDE = `(() => {
   for (const el of document.querySelectorAll('body *')) {
     const r = el.getBoundingClientRect();
     if (r.width && getComputedStyle(el).visibility !== 'hidden' && (r.right > innerWidth + 1 || r.left < -1) && !el.closest('[hidden],dialog:not([open]),.sr-only,.visually-hidden') && !scrolls(el))
-      out.push((el.id || el.tagName.toLowerCase()) + ':' + Math.round(r.left) + '..' + Math.round(r.right));
+      out.push((el.id || el.tagName.toLowerCase() + (typeof el.className === 'string' && el.className ? '.' + el.className.split(' ')[0] : '') + '<' + (el.parentElement.closest('[id]')?.id ?? '')) + ':' + Math.round(r.left) + '..' + Math.round(r.right));
   }
   return { page: document.documentElement.scrollWidth > innerWidth, elements: out.slice(0, 8) };
 })()`;
@@ -51,15 +58,12 @@ const fits = async (name) => {
   return !wide.page && !wide.elements.length;
 };
 
-check("Pseudosprache erkannt: lang und dir gesetzt", await ev(`document.documentElement.lang === '${PSEUDO}' && document.documentElement.dir === 'rtl'`));
-const missing = await ev(UNTRANSLATED);
-if (missing.length) console.log("Nicht übersetzt:", missing.slice(0, 20));
-check("Alle markierten Texte und Attribute übersetzt", missing.length === 0);
-
+check("Gerätesprache gilt nicht für das Kundenformular", await ev(`document.documentElement.lang === 'de'`));
 await until(`document.getElementById('admin-pin-dialog')?.open`);
-check("PIN-Dialog in der Pseudosprache", await ev(`document.getElementById('admin-pin-dialog').textContent.includes('[')`));
 await ev(`document.getElementById('admin-pin').value='839274';document.getElementById('admin-pin-repeat').value='839274';document.getElementById('admin-pin-form').requestSubmit()`);
-await until(`adminAccess.isUnlocked()`);
+await until(`adminAccess.isUnlocked() && adminOpen`);
+check("Verwaltung in der Gerätesprache: lang und dir", await ev(`document.documentElement.lang === '${PSEUDO}' && document.documentElement.dir === 'rtl'`));
+await translated("Verwaltung: alle markierten Texte übersetzt", "#admin-app");
 
 const viewports = [
   ["iPad hochkant", 820, 1180],
@@ -79,15 +83,47 @@ for (const [label, width, height] of viewports) {
   check(`${label}: alle Admin-Seiten übersetzt und nicht breiter als der Bildschirm`, ok);
   await screenshot(`sprachen-admin-${width}`);
 }
+// Form texts in the pseudo language, offered to customers next to the studio language.
+await ev(`(() => {
+  const p = (x) => x ? '[' + x + ']' : x, s = JSON.parse(JSON.stringify(settings));
+  const items = (list, keys) => Object.fromEntries(list.map((i) => [i.id, Object.fromEntries(keys.map((k) => [k, p(i[k])]))]));
+  s.translations = { ${PSEUDO}: {
+    app: Object.fromEntries(TRANSLATED.app.map((k) => [k, p(s.app[k])])),
+    studio: Object.fromEntries(TRANSLATED.studio.map((k) => [k, p(s.studio[k])])),
+    medical: items(s.medical, TRANSLATED.medical),
+    legal: items(s.legal, TRANSLATED.legal),
+  } };
+  s.locale.customer = [s.locale.studio, '${PSEUDO}'];
+  s.locale.note = { ${PSEUDO}: '[Maßgeblich ist die Fassung in der Studiosprache]' };
+  adminDraft = s;
+  saveAdmin();
+})()`);
+await ev(`openAdminAuthorized('studio')`);
+check("Studio-Seite: Kundensprache wählbar", await ev(`!document.querySelector('[data-locale-customer="${PSEUDO}"]').disabled && document.querySelector('[data-locale-customer="${PSEUDO}"]').checked`));
 await ev(`finishAdminLeave()`);
 await until(`!document.getElementById('customer-app').hidden`);
+check("Nach der Verwaltung wieder Studiosprache", await ev(`document.documentElement.lang === 'de'`));
+check("Sprachauswahl mit zwei Sprachen sichtbar", await ev(`!document.getElementById('customer-language').hidden && document.getElementById('customer-language').options.length === 2`));
+
+await ev(`fillConsent()`);
+await ev(`(() => { const s = document.getElementById('customer-language'); s.value = '${PSEUDO}'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+check("Kundensprache gewechselt: lang und dir", await ev(`document.documentElement.lang === '${PSEUDO}' && document.documentElement.dir === 'rtl'`));
+await translated("Kundenformular: alle markierten Texte übersetzt", "#customer-app");
+check("Formulartexte in der Kundensprache", await ev(`document.getElementById('customer-headline').textContent.startsWith('[') && document.querySelector('.question-title').textContent.trim().startsWith('[')`));
+check(
+  "Eingaben und Gesundheitsangaben bleiben, Erklärungen, Foto und Unterschrift sind zurückgesetzt",
+  await ev(`document.getElementById('firstName').value === 'Test' && MEDICAL.every((q) => choiceValue(q.id) === 'no') && LEGAL.every((i) => !document.getElementById(i.id).checked) && !document.getElementById('sober').checked && !choiceValue('photo') && !hasSignature()`),
+);
 for (const [label, width, height] of viewports) {
   await size(width, height);
   check(`${label}: Kundenformular nicht breiter als der Bildschirm`, await fits(`${label} Formular`));
   await screenshot(`sprachen-formular-${width}`);
 }
 await cmd("Emulation.clearDeviceMetricsOverride");
+await ev(`fillConsent()`);
+check("PDF-Daten vermerken die Kundensprache", await ev(`gatherData().language === '${PSEUDO}' && !!createPdf(gatherData())`));
+await ev(`resetCustomerForm()`);
+check("Nächstes Formular wieder in der Studiosprache", await ev(`document.documentElement.lang === 'de' && document.getElementById('customer-language').value === 'de' && document.getElementById('customer-headline').textContent === settings.app.headline`));
 if (errors.length) console.log("Fehler:", JSON.stringify(errors).slice(0, 1500));
 check("Keine JavaScript-Fehler", errors.length === 0);
-await ev(`resetCustomerForm()`);
 process.exit(0);

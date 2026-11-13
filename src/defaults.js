@@ -1,3 +1,12 @@
+import { BASE_LANGUAGE } from "./i18n.js";
+
+// Languages and currency of the studio profile, filled in by the build (profile.json "languages",
+// "currency"); unbuilt sources use the base language and euro.
+const PROFILE_LOCALE_JSON = "__PROFILE_LOCALE__";
+export const PROFILE_LOCALE = PROFILE_LOCALE_JSON.startsWith("{")
+  ? JSON.parse(PROFILE_LOCALE_JSON)
+  : { content: BASE_LANGUAGE, studio: BASE_LANGUAGE, customer: [BASE_LANGUAGE], currency: "EUR", note: {} };
+
 export const STUDIO_DEFAULTS = {
   name: "%%studioName%%",
   address: "%%studioAddress%%",
@@ -160,4 +169,6 @@ Die App verarbeitet deine Angaben und deine Unterschrift auf diesem Gerät und e
   },
   medical: DEFAULT_MEDICAL,
   legal: DEFAULT_LEGAL,
+  locale: PROFILE_LOCALE,
+  translations: {},
 };
