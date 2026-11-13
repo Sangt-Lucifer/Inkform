@@ -6,6 +6,8 @@
 //
 // The income entry is booked only when the owner confirms the filing. Both parts are removed
 // right after that. If the PDF can no longer be read, the owner can book the entry as "PDF fehlt".
+import { t } from "./i18n.js";
+
 export const PENDING_KEY = "inkform.pending.v1";
 
 export function createPendingStore({ storage, files }) {
@@ -22,7 +24,7 @@ export function createPendingStore({ storage, files }) {
       !value.income ||
       typeof value.income !== "object"
     )
-      throw Error("Die offene Einwilligung auf diesem Gerät ist beschädigt.");
+      throw Error(t("pending.damaged"));
     return value;
   }
   // PDF writes still running, per consent: cleanup waits for them, so a late write can never
@@ -35,11 +37,11 @@ export function createPendingStore({ storage, files }) {
     save({ id, filename, pages, income, blob }) {
       const existing = read();
       if (existing && existing.id !== id)
-        throw Error("Es gibt noch eine offene Einwilligung. Bitte zuerst deren Ablage bestätigen.");
+        throw Error(t("pending.exists"));
       const meta = { version: 1, id, filename, pages, income, savedAt: new Date().toISOString() };
       storage.setItem(PENDING_KEY, JSON.stringify(meta));
       const write = Promise.resolve()
-        .then(() => (files ? files.put(id, blob) : Promise.reject(Error("kein Dateispeicher"))))
+        .then(() => (files ? files.put(id, blob) : Promise.reject(Error(t("pending.noFiles")))))
         .then(
           () => true,
           () => false,
@@ -85,7 +87,7 @@ export function createPendingStore({ storage, files }) {
 export function createIndexedDbFiles(indexedDB = globalThis.indexedDB, name = "inkform-pending") {
   let opening = null;
   function open() {
-    if (!indexedDB) return Promise.reject(Error("IndexedDB nicht verfügbar."));
+    if (!indexedDB) return Promise.reject(Error(t("pending.noIndexedDb")));
     opening ??= new Promise((resolve, reject) => {
       const request = indexedDB.open(name, 1);
       request.onupgradeneeded = () => request.result.createObjectStore("files");

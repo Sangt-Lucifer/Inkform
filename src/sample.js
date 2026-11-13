@@ -1,5 +1,7 @@
 // Invented sample entries for trying out the neutral edition. Every id starts with SAMPLE_PREFIX,
 // so they can always be removed completely, also after editing.
+import { t } from "./i18n.js";
+
 export const SAMPLE_PREFIX = "beispiel-";
 export const isSample = (record) => record.id.startsWith(SAMPLE_PREFIX);
 
@@ -26,7 +28,7 @@ export function sampleRecords(today, now = new Date().toISOString()) {
       customer: `${first} ${last}`,
       totalCents,
       depositCents,
-      source: `Tattoo_Einwilligung_${last}_${first}_${date}_120000_DEMO.pdf`,
+      source: `${t("file.consent")}_${last}_${first}_${date}_120000_DEMO.pdf`,
       updatedAt: now,
     };
   });

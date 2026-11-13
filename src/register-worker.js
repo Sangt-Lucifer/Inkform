@@ -1,3 +1,5 @@
+import { t } from "./i18n.js";
+
 if ("serviceWorker" in navigator && window.isSecureContext && location.protocol !== "file:") {
   const updateStatus = (ready, text) => {
     document.documentElement.dataset.offlineReady = String(ready);
@@ -7,10 +9,10 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
       node.textContent = text;
     });
   };
-  updateStatus(false, "Offline-Nutzung wird vorbereitet …");
+  updateStatus(false, t("offline.preparing"));
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type === "INKFORM_OFFLINE_READY")
-      updateStatus(true, "Offline bereit – im Flugmodus testen.");
+      updateStatus(true, t("offline.ready"));
   });
   window.addEventListener("load", async () => {
     try {
@@ -31,7 +33,7 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
       const registration = await navigator.serviceWorker.ready;
       registration.active?.postMessage({ type: "CHECK_OFFLINE" });
     } catch (error) {
-      updateStatus(false, "Offline-Vorbereitung fehlgeschlagen. Vor Einsatz erneut online öffnen.");
+      updateStatus(false, t("offline.failed"));
       console.info("Offline-App konnte nicht vorbereitet werden:", error.message);
     }
   });

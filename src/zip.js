@@ -1,4 +1,6 @@
 // Uncompressed ZIP ("stored") without a library: CRC-32, UTF-8 file names (flag bit 11), no ZIP64.
+import { t } from "./i18n.js";
+
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -18,7 +20,7 @@ export function crc32(bytes) {
 // DOS time and date in local time; the format covers the years 1980 to 2107.
 function dosDateTime(date) {
   const year = date.getFullYear();
-  if (year < 1980 || year > 2107) throw Error("ZIP-Dateien können nur Daten von 1980 bis 2107 speichern.");
+  if (year < 1980 || year > 2107) throw Error(t("zip.dateRange"));
   return {
     time: (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1),
     day: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
@@ -27,14 +29,14 @@ function dosDateTime(date) {
 
 // files: [{ name: "Ordner/Datei.pdf", data: Uint8Array }] -> Uint8Array of the ZIP file.
 export function createZip(files, date = new Date()) {
-  if (files.length > 0xffff) throw Error("Zu viele Dateien für eine ZIP-Datei.");
+  if (files.length > 0xffff) throw Error(t("zip.tooMany"));
   const { time, day } = dosDateTime(date),
     encoder = new TextEncoder(),
     entries = files.map(({ name, data }) => ({ name: encoder.encode(name), data, crc: crc32(data) }));
-  if (entries.some((e) => e.name.length > 0xffff)) throw Error("Ein Dateiname ist für eine ZIP-Datei zu lang.");
+  if (entries.some((e) => e.name.length > 0xffff)) throw Error(t("zip.nameTooLong"));
   const localSize = entries.reduce((sum, e) => sum + 30 + e.name.length + e.data.length, 0),
     centralSize = entries.reduce((sum, e) => sum + 46 + e.name.length, 0);
-  if (localSize + centralSize + 22 > 0xffffffff) throw Error("Die ZIP-Datei wäre größer als 4 GB.");
+  if (localSize + centralSize + 22 > 0xffffffff) throw Error(t("zip.tooLarge"));
   const out = new Uint8Array(localSize + centralSize + 22),
     view = new DataView(out.buffer);
   let pos = 0;

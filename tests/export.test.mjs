@@ -163,7 +163,7 @@ function feature({ records, archive, removed = new Set() }) {
   globalThis.document = {
     getElementById: (id) => elements[id] ?? null,
     querySelectorAll: () => [],
-    createElement: () => ({ setAttribute() {}, addEventListener() {} }),
+    createElement: () => ({ setAttribute() {}, addEventListener() {}, querySelectorAll: () => [] }),
     body: { append() {} },
   };
   const exporter = createExportFeature({

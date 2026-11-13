@@ -8,6 +8,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 const PDF_FONT_FILES = { normal: "NotoSans-Regular.ttf", bold: "NotoSans-Bold.ttf" };
+// Fonts a language file may name as its "pdfFont".
+export const PDF_FONT_NAMES = ["NotoSans"];
 
 function tables(buffer) {
   const count = buffer.readUInt16BE(4),

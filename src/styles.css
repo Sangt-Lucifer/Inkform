@@ -529,6 +529,8 @@ textarea {
   gap: 20px;
 }
 .question-title {
+  min-width: 0;
+  overflow-wrap: break-word;
   margin: 0;
   font-size: 12px;
   font-weight: 600;
@@ -545,12 +547,15 @@ textarea {
 .radio-pair {
   display: flex;
   flex-shrink: 0;
+  max-width: 60%;
   gap: 7px;
 }
 .choice {
   position: relative;
   cursor: pointer;
   display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .choice input {
   position: absolute;
@@ -564,6 +569,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
+  text-align: center;
   min-height: 44px;
   min-width: 57px;
   border: 1px solid #e2e2e2;
@@ -807,6 +813,7 @@ canvas {
   display: flex;
   gap: 11px;
   align-items: center;
+  min-width: 0;
 }
 .bottom-doc {
   background: #f2f2f2;
@@ -862,6 +869,8 @@ canvas {
   display: flex;
   align-items: center;
   gap: 17px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .format-tag {
   font-size: 10px;
@@ -1044,6 +1053,7 @@ noscript {
     grid-template-columns: repeat(4, 1fr);
     gap: 6px;
     margin: 23px 0;
+    overflow-x: auto;
   }
   .mobile-steps a {
     text-align: center;

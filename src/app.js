@@ -1,3 +1,4 @@
+import { LANGUAGE_KEY, applyTexts, language, markup, setLanguage, t, th } from "./i18n.js";
 import { createAdminAccess } from "./access.js";
 import { INCOME_KEY, createIncomeFeature, incomeId } from "./income.js";
 import { STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
@@ -52,6 +53,15 @@ const OWNER_GUIDE_PAGES = Number("__OWNER_GUIDE_PAGES__");
 // Neutral edition without a studio: setup assistant, sample data, no owner guide.
 const BLANK_EDITION = "__BLANK_EDITION__" === "true";
 const THEME_KEY = "inkform.theme.v1";
+try {
+  setLanguage(localStorage.getItem(LANGUAGE_KEY));
+} catch (_) {}
+function applyLanguage() {
+  document.documentElement.lang = language().code;
+  document.documentElement.dir = language().dir;
+  applyTexts(document);
+}
+applyLanguage();
 function validateSettings(value) {
   if (
     !value ||
@@ -60,12 +70,12 @@ function validateSettings(value) {
     !value.studio ||
     !value.app
   )
-    throw new Error("Diese Datei ist keine unterstützte INKFORM-Konfiguration (Version 1).");
+    throw new Error(t("settings.unsupported"));
   function string(input, label, max, required = false) {
     if (typeof input !== "string" || input.length > max)
-      throw new Error(`${label}: Bitte Text mit maximal ${max} Zeichen angeben.`);
+      throw new Error(t("settings.tooLong", { feld: label, max }));
     const result = input.normalize("NFC").trim();
-    if (required && !result) throw new Error(`${label}: Der Text darf nicht leer sein.`);
+    if (required && !result) throw new Error(t("settings.empty", { feld: label }));
     return result;
   }
   const studio = Object.fromEntries(
@@ -73,7 +83,7 @@ function validateSettings(value) {
       key,
       string(
         value.studio[key],
-        `Studio / ${key}`,
+        t("settings.studioField", { key }),
         key === "retention" || key === "recipients"
           ? 2000
           : key === "address"
@@ -85,7 +95,7 @@ function validateSettings(value) {
     ]),
   );
   if (studio.contact && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studio.contact))
-    throw new Error("Bitte eine gültige E-Mail-Adresse für den Datenschutzkontakt eingeben.");
+    throw new Error(t("settings.contactEmail"));
   const maxLengths = {
     brand: 24,
     formVersion: 50,
@@ -102,16 +112,14 @@ function validateSettings(value) {
   const app = Object.fromEntries(
     Object.keys(DEFAULT_SETTINGS.app).map((key) => [
       key,
-      string(value.app[key], `Formular / ${key}`, maxLengths[key], key !== "defaultArtist"),
+      string(value.app[key], t("settings.formField", { key }), maxLengths[key], key !== "defaultArtist"),
     ]),
   );
   function items(key) {
     const input = value[key],
       base = DEFAULT_SETTINGS[key];
     if (!Array.isArray(input) || input.length < base.length || input.length > 40)
-      throw new Error(
-        `${key === "medical" ? "Gesundheitsfragen" : "Einwilligungen"}: Standardfragen erhalten, maximal 40 Einträge.`,
-      );
+      throw new Error(t(key === "medical" ? "settings.medicalCount" : "settings.legalCount"));
     const seen = new Set();
     const output = input.map((item) => {
       if (
@@ -121,25 +129,25 @@ function validateSettings(value) {
           !/^custom(?:Medical|Legal)_[a-zA-Z0-9]+$/.test(item.id)) ||
         seen.has(item.id)
       )
-        throw new Error("Eine Frage enthält eine ungültige oder doppelte Kennung.");
+        throw new Error(t("settings.badId"));
       seen.add(item.id);
-      const result = { id: item.id, title: string(item.title, "Überschrift", 250, true) };
-      if (key === "medical") result.hint = string(item.hint, "Erläuterung", 3000, true);
+      const result = { id: item.id, title: string(item.title, t("settings.itemTitle"), 250, true) };
+      if (key === "medical") result.hint = string(item.hint, t("settings.itemHint"), 3000, true);
       else {
-        result.text = string(item.text, "Erklärungstext", 8000, true);
+        result.text = string(item.text, t("settings.itemText"), 8000, true);
         result.review = item.id === "privacy" ? true : !!item.review;
       }
       return result;
     });
     if (base.some((item) => !seen.has(item.id)))
-      throw new Error("Die Konfiguration muss alle Standardfragen enthalten.");
+      throw new Error(t("settings.missingDefaults"));
     return output;
   }
   const medical = items("medical"),
     legal = items("legal");
   const ids = [...medical, ...legal].map((item) => item.id);
   if (new Set(ids).size !== ids.length)
-    throw new Error("Fragen und Erklärungen benötigen eindeutige Kennungen.");
+    throw new Error(t("settings.duplicateIds"));
   return {
     schemaVersion: 1,
     savedAt:
@@ -159,7 +167,7 @@ try {
   embeddedConfig = JSON.parse(document.getElementById("inkform-config").textContent);
   if (embeddedConfig) settings = validateSettings(embeddedConfig);
 } catch (_) {
-  configLoadError = "Eingebettete Konfiguration ungültig. Standardvorlage wurde geladen.";
+  configLoadError = t("settings.embeddedInvalid");
 }
 try {
   const saved = localStorage.getItem(SETTINGS_KEY);
@@ -173,20 +181,15 @@ try {
     }
   }
 } catch (_) {
-  configLoadError =
-    "Lokale Einstellungen konnten nicht geladen werden. Die eingebettete Vorlage wird verwendet.";
+  configLoadError = t("settings.localInvalid");
 }
 
 const $ = (id) => document.getElementById(id);
 const form = $("consent-form");
 const localDate = (date = new Date()) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-const dateFormat = (value) =>
-  value
-    ? new Intl.DateTimeFormat("de-DE").format(new Date(value + "T12:00:00"))
-    : "Nicht angegeben";
-const timeFormat = (date) =>
-  new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "long" }).format(date);
+const dateFormat = (value) => (value ? language().date(value) : t("common.notGiven"));
+const timeFormat = (date) => language().dateTime(date, { dateStyle: "medium", timeStyle: "long" });
 const fieldValue = (id) => $(id).value.trim();
 const choiceValue = (name) => form.querySelector(`input[name="${name}"]:checked`)?.value || "";
 const normalizeText = (value) =>
@@ -220,28 +223,28 @@ function renderQuestionnaire() {
                 name="${q.id}"
                 value="yes"
                 required
-                aria-label="${escapeHtml(q.title)}: Ja"
-              /><span>Ja</span></label
+                aria-label="${th("health.answerYesLabel", { frage: q.title })}"
+              /><span>${th("common.yes")}</span></label
             ><label class="choice"
               ><input
                 type="radio"
                 name="${q.id}"
                 value="no"
                 required
-                aria-label="${escapeHtml(q.title)}: Nein"
-              /><span>Nein</span></label
+                aria-label="${th("health.answerNoLabel", { frage: q.title })}"
+              /><span>${th("common.no")}</span></label
             >
           </div>
         </div>
         <div class="field details-field" id="details-${q.id}" hidden>
           <label for="note-${q.id}"
-            >Falls bekannt, bitte ergänzen <span class="optional">optional</span></label
+            >${th("health.detailsLabel")} <span class="optional">${th("common.optional")}</span></label
           ><textarea
             id="note-${q.id}"
             name="note-${q.id}"
             rows="2"
             maxlength="2000"
-            placeholder="Welche Besonderheiten sind für deinen Artist wichtig?"
+            placeholder="${th("health.detailsPlaceholder")}"
           ></textarea>
         </div>
       </fieldset>`,
@@ -252,7 +255,7 @@ function renderQuestionnaire() {
         ><input type="checkbox" name="${item.id}" id="${item.id}" required /><span
           class="check-text"
           >${
-            item.review ? '<span class="inline-review">Vor Einsatz rechtlich prüfen</span>' : ""
+            item.review ? `<span class="inline-review">${th("common.inlineReview")}</span>` : ""
           }<strong>${escapeHtml(item.title)}<span class="required">*</span></strong
           ><small>${escapeHtml(item.text)}</small></span
         ></label
@@ -267,12 +270,12 @@ $("birthDate").max = localDate();
 function privacyText() {
   return settings.app.privacyTemplate.replace(
     /\{\{studio\.(name|address|contact|location|retention|recipients)\}\}/g,
-    (_, key) => studio[key] || "[Studioangabe ergänzen]",
+    (_, key) => studio[key] || t("privacy.missingStudio"),
   );
 }
 function renderStudio() {
   $("privacy-text").textContent = privacyText();
-  $("studio-button-label").textContent = "Admin-Konsole";
+  $("studio-button-label").textContent = t("customer.admin");
   $("customer-studio-name").textContent = studio.name.split(" · ")[0];
   $("customer-studio-contact").textContent = [studio.name, studio.address]
     .filter(Boolean)
@@ -359,7 +362,7 @@ function clearSignature(message = "") {
   ink.active = null;
   ink.signedAt = null;
   redraw();
-  $("signature-time").textContent = "Datum & Uhrzeit werden automatisch erfasst.";
+  $("signature-time").textContent = t("signature.timeAuto");
   $("signature-error").textContent = message;
   $("signature-wrap").removeAttribute("aria-invalid");
   invalidatePdf();
@@ -435,11 +438,7 @@ function isSectionComplete(id) {
     (id !== "personal" || (birthValid() && priceErrors().length === 0))
   );
 }
-const formatMoney = (cents) =>
-  new Intl.NumberFormat("de-DE", {
-    style: "currency",
-    currency: "EUR",
-  }).format(cents / 100);
+const formatMoney = (cents) => language().money(cents);
 function priceErrors() {
   const total = moneyCents(fieldValue("totalPrice"));
   const deposit = moneyCents(fieldValue("depositPaid"));
@@ -447,24 +446,22 @@ function priceErrors() {
   if (Number.isNaN(total))
     errors.push({
       id: "totalPrice",
-      message:
-        "Gesamtkosten bitte als positiven Eurobetrag mit höchstens zwei Nachkommastellen ohne Tausendertrennzeichen eingeben, z. B. 450,00.",
+      message: t("price.totalInvalid"),
     });
   if (Number.isNaN(deposit))
     errors.push({
       id: "depositPaid",
-      message:
-        "Anzahlung bitte als positiven Eurobetrag mit höchstens zwei Nachkommastellen ohne Tausendertrennzeichen eingeben, z. B. 100,00.",
+      message: t("price.depositInvalid"),
     });
   if (deposit !== null && total === null)
     errors.push({
       id: "totalPrice",
-      message: "Bitte zur Anzahlung auch die vereinbarten Gesamtkosten eintragen.",
+      message: t("price.depositWithoutTotal"),
     });
   if (Number.isFinite(total) && Number.isFinite(deposit) && deposit > total)
     errors.push({
       id: "depositPaid",
-      message: "Die Anzahlung darf die Gesamtkosten nicht überschreiten.",
+      message: t("price.depositTooHigh"),
     });
   return errors;
 }
@@ -474,7 +471,7 @@ function updatePriceBalance() {
   const valid = Number.isFinite(total) && Number.isFinite(deposit) && deposit <= total;
   $("price-balance").hidden = !valid;
   $("price-balance").textContent = valid
-    ? `Offener Restbetrag: ${formatMoney(total - deposit)}`
+    ? t("price.balance", { betrag: formatMoney(total - deposit) })
     : "";
 }
 function updateProgress() {
@@ -484,27 +481,25 @@ function updateProgress() {
     const done = isSectionComplete(id);
     if (done) complete++;
     const status = document.querySelector(`[data-status="${id}"]`);
-    status.textContent = done ? "Vollständig" : "Offen";
+    status.textContent = t(done ? "status.complete" : "status.open");
     status.classList.toggle("complete", done);
     document
       .querySelectorAll(`[data-step="${id}"]`)
       .forEach((link) => link.classList.toggle("done", done));
   });
-  $("overall-label").textContent = `${complete} von 4 Abschnitten vollständig`;
+  $("overall-label").textContent = t("customer.progressLabel", { anzahl: complete });
   $("progress-fill").style.width = `${complete * 25}%`;
   $("progress").setAttribute("aria-valuenow", complete);
   $("export-status").textContent =
-    complete === 4
-      ? "Bereit zum Erstellen und Speichern."
-      : `${complete} von 4 Abschnitten vollständig`;
+    complete === 4 ? t("export.ready") : t("customer.progressLabel", { anzahl: complete });
   $("signature-name").textContent =
     [fieldValue("firstName"), fieldValue("lastName")].filter(Boolean).join(" ") ||
-    "Dein Name erscheint hier";
+    t("signature.namePlaceholder");
 }
 form.addEventListener("input", (event) => {
   dirty = true;
   if (ink.strokes.length)
-    clearSignature("Deine Angaben wurden geändert. Bitte unterschreibe erneut.");
+    clearSignature(t("signature.changed"));
   invalidatePdf();
   event.target.removeAttribute("aria-invalid");
   const q = event.target.closest(".question");
@@ -524,7 +519,7 @@ form.addEventListener("input", (event) => {
 form.addEventListener("change", (event) => {
   if (event.target.type === "date") {
     if (ink.strokes.length)
-      clearSignature("Deine Angaben wurden geändert. Bitte unterschreibe erneut.");
+      clearSignature(t("signature.changed"));
     dirty = true;
     invalidatePdf();
     updateProgress();
@@ -534,55 +529,54 @@ function validate() {
   const errors = priceErrors();
   form.querySelectorAll("[aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
   const requireText = (id, label) => {
-    if (!fieldValue(id)) errors.push({ id, message: `${label} bitte ausfüllen.` });
+    if (!fieldValue(id)) errors.push({ id, message: t("validate.required", { feld: t(label) }) });
   };
-  requireText("firstName", "Vorname");
-  requireText("lastName", "Nachname");
+  requireText("firstName", "personal.firstName");
+  requireText("lastName", "personal.lastName");
   if (!fieldValue("birthDate"))
-    errors.push({ id: "birthDate", message: "Geburtsdatum bitte angeben." });
+    errors.push({ id: "birthDate", message: t("validate.birthDate") });
   else if (!birthValid())
     errors.push({
       id: "birthDate",
-      message:
-        "Bitte prüfe das Geburtsdatum. Du musst heute und am Tattoo-Termin mindestens 18 Jahre alt sein (Geburtsjahr ab 1900).",
+      message: t("validate.birthDateInvalid"),
     });
-  requireText("appointment", "Datum des Termins");
-  requireText("artist", "Tätowierer / Artist");
-  requireText("placement", "Körperstelle");
-  requireText("motif", "Motiv / Beschreibung");
+  requireText("appointment", "tattoo.appointment");
+  requireText("artist", "tattoo.artist");
+  requireText("placement", "tattoo.placement");
+  requireText("motif", "tattoo.motif");
   if (fieldValue("email") && !$("email").checkValidity())
-    errors.push({ id: "email", message: "Bitte eine gültige E-Mail-Adresse eingeben." });
+    errors.push({ id: "email", message: t("validate.email") });
   if (!$("sober").checked)
     errors.push({
       id: "sober",
-      message: "Bitte bestätige, dass du aktuell nicht unter Alkohol- oder Drogeneinfluss stehst.",
+      message: t("validate.sober"),
     });
   MEDICAL.forEach((q) => {
     if (!choiceValue(q.id))
       errors.push({
         id: `q-${q.id}`,
-        message: `Gesundheit: „${q.title}“ bitte mit Ja oder Nein beantworten.`,
+        message: t("validate.medical", { frage: q.title }),
       });
   });
   LEGAL.forEach((item) => {
     if (!$(item.id).checked)
-      errors.push({ id: item.id, message: `Bitte bestätigen: ${item.title}` });
+      errors.push({ id: item.id, message: t("validate.legal", { erklaerung: item.title }) });
   });
   if (!choiceValue("photo"))
     errors.push({
       id: "photo-fieldset",
-      message: "Bitte entscheide dich für oder gegen die Fotoverwendung.",
+      message: t("validate.photo"),
     });
   if (!hasSignature() || !ink.signedAt || ink.active !== null)
     errors.push({
       id: "signature-canvas",
-      message: "Bitte unterschreibe mit einem vollständigen Schriftzug.",
+      message: t("validate.signature"),
     });
   const box = $("error-summary");
   box.replaceChildren();
   if (errors.length) {
     const title = document.createElement("strong");
-    title.textContent = "Noch ein paar Angaben, bevor wir das PDF erstellen:";
+    title.textContent = t("validate.summary");
     box.append(title);
     const list = document.createElement("ul");
     errors.forEach((error) => {
@@ -669,7 +663,7 @@ function resetCustomerForm() {
   $("reset-dialog").close();
   updateProgress();
   window.scrollTo({ top: 0, behavior: "smooth" });
-  toast("Neues Formular ist bereit.");
+  toast(t("customer.newFormReady"));
 }
 $("reset-confirm").addEventListener("click", resetCustomerForm);
 window.addEventListener("beforeunload", (event) => {
@@ -738,10 +732,10 @@ function createPdf(data) {
   const stamp = `${timeFormat(data.createdAt)} | UTC ${data.createdAt.toISOString()}`;
   const reference = `IF-${data.createdAt.toISOString().replace(/\D/g, "").slice(0, 14)}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
   doc.setProperties({
-    title: `Tattoo-Einwilligung – ${fullName}`,
-    subject: `Formular ${version} · ${reference}`,
+    title: t("pdf.docTitle", { name: fullName }),
+    subject: t("pdf.docSubject", { version, referenz: reference }),
     author: data.studio.name,
-    creator: "INKFORM · lokale PDF-Erstellung",
+    creator: t("pdf.docCreator"),
   });
   doc.setCreationDate(data.createdAt);
   function font(size = 10, bold = false, color = black) {
@@ -755,10 +749,10 @@ function createPdf(data) {
     font(16, true);
     doc.text(data.template?.brand || settings.app.brand, margin, 15);
     font(8, false, grey);
-    doc.text("TATTOO-EINWILLIGUNG", margin, 22);
+    doc.text(t("pdf.headerLabel"), margin, 22);
     font(8, false, grey);
     doc.text(reference, 192, 15, { align: "right" });
-    doc.text(`Formularversion ${version}`, 192, 22, { align: "right" });
+    doc.text(t("pdf.formVersion", { version }), 192, 22, { align: "right" });
     y = 42;
   }
   function ensure(height) {
@@ -785,10 +779,10 @@ function createPdf(data) {
     paragraph(text, { size: 12, bold: true, after: 4 });
   }
   function labelValue(label, value) {
-    paragraph(`${label}: ${value || "Nicht angegeben"}`, { size: 10, after: 2 });
+    paragraph(t("pdf.labelValue", { feld: label, wert: value || t("common.notGiven") }), { size: 10, after: 2 });
   }
   function review(text) {
-    paragraph("VOR EINSATZ RECHTLICH PRÜFEN", { size: 8, bold: true, color: red, after: 1 });
+    paragraph(t("common.reviewLabel"), { size: 8, bold: true, color: red, after: 1 });
     paragraph(text, { size: 9, color: red, after: 4 });
   }
   header();
@@ -797,61 +791,52 @@ function createPdf(data) {
     bold: true,
     after: 5,
   });
-  paragraph(`Studio: ${data.studio.name}`, { size: 10, bold: true });
+  paragraph(t("pdf.studio", { studio: data.studio.name }), { size: 10, bold: true });
   paragraph(`${data.studio.address} | ${data.studio.contact}`, { size: 9, color: grey });
-  review(
-    "ENTWURF: Haftungs-, Foto- und Datenschutzpassagen sind an das konkrete Studio anzupassen und vor Verwendung rechtlich zu prüfen. Das Unterschreiben dieses Entwurfs ersetzt diese Prüfung nicht.",
-  );
-  title("01 / Kundenangaben & Tattoo");
-  labelValue("Vor- und Nachname", fullName);
-  labelValue("Geburtsdatum", dateFormat(f.birthDate));
+  review(t("pdf.draftNotice"));
+  title(t("pdf.section1"));
+  labelValue(t("pdf.fullName"), fullName);
+  labelValue(t("personal.birthDate"), dateFormat(f.birthDate));
   labelValue(
-    "Anschrift",
+    t("pdf.address"),
     [f.street, [f.postalCode, f.city].filter(Boolean).join(" ")].filter(Boolean).join(", "),
   );
-  labelValue("Telefon", f.phone);
-  labelValue("E-Mail", f.email);
-  labelValue("Termin", dateFormat(f.appointment));
-  labelValue("Tätowierer / Artist", f.artist);
-  labelValue("Körperstelle", f.placement);
-  labelValue("Ungefähre Größe", f.size);
-  labelValue("Motiv / Beschreibung", f.motif);
+  labelValue(t("pdf.phone"), f.phone);
+  labelValue(t("pdf.email"), f.email);
+  labelValue(t("pdf.appointment"), dateFormat(f.appointment));
+  labelValue(t("tattoo.artist"), f.artist);
+  labelValue(t("tattoo.placement"), f.placement);
+  labelValue(t("tattoo.size"), f.size);
+  labelValue(t("tattoo.motif"), f.motif);
   const total = moneyCents(f.totalPrice),
     deposit = moneyCents(f.depositPaid);
   if (Number.isFinite(total)) {
     ensure(30);
-    paragraph("Preisvereinbarung", { size: 11, bold: true });
-    labelValue("Vereinbarte Gesamtkosten (inkl. ggf. USt.)", formatMoney(total));
+    paragraph(t("pdf.price"), { size: 11, bold: true });
+    labelValue(t("pdf.priceTotal"), formatMoney(total));
     if (Number.isFinite(deposit)) {
-      labelValue("Bereits angezahlt", formatMoney(deposit));
-      labelValue("Offener Restbetrag", formatMoney(total - deposit));
+      labelValue(t("pdf.priceDeposit"), formatMoney(deposit));
+      labelValue(t("pdf.priceBalance"), formatMoney(total - deposit));
     }
   }
-  title("02 / Medizinische Anamnese");
-  paragraph(
-    "Bestätigt: Ich stehe aktuell nicht unter Alkohol- oder Drogeneinfluss und kann frei über die Tätowierung entscheiden.",
-    { size: 10, bold: true },
-  );
+  title(t("pdf.section2"));
+  paragraph(t("pdf.sober"), { size: 10, bold: true });
   data.medical.forEach((q) => {
     ensure(19);
-    paragraph(`${q.title}: ${q.value === "yes" ? "JA" : "NEIN"}`, {
+    paragraph(t("pdf.answer", { frage: q.title, antwort: t(q.value === "yes" ? "pdf.yes" : "pdf.no") }), {
       size: 10,
       bold: true,
       after: 1,
     });
     paragraph(q.hint, { size: 9, color: grey, after: 2 });
-    if (q.note) paragraph(`Ergänzung: ${q.note}`, { size: 9, indent: 3 });
+    if (q.note) paragraph(t("pdf.note", { text: q.note }), { size: 9, indent: 3 });
   });
-  labelValue("Weitere Medikamente / Hinweise", f.medicationNotes);
-  if (data.medical.some((q) => q.value === "yes"))
-    paragraph(
-      "Hinweis: Mindestens eine Gesundheitsfrage wurde mit Ja beantwortet. Vor Beginn persönlich mit dem Studio klären. Dieses Dokument erteilt keine medizinische Freigabe.",
-      { size: 10, bold: true },
-    );
-  title("03 / Erklärungen & Einwilligungen");
+  labelValue(t("pdf.medication"), f.medicationNotes);
+  if (data.medical.some((q) => q.value === "yes")) paragraph(t("pdf.yesNotice"), { size: 10, bold: true });
+  title(t("pdf.section3"));
   data.legal.forEach((item) => {
     ensure(22);
-    paragraph(`BESTÄTIGT: ${item.title}`, {
+    paragraph(t("pdf.confirmed", { erklaerung: item.title }), {
       size: 10,
       bold: true,
       color: item.review ? red : black,
@@ -861,27 +846,24 @@ function createPdf(data) {
     else paragraph(item.text, { size: 10, after: 5 });
   });
   ensure(22);
-  paragraph(
-    `Fotoverwendung: ${data.photo === "yes" ? "JA, freiwillige Einwilligung erteilt" : "NEIN, keine Einwilligung zur Veröffentlichung"}`,
-    { size: 11, bold: true, color: red },
-  );
+  paragraph(t(data.photo === "yes" ? "pdf.photoYes" : "pdf.photoNo"), { size: 11, bold: true, color: red });
   review(
     data.photo === "yes"
       ? data.template?.photoText || settings.app.photoText
       : data.template?.photoDeniedText || settings.app.photoDeniedText,
   );
-  title("Datenschutzhinweise / Entwurf");
+  title(t("pdf.privacy"));
   review(data.privacy);
   const imageWidth = 150,
     imageHeight = Math.min(60, imageWidth * data.signature.ratio);
 
   // Keep the consent statement and signature on the same PDF page.
   ensure(imageHeight + 100);
-  title("04 / Digitale Unterschrift");
+  title(t("pdf.section4"));
   paragraph(data.template?.signatureText || settings.app.signatureText, { size: 10 });
 
   ensure(imageHeight + 48);
-  labelValue("Ort", data.studio.location);
+  labelValue(t("pdf.place"), data.studio.location);
   doc.setDrawColor(218, 225, 209);
   doc.roundedRect(margin, y, width, imageHeight + 3, 2, 2, "S");
   const actualWidth = imageHeight / data.signature.ratio;
@@ -897,31 +879,24 @@ function createPdf(data) {
   );
   y += imageHeight + 9;
   paragraph(fullName, { size: 11, bold: true, after: 2 });
-  paragraph(`Unterzeichnet: ${timeFormat(data.signedAt)}`, { size: 9, after: 2 });
-  paragraph(`Unterzeichnet (UTC): ${data.signedAt.toISOString()}`, {
+  paragraph(t("pdf.signed", { zeit: timeFormat(data.signedAt) }), { size: 9, after: 2 });
+  paragraph(t("pdf.signedUtc", { zeit: data.signedAt.toISOString() }), {
     size: 8,
     color: grey,
     after: 4,
   });
-  paragraph(`PDF erstellt: ${stamp}`, { size: 8, color: grey, after: 2 });
-  paragraph(
-    "Zeitangaben stammen von der Geräteuhr. Gezeichnete Unterschrift; keine qualifizierte elektronische Signatur und kein vertrauenswürdiger externer Zeitstempel.",
-    { size: 8, color: grey },
-  );
+  paragraph(t("pdf.created", { zeit: stamp }), { size: 8, color: grey, after: 2 });
+  paragraph(t("pdf.clockNotice"), { size: 8, color: grey });
   const pages = doc.getNumberOfPages();
   for (let page = 1; page <= pages; page++) {
     doc.setPage(page);
     doc.setDrawColor(224, 228, 217);
     doc.line(margin, 282, 192, 282);
     font(7, false, grey);
-    doc.text(`${reference} | Vertrauliche Kundendaten`, margin, 287);
-    doc.text(`Seite ${page} von ${pages}`, 192, 287, { align: "right" });
+    doc.text(t("pdf.footer", { referenz: reference }), margin, 287);
+    doc.text(t("pdf.page", { seite: page, seiten: pages }), 192, 287, { align: "right" });
     font(7, true, red);
-    doc.text(
-      "ENTWURF: Haftungs-, Foto- und Datenschutztexte vor Einsatz rechtlich prüfen.",
-      margin,
-      292,
-    );
+    doc.text(t("pdf.footerDraft"), margin, 292);
   }
   return { doc, pages };
 }
@@ -934,15 +909,13 @@ $("pdf-library").addEventListener("error", () => libraryAvailable());
 window.addEventListener("load", libraryAvailable);
 $("retry-library").addEventListener("click", () => {
   if (libraryAvailable()) return;
-  toast(
-    "Die eingebettete PDF-Bibliothek ist nicht verfügbar. Eingaben vor dem Schließen sichern und die vollständige App-Datei erneut öffnen.",
-  );
+  toast(t("customer.libraryMissingToast"));
 });
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   if (!validate()) return;
   if (Object.values(studio).some((value) => !value.trim())) {
-    toast("Bitte zuerst die Studio- und Datenschutzhinweise ergänzen.");
+    toast(t("customer.studioMissing"));
     openStudio();
     return;
   }
@@ -966,9 +939,7 @@ form.addEventListener("submit", (event) => {
     ].join("\n");
     const missing = unsupportedPdfChars(userText);
     if (missing.length) {
-      toast(
-        `Diese Zeichen kann die PDF-Schrift nicht darstellen: ${missing.join(" ")} Bitte ersetzen oder weglassen.`,
-      );
+      toast(t("pdf.unsupportedChars", { zeichen: missing.join(" ") }));
       return;
     }
     const result = createPdf(data),
@@ -976,7 +947,7 @@ form.addEventListener("submit", (event) => {
     const slug = fileSlug(normalizeText(`${data.fields.lastName}_${data.fields.firstName}`));
     const clock = data.createdAt.toTimeString().slice(0, 8).replaceAll(":", "");
     const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
-    const filename = `Tattoo_Einwilligung_${slug}_${data.fields.appointment}_${clock}_${suffix}.pdf`;
+    const filename = `${t("file.consent")}_${slug}_${data.fields.appointment}_${clock}_${suffix}.pdf`;
     // Prepared now, booked only when the owner confirms the filing (pdf-next).
     const incomeEntry = incomeFeature.capture(data, filename, consentIncomeId);
     presentPdfArtifact(blob, filename, result.pages, { autoSave: true, incomeEntry });
@@ -984,9 +955,7 @@ form.addEventListener("submit", (event) => {
     keepPending(pendingConsent);
   } catch (error) {
     console.error("PDF-Erstellung fehlgeschlagen:", error);
-    toast(
-      "Das PDF konnte nicht erstellt werden. Deine Eingaben bleiben erhalten. Bitte versuche es erneut.",
-    );
+    toast(t("pdf.createFailed"));
   } finally {
     button.disabled = false;
   }
@@ -1008,11 +977,11 @@ function presentPdfArtifact(
     isTest = false,
     isReport = false,
     incomeEntry = null,
-    reportTitle = "Einnahmenübersicht als PDF",
+    reportTitle = t("pdf.reportTitle"),
   } = {},
 ) {
   if (!isTest && !isReport && pendingConsent && !pendingConsent.confirmed)
-    throw Error("Bitte zuerst die offene Einwilligung ablegen und als Inhaber bestätigen.");
+    throw Error(t("pdf.pendingFirst"));
   invalidatePdf();
   const artifact = {
     blob,
@@ -1041,14 +1010,17 @@ function renderPdfArtifact(artifact) {
   $("pdf-title").textContent = isReport
     ? reportTitle
     : isTest
-      ? "Speichertest für dein iPad"
+      ? t("pdf.testTitle")
       : missing
-        ? "PDF nicht mehr verfügbar"
-        : "Dein PDF ist bereit.";
+        ? t("pdf.missingTitle")
+        : t("pdf.ready");
   $("pdf-filename").textContent = filename;
   $("pdf-meta").textContent = missing
-    ? "Die App wurde vor der Bestätigung neu geladen und konnte das PDF nicht wiederherstellen."
-    : `${pages} ${pages === 1 ? "Seite" : "Seiten"} · DIN A4 · ${Math.ceil(blob.size / 1024)} KB${isReport ? " · Dokument" : isTest ? " · Test ohne Kundendaten" : " · mit Unterschrift"}`;
+    ? t("pdf.missingMeta")
+    : t(isReport ? "pdf.metaReport" : isTest ? "pdf.metaTest" : "pdf.metaConsent", {
+        anzahl: pages,
+        kb: Math.ceil(blob.size / 1024),
+      });
   if (missing) {
     $("pdf-preview").removeAttribute("src");
     $("pdf-open").removeAttribute("href");
@@ -1067,13 +1039,12 @@ function renderPdfArtifact(artifact) {
   $("pdf-missing").hidden = !consent || !missing;
   $("pdf-review-notice").hidden = !consent || missing;
   $("income-capture-note").hidden = !consent;
-  $("income-capture-note").textContent = missing
-    ? "Bitte die Einwilligung erneut ausfüllen lassen, falls sie gebraucht wird. Die vorbereitete Einnahme (Name, Termin, Artist, Preise) kannst du hier mit dem Vermerk „PDF fehlt“ buchen; der Vermerk lässt sich später in der Einnahmenliste entfernen."
-    : "Sobald du als Inhaber die Ablage bestätigst, werden Name, Termin, Artist und Preise in der lokalen Einnahmenliste gebucht. Gesundheitsangaben und Unterschrift werden dort nicht gespeichert. Das unterschriebene PDF bleibt zusätzlich für den ZIP-Export auf diesem Gerät, bis es als gelöscht markiert wird.";
+  $("income-capture-note").textContent = t(missing ? "pdf.captureMissing" : "pdf.capture");
   if (consent && artifact.keepError)
-    $("income-capture-note").textContent =
-      `Achtung: ${artifact.keepError} Bitte das PDF jetzt ablegen und die App bis zur Bestätigung nicht neu laden. ` +
-      $("income-capture-note").textContent;
+    $("income-capture-note").textContent = t("pdf.keepWarning", {
+      fehler: artifact.keepError,
+      hinweis: $("income-capture-note").textContent,
+    });
   $("pdf-preview-details").open = false;
   const native =
     !missing && canSharePdf(new File([blob], filename, { type: "application/pdf" }));
@@ -1081,8 +1052,8 @@ function renderPdfArtifact(artifact) {
   $("share-status").textContent = missing
     ? ""
     : native
-      ? "Wähle im iPad-Systemdialog „In Dateien sichern“ und bestätige dort mit „Sichern“."
-      : "Das PDF kann über den Safari-Download oder „PDF öffnen“ abgelegt werden. Prüfe danach den gewählten Speicherort in der Dateien-App.";
+      ? t("share.native")
+      : t("share.fallback");
   showDialog("pdf-dialog");
   return native;
 }
@@ -1100,18 +1071,17 @@ async function savePdfToFiles() {
       title: artifact.isReport
         ? artifact.reportTitle
         : artifact.isTest
-          ? "INKFORM Speichertest"
-          : "Tattoo-Einwilligung",
+          ? t("share.testTitle")
+          : t("share.consentTitle"),
     });
     if (pdfArtifact === artifact)
-      $("share-status").textContent =
-        "Systemdialog abgeschlossen. Prüfe in der Dateien-App, ob das PDF im gewählten Ordner liegt. Die App kann die Ablage im Systemordner nicht selbst überprüfen.";
+      $("share-status").textContent = t("share.done");
   } catch (error) {
     if (pdfArtifact === artifact)
       $("share-status").textContent =
         error.name === "AbortError"
-          ? "Speichern abgebrochen. Das PDF und alle Eingaben bleiben erhalten. Über „In Dateien sichern“ erneut versuchen."
-          : "Der Systemdialog konnte nicht geöffnet werden. Tippe erneut auf „In Dateien sichern“ oder nutze „PDF öffnen“ und das Teilen-Menü von Safari.";
+          ? t("share.aborted")
+          : t("share.failed");
   } finally {
     nativeShareInFlight = false;
     $("pdf-share").disabled = false;
@@ -1119,8 +1089,7 @@ async function savePdfToFiles() {
 }
 $("pdf-share").addEventListener("click", savePdfToFiles);
 $("pdf-download").addEventListener("click", () => {
-  $("share-status").textContent =
-    "Download an den Browser übergeben. Prüfe das Dokument anschließend in der Dateien-App im Downloadordner. Falls Safari das PDF öffnet, verwende dort Teilen → In Dateien sichern.";
+  $("share-status").textContent = t("share.download");
 });
 // Keeps the unconfirmed consent on this device until the owner confirms the filing.
 // Until the PDF is stored (keptOk), leaving the page asks for confirmation; if storing fails, the
@@ -1130,8 +1099,7 @@ function keepPending(artifact) {
   const failed = (message) => {
     artifact.keepError = message;
     if (pendingConsent === artifact && !$("completion-screen").hidden)
-      $("completion-copy").textContent =
-        "Bitte gib das iPad an das Studio zurück. Hinweis für das Studio: Diese Einwilligung ist nicht auf dem Gerät zwischengespeichert. Bitte nicht neu laden, sondern jetzt entsperren und ablegen.";
+      $("completion-copy").textContent = t("completion.notKept");
     // Only refresh a dialog the unlocked owner already has open; never open it for the customer.
     if (pdfArtifact === artifact && $("pdf-dialog").open && adminAccess.isUnlocked())
       renderPdfArtifact(artifact);
@@ -1147,13 +1115,13 @@ function keepPending(artifact) {
       })
       .then((stored) => {
         artifact.keptOk = stored;
-        if (!stored) failed("Das PDF konnte nicht auf dem Gerät zwischengespeichert werden.");
+        if (!stored) failed(t("pending.pdfNotKept"));
         return stored;
       });
   } catch (error) {
     console.error("Offene Einwilligung nicht gesichert:", error);
     artifact.kept = Promise.resolve(false);
-    failed(`Die Einwilligung konnte nicht auf dem Gerät zwischengespeichert werden (${error.message}).`);
+    failed(t("pending.notKept", { fehler: error.message }));
   }
 }
 async function restorePending() {
@@ -1191,15 +1159,12 @@ function bookPendingConsent(pdfMissing) {
   }
   try {
     if (!artifact.incomeEntry)
-      throw Error("Der Einnahmeneintrag fehlt. Bitte das PDF erneut erstellen.");
+      throw Error(t("pending.entryMissing"));
     // Booking is idempotent per consent: a repeated confirmation never adds a second entry.
     incomeFeature.book(artifact.incomeEntry, { pdfMissing });
   } catch (error) {
-    $("share-status").textContent =
-      "Einnahmen konnten nicht lokal gespeichert werden: " +
-      error.message +
-      " Das PDF bleibt erhalten. Bitte Browser-Speicher prüfen und erneut versuchen.";
-    toast("Einnahme nicht gebucht. PDF bleibt erhalten.");
+    $("share-status").textContent = t("pending.bookFailed", { fehler: error.message });
+    toast(t("pending.bookFailedToast"));
     return;
   }
   artifact.confirmed = true;
@@ -1209,9 +1174,7 @@ function bookPendingConsent(pdfMissing) {
   if (!pdfMissing && artifact.blob)
     exportFeature.keep(artifact.incomeEntry.id, artifact.blob).catch((error) => {
       console.error("PDF nicht für den Export gespeichert:", error);
-      toast(
-        "Einnahme gebucht. Das PDF konnte nicht für den ZIP-Export gespeichert werden (Speicher voll?) und fehlt dort; die Export-Vorschau zählt es als „ohne PDF“. Das abgelegte PDF in der Dateien-App ist davon nicht betroffen.",
-      );
+      toast(t("pending.archiveFailed"));
     });
   pendingStore
     .clear(artifact.incomeEntry.id)
@@ -1231,110 +1194,101 @@ $("pdf-next").addEventListener("click", () => bookPendingConsent(false));
 $("pdf-missing").addEventListener("click", () => bookPendingConsent(true));
 function runFilesTest() {
   if (!libraryAvailable()) {
-    toast(
-      "Die eingebettete PDF-Funktion ist nicht verfügbar. Bitte die vollständige App-Datei verwenden.",
-    );
+    toast(t("filesTest.libraryMissing"));
     return;
   }
   const doc = createPdfDocument(window.jspdf.jsPDF, { unit: "mm", format: "a4" });
   doc.setFont(PDF_FONT, "bold");
   doc.setFontSize(22);
-  doc.text("INKFORM / Speichertest", 20, 30);
+  doc.text(t("filesTest.title"), 20, 30);
   doc.setFont(PDF_FONT, "normal");
   doc.setFontSize(12);
-  doc.text("Dieses Testdokument enthält keine Kundendaten.", 20, 48);
-  doc.text("Wenn du diese Datei in der Dateien-App öffnen kannst,", 20, 61);
-  doc.text("ist die PDF-Ablage für dein iPad eingerichtet.", 20, 69);
+  doc.text(t("filesTest.line1"), 20, 48);
+  doc.text(t("filesTest.line2"), 20, 61);
+  doc.text(t("filesTest.line3"), 20, 69);
   doc.setFontSize(10);
   doc.text(timeFormat(new Date()), 20, 88);
   const clock = new Date().toTimeString().slice(0, 8).replaceAll(":", "");
-  presentPdfArtifact(doc.output("blob"), `INKFORM_Speichertest_${localDate()}_${clock}.pdf`, 1, {
+  presentPdfArtifact(doc.output("blob"), `${t("file.filesTest")}_${localDate()}_${clock}.pdf`, 1, {
     autoSave: true,
     isTest: true,
   });
 }
+// Texts are keys of the language files.
 const ADMIN_PAGES = {
   ...(BLANK_EDITION && {
     setup: {
-      label: "Einrichtung",
+      label: "admin.page.setup.label",
       icon: "settings",
-      title: "Einrichtung",
-      description: "Studio auf diesem Gerät einrichten. Alles bleibt hier gespeichert und ist später unter „Studio & Kontakt“ änderbar.",
+      title: "admin.page.setup.title",
+      description: "admin.page.setup.description",
     },
   }),
   overview: {
-    label: "Übersicht",
+    label: "admin.page.overview.label",
     icon: "grid",
-    title: "Übersicht",
-    description: "Studioangaben, Formulartexte und Geräteeinstellungen verwalten.",
+    title: "admin.page.overview.title",
+    description: "admin.page.overview.description",
   },
   studio: {
-    label: "Studio & Kontakt",
+    label: "admin.page.studio.label",
     icon: "building",
-    title: "Studio & Kontakt",
-    description:
-      "Studioangaben für das Kundenformular, die Datenschutzhinweise und jedes exportierte PDF.",
+    title: "admin.page.studio.title",
+    description: "admin.page.studio.description",
   },
   content: {
-    label: "Formular & Texte",
+    label: "admin.page.content.label",
     icon: "pen",
-    title: "Formulartexte",
-    description:
-      "Gestalte den Einstieg, deine Fotoeinwilligung und die Texte rund um die Unterschrift.",
+    title: "admin.page.content.title",
+    description: "admin.page.content.description",
   },
   medical: {
-    label: "Gesundheitsfragen",
+    label: "admin.page.medical.label",
     icon: "heart",
-    title: "Gesundheitsfragen",
-    description:
-      "Bearbeite die Gesundheitsfragen und ergänze eigene Fragen. Jede Frage wird mit Ja oder Nein beantwortet.",
+    title: "admin.page.medical.title",
+    description: "admin.page.medical.description",
   },
   legal: {
-    label: "Einwilligungen",
+    label: "admin.page.legal.label",
     icon: "doc",
-    title: "Einwilligungen",
-    description:
-      "Bearbeite die Erklärungen, die deine Kundinnen und Kunden vor der Unterschrift bestätigen.",
+    title: "admin.page.legal.title",
+    description: "admin.page.legal.description",
   },
   income: {
-    label: "Einnahmen",
+    label: "admin.page.income.label",
     icon: "doc",
-    title: "Einnahmenübersicht",
-    description:
-      "Gesamtpreise je Termin und Artist auswerten, fehlende Preise ergänzen und Listen ausgeben.",
+    title: "admin.page.income.title",
+    description: "admin.page.income.description",
   },
   export: {
-    label: "Export",
+    label: "admin.page.export.label",
     icon: "download",
-    title: "Export nach Zeitraum",
-    description:
-      "Einwilligungs-PDFs und Einnahmen eines Monats, eines Jahres oder eines freien Zeitraums als ZIP-Datei sichern.",
+    title: "admin.page.export.title",
+    description: "admin.page.export.description",
   },
   retention: {
-    label: "Aufbewahrung",
+    label: "admin.page.retention.label",
     icon: "lock",
-    title: "Aufbewahrung & Löschung",
-    description:
-      "Fristen festlegen, fällige Einwilligungs-PDFs löschen und alte Namen in der Einnahmenliste anonymisieren.",
+    title: "admin.page.retention.title",
+    description: "admin.page.retention.description",
   },
   privacy: {
-    label: "Datenschutz",
+    label: "admin.page.privacy.label",
     icon: "lock",
-    title: "Datenschutzhinweise",
-    description:
-      "Passe die Datenschutzhinweise an deine tatsächlichen Abläufe, die Ablage und das Löschkonzept an.",
+    title: "admin.page.privacy.title",
+    description: "admin.page.privacy.description",
   },
   ipad: {
-    label: "iPad & Dateien",
+    label: "admin.page.ipad.label",
     icon: "tablet",
-    title: "iPad einrichten",
-    description: "Einmal einrichten, die Ablage testen und dann direkt mit dem iPad arbeiten.",
+    title: "admin.page.ipad.title",
+    description: "admin.page.ipad.description",
   },
   appearance: {
-    label: "Design & Sicherung",
+    label: "admin.page.appearance.label",
     icon: "sliders",
-    title: "Darstellung & Sicherung",
-    description: "Farbschema wählen und Einstellungen übertragen.",
+    title: "admin.page.appearance.title",
+    description: "admin.page.appearance.description",
   },
 };
 let adminDraft = null,
@@ -1391,7 +1345,7 @@ function adminPreview() {
   const a = adminDraft.app;
   return /* HTML */ `<aside class="ad-preview-sticky">
     ${adminPanel(
-      "Formular-Vorschau",
+      th("preview.title"),
       /* HTML */ `<div class="ad-preview">
           <div class="ad-preview-brand">
             <img
@@ -1405,37 +1359,29 @@ function adminPreview() {
           <div class="ad-preview-kicker" data-preview="eyebrow">${escapeHtml(a.eyebrow)}</div>
           <h3 data-preview="headline">${escapeHtml(a.headline)}</h3>
           <p data-preview="description">${escapeHtml(a.description)}</p>
-          <div class="ad-preview-field">Vorname</div>
-          <div class="ad-preview-field">Nachname</div>
-          <div class="ad-preview-field">Geburtsdatum</div>
+          <div class="ad-preview-field">${th("personal.firstName")}</div>
+          <div class="ad-preview-field">${th("personal.lastName")}</div>
+          <div class="ad-preview-field">${th("personal.birthDate")}</div>
           <div class="ad-preview-field" data-preview="defaultArtist">
-            ${escapeHtml(a.defaultArtist || "Dein Artist")}
+            ${escapeHtml(a.defaultArtist || t("preview.artist"))}
           </div>
-          <div class="ad-preview-button">Einwilligung ausfüllen ${adminIcon("arrow")}</div>
+          <div class="ad-preview-button">${th("preview.button")} ${adminIcon("arrow")}</div>
         </div>
-        <p class="ad-preview-note">
-          Vorschau deines Entwurfs. Änderungen erscheinen nach dem Speichern im Kundenformular.
-        </p>`,
-      "Entwurf",
+        <p class="ad-preview-note">${th("preview.note")}</p>`,
+      th("preview.draft"),
     )}
     <div class="ad-notice review">
-      <strong>Rechtstexte zur Prüfung</strong><br />Haftung, Fotoeinwilligung und Datenschutz
-      bleiben im Formular und PDF rot gekennzeichnet.
+      <strong>${th("preview.legalTitle")}</strong><br />${th("preview.legalText")}
     </div>
   </aside>`;
 }
 function shortcuts() {
   return [
-    ["studio", "building", "Studio & Kontakt", "Name, Anschrift und Ansprechpartner"],
-    ["content", "pen", "Formular & Texte", "Begrüßung, Fotoeinwilligung und Unterschrift"],
-    [
-      "medical",
-      "heart",
-      "Gesundheitsfragen",
-      `${adminDraft.medical.length} Fragen für ein gutes Vorgespräch`,
-    ],
-    ["legal", "doc", "Einwilligungen", "Aufklärung und Bestätigungen bearbeiten"],
-    ["privacy", "lock", "Datenschutzhinweise", "Zwecke, Aufbewahrung und Rechte"],
+    ["studio", "building", th("admin.page.studio.label"), th("shortcut.studio")],
+    ["content", "pen", th("admin.page.content.label"), th("shortcut.content")],
+    ["medical", "heart", th("admin.page.medical.label"), th("shortcut.medical", { anzahl: adminDraft.medical.length })],
+    ["legal", "doc", th("admin.page.legal.label"), th("shortcut.legal")],
+    ["privacy", "lock", th("admin.page.privacy.title"), th("shortcut.privacy")],
   ]
     .map(
       ([page, icon, title, note]) =>
@@ -1458,10 +1404,8 @@ function privacyReminders() {
   } catch (_) {}
   const age = pending ? daysBetween(pending.savedAt) : 0;
   if (pending && age >= PENDING_REMINDER_DAYS && pendingConsent && !pendingConsent.confirmed) {
-    notes.push(
-      `Eine unterschriebene Einwilligung ist seit ${age} Tagen nicht als abgelegt bestätigt. Das PDF mit Gesundheitsangaben liegt so lange zusätzlich im Browser-Speicher. Bitte ablegen und bestätigen.`,
-    );
-    buttons.push('<button class="ad-button primary" type="button" data-admin-action="pending">Offene Einwilligung ablegen</button>');
+    notes.push(t("reminder.pending", { anzahl: age }));
+    buttons.push(`<button class="ad-button primary" type="button" data-admin-action="pending">${th("reminder.pendingButton")}</button>`);
   }
   let pdfYears = null,
     records = [];
@@ -1471,17 +1415,15 @@ function privacyReminders() {
   } catch (_) {}
   const open = dueForPdfDeletion(records, pdfYears, localDate()).length;
   if (open) {
-    notes.push(`${open} Einwilligungs-PDFs haben die eingetragene Aufbewahrungsfrist überschritten.`);
-    buttons.push('<button class="ad-button" type="button" data-admin-page="retention">Löschliste öffnen</button>');
+    notes.push(t("reminder.retention", { anzahl: open }));
+    buttons.push(`<button class="ad-button" type="button" data-admin-page="retention">${th("reminder.retentionButton")}</button>`);
   }
   const backup = backupState();
   if (records.length && (backup.age === null || backup.age >= backup.days)) {
     notes.push(
-      backup.age === null
-        ? "Es gibt noch keine Gesamtsicherung."
-        : `Die letzte Gesamtsicherung ist ${backup.age} ${backup.age === 1 ? "Tag" : "Tage"} alt.`,
+      backup.age === null ? t("reminder.noBackup") : t("reminder.backupAge", { anzahl: backup.age }),
     );
-    buttons.push('<button class="ad-button" type="button" data-admin-action="backup-create">Jetzt sichern</button>');
+    buttons.push(`<button class="ad-button" type="button" data-admin-action="backup-create">${th("reminder.backupButton")}</button>`);
   }
   let log = [];
   try {
@@ -1489,9 +1431,9 @@ function privacyReminders() {
   } catch (_) {}
   const months = exportFeature.unexportedMonths(log);
   if (months.length) {
-    const name = (month) => new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" }).format(new Date(`${month}-15T12:00:00`));
-    notes.push(`Noch nicht als ZIP exportiert: ${months.map(name).join(", ")}.`);
-    buttons.push('<button class="ad-button" type="button" data-admin-page="export">Export öffnen</button>');
+    const name = (month) => language().date(`${month}-15`, { month: "long", year: "numeric" });
+    notes.push(t("reminder.unexported", { monate: months.map(name).join(", ") }));
+    buttons.push(`<button class="ad-button" type="button" data-admin-page="export">${th("reminder.exportButton")}</button>`);
   }
   return notes.length
     ? `<div class="ad-notice ad-reminder" role="status">${notes.map((n) => `<p>${escapeHtml(n)}</p>`).join("")}<div class="ad-actions-row">${buttons.join("")}</div></div>`
@@ -1511,14 +1453,14 @@ function backupPanel() {
   const { age, days } = backupState();
   const status =
     age === null
-      ? "Noch keine Gesamtsicherung auf diesem Gerät erstellt."
-      : `Letzte Gesamtsicherung vor ${age} ${age === 1 ? "Tag" : "Tagen"}${age >= days ? " – bitte neu sichern." : "."}`;
+      ? t("backup.none")
+      : t(age >= days ? "backup.ageDue" : "backup.age", { anzahl: age });
   return adminPanel(
-    "Gesamtsicherung",
+    th("backup.title"),
     `<p class="ad-section-copy${age === null || age >= days ? " ad-warn" : ""}">${escapeHtml(status)}</p>
-    <p class="ad-section-copy">Eine Datei mit allem, was zum Wiederherstellen nötig ist: Einstellungen, Einnahmenliste, Fristen, Export-Protokoll und die Einwilligungs-PDFs für den ZIP-Export. Sie enthält Gesundheitsangaben und Unterschriften: nur auf dem iPad oder dem Mac ablegen, nicht in iCloud Drive. Nicht enthalten sind die PIN und eine noch offene Einwilligung.</p>
-    <div class="income-filters"><label>Erinnern nach<select id="backup-interval">${BACKUP_INTERVALS.map((d) => `<option value="${d}"${d === days ? " selected" : ""}>${d} ${d === 1 ? "Tag" : "Tagen"}</option>`).join("")}</select></label></div>
-    <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="backup-create">${adminIcon("download")}Gesamtsicherung erstellen</button><button class="ad-button primary" type="button" data-admin-action="backup-save" hidden>${adminIcon("share")}In Dateien sichern</button><button class="ad-button" type="button" data-admin-action="backup-restore">${adminIcon("upload")}Aus Sicherung wiederherstellen</button></div>
+    <p class="ad-section-copy">${th("backup.copy")}</p>
+    <div class="income-filters"><label>${th("backup.interval")}<select id="backup-interval">${BACKUP_INTERVALS.map((d) => `<option value="${d}"${d === days ? " selected" : ""}>${th("backup.days", { anzahl: d })}</option>`).join("")}</select></label></div>
+    <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="backup-create">${adminIcon("download")}${th("backup.create")}</button><button class="ad-button primary" type="button" data-admin-action="backup-save" hidden>${adminIcon("share")}${th("pdf.share")}</button><button class="ad-button" type="button" data-admin-action="backup-restore">${adminIcon("upload")}${th("backup.restore")}</button></div>
     <p class="ad-preview-note" id="backup-note" role="status"></p>`,
   );
 }
@@ -1526,7 +1468,7 @@ async function createBackup() {
   const note = $("backup-note");
   preparedBackup = null;
   document.querySelector('[data-admin-action="backup-save"]').hidden = true;
-  note.textContent = "Sicherung wird erstellt …";
+  note.textContent = t("backup.creating");
   try {
     // PDFs first: entries and the list are read afterwards, so a copy deleted meanwhile is marked.
     const pdfs = await exportFeature.pdfs(),
@@ -1540,11 +1482,15 @@ async function createBackup() {
         records: incomeFeature.list(),
         removed: readRemovedIds(localStorage),
       });
-    preparedBackup = new File([JSON.stringify(backup)], `Inkform_Sicherung_${localDate()}.json`, { type: "application/json" });
-    note.textContent = `Sicherung bereit: ${backup.income.records.length} Einträge, ${backup.pdfs.length} PDFs, ${formatSize(preparedBackup.size)}. Jetzt „In Dateien sichern“ tippen.`;
+    preparedBackup = new File([JSON.stringify(backup)], `${t("file.backup")}_${localDate()}.json`, { type: "application/json" });
+    note.textContent = t("backup.ready", {
+      eintraege: backup.income.records.length,
+      pdfs: backup.pdfs.length,
+      groesse: formatSize(preparedBackup.size),
+    });
     document.querySelector('[data-admin-action="backup-save"]').hidden = false;
   } catch (error) {
-    note.textContent = "Sicherung nicht möglich: " + error.message;
+    note.textContent = t("backup.failed", { fehler: error.message });
   }
 }
 function saveBackup() {
@@ -1557,14 +1503,14 @@ function saveBackup() {
       if (adminPage === "overview") renderAdminSection();
       $("backup-note").textContent =
         way === "download"
-          ? `${file.name} an den Browser übergeben. Bitte in der Dateien-App prüfen und auf den Mac kopieren.`
-          : `Systemdialog abgeschlossen. Prüfe in der Dateien-App, ob ${file.name} im gewählten Ordner liegt.`;
+          ? t("backup.downloaded", { datei: file.name })
+          : t("backup.shared", { datei: file.name });
     },
     (error) =>
       ($("backup-note").textContent =
         error.name === "AbortError"
-          ? "Speichern abgebrochen. Über „In Dateien sichern“ erneut versuchen."
-          : "Der Systemdialog konnte nicht geöffnet werden. Bitte erneut versuchen."),
+          ? t("save.aborted")
+          : t("save.failed")),
   );
 }
 const backupPicker = document.createElement("input");
@@ -1581,13 +1527,18 @@ backupPicker.addEventListener("change", async () => {
   if (!file || !adminAccess.isUnlocked()) return;
   try {
     if ((pendingConsent && !pendingConsent.confirmed) || pendingStore.read())
-      throw Error("Bitte zuerst die offene Einwilligung ablegen und bestätigen.");
-    if (adminChanged()) throw Error("Bitte zuerst die Änderungen speichern oder verwerfen.");
+      throw Error(t("restore.pendingFirst"));
+    if (adminChanged()) throw Error(t("restore.unsaved"));
     const data = readFullBackup(JSON.parse(await file.text()), validateSettings),
       { removed, records, pdfs, skipped } = applyRemovals(data, readRemovedIds(localStorage), incomeFeature.list(), localDate());
     if (
       !window.confirm(
-        `Sicherung vom ${timeFormat(new Date(data.createdAt))} wiederherstellen?\n\nSie enthält ${data.records.length} Einträge, ${data.pdfs.length} PDFs, Einstellungen und Fristen.${skipped ? ` ${skipped} PDF-Kopien wurden auf diesem Gerät schon aus der App gelöscht und werden nicht zurückgeholt.` : ""}\n\nAlles auf diesem Gerät wird ersetzt: Einnahmenliste (aktuell ${incomeFeature.list().length} Einträge), PDFs für den ZIP-Export, Einstellungen, Fristen und Export-Protokoll. Das lässt sich nicht rückgängig machen. Die PIN bleibt.`,
+        [
+          t("restore.question", { datum: timeFormat(new Date(data.createdAt)) }),
+          t("restore.contents", { eintraege: data.records.length, pdfs: data.pdfs.length }) +
+            (skipped ? " " + t("restore.skipped", { anzahl: skipped }) : ""),
+          t("restore.replaces", { eintraege: incomeFeature.list().length }),
+        ].join("\n\n"),
       )
     )
       return;
@@ -1606,7 +1557,7 @@ backupPicker.addEventListener("change", async () => {
     sessionStorage.setItem("inkform.restored", data.createdAt);
     location.reload();
   } catch (error) {
-    toast("Wiederherstellen nicht möglich: " + error.message);
+    toast(t("restore.failed", { fehler: error.message }));
   }
 });
 const SETUP_FIELDS = ["name", "contact", "address", "location"];
@@ -1652,7 +1603,7 @@ function setupYearsShown() {
 }
 function finishSetup() {
   if (SETUP_FIELDS.some((key) => !adminDraft.studio[key].trim())) {
-    configError("Bitte Studio, Datenschutzkontakt, Anschrift und Ort der Unterschrift ausfüllen.");
+    configError(t("setup.missing"));
     return;
   }
   let years;
@@ -1664,27 +1615,23 @@ function finishSetup() {
   }
   if (!saveAdmin()) return;
   if (!storageWorking) {
-    configError("Der Browser-Speicher ist nicht verfügbar. Die Einrichtung gilt nur bis zum Schließen der App.");
+    configError(t("setup.noStorage"));
     return;
   }
   writeRetention(localStorage, years);
   setupYears = null;
   adminPage = "overview";
   renderAdminSection();
-  toast("Einrichtung abgeschlossen. Alles ist nur auf diesem Gerät gespeichert.");
+  toast(t("setup.done"));
 }
 function samplePanel() {
   const loaded = incomeFeature.list().some(isSample);
   return adminPanel(
-    "Beispieldaten",
-    `<p class="ad-section-copy">${
+    th("sample.title"),
+    `<p class="ad-section-copy">${th(loaded ? "sample.loaded" : "sample.offer")}</p><div class="ad-actions-row">${
       loaded
-        ? "Erfundene Beispieldaten sind geladen: Einträge in der Einnahmenliste und PDFs für den Export. Sie lassen sich jederzeit vollständig entfernen."
-        : "Zum Ausprobieren: sechs erfundene Einwilligungen mit PDFs in den letzten zwei Monaten. Sie lassen sich jederzeit vollständig entfernen. Standard ist leer."
-    }</p><div class="ad-actions-row">${
-      loaded
-        ? `<button class="ad-button danger" type="button" data-admin-action="sample-remove">${adminIcon("trash")}Beispieldaten entfernen</button>`
-        : `<button class="ad-button" type="button" data-admin-action="sample-load">${adminIcon("plus")}Beispieldaten laden</button>`
+        ? `<button class="ad-button danger" type="button" data-admin-action="sample-remove">${adminIcon("trash")}${th("sample.remove")}</button>`
+        : `<button class="ad-button" type="button" data-admin-action="sample-load">${adminIcon("plus")}${th("sample.load")}</button>`
     }</div>`,
   );
 }
@@ -1692,17 +1639,17 @@ function samplePdf(record) {
   const doc = createPdfDocument(window.jspdf.jsPDF, { unit: "mm", format: "a4" });
   doc.setFont(PDF_FONT, "bold");
   doc.setFontSize(20);
-  doc.text("Beispiel-Einwilligung (erfunden)", 20, 30);
+  doc.text(t("sample.pdfTitle"), 20, 30);
   doc.setFont(PDF_FONT, "normal");
   doc.setFontSize(12);
-  doc.text(`Name: ${record.customer}`, 20, 48);
-  doc.text(`Termin: ${dateFormat(record.date)}`, 20, 56);
-  doc.text(`Artist: ${record.artist || "Nicht zugeordnet"}`, 20, 64);
-  doc.text("Erfundene Beispieldaten zum Ausprobieren. Keine echte Einwilligung.", 20, 80);
+  doc.text(t("sample.pdfName", { name: record.customer }), 20, 48);
+  doc.text(t("sample.pdfDate", { datum: dateFormat(record.date) }), 20, 56);
+  doc.text(t("sample.pdfArtist", { artist: record.artist || t("common.unassigned") }), 20, 64);
+  doc.text(t("sample.pdfNote"), 20, 80);
   return doc.output("blob");
 }
 async function loadSamples() {
-  if (!libraryAvailable()) return toast("Die eingebettete PDF-Funktion ist nicht verfügbar.");
+  if (!libraryAvailable()) return toast(t("sample.libraryMissing"));
   if (incomeFeature.list().some(isSample)) return;
   // All or nothing: after a failure every sample entry and PDF written so far is removed again.
   const records = sampleRecords(localDate());
@@ -1710,13 +1657,13 @@ async function loadSamples() {
     const pdfs = records.map(samplePdf);
     for (const record of records) incomeFeature.book(record);
     for (const [i, record] of records.entries()) await exportFeature.keep(record.id, pdfs[i]);
-    toast("Beispieldaten geladen.");
+    toast(t("sample.loadedToast"));
   } catch (error) {
     try {
       incomeFeature.removeMany(records.map((r) => r.id));
       await exportFeature.sync();
     } catch (_) {}
-    toast("Beispieldaten nicht geladen: " + error.message);
+    toast(t("sample.loadFailed", { fehler: error.message }));
   }
   renderAdminSection();
 }
@@ -1724,32 +1671,32 @@ async function removeSamples() {
   try {
     incomeFeature.removeMany(incomeFeature.list().filter(isSample).map((r) => r.id));
     await exportFeature.sync();
-    toast("Beispieldaten entfernt.");
+    toast(t("sample.removedToast"));
   } catch (error) {
-    toast("Beispieldaten nicht entfernt: " + error.message);
+    toast(t("sample.removeFailed", { fehler: error.message }));
   }
   renderAdminSection();
 }
 function securityChecklist() {
   const items = [
-    "Gerätecode mit mindestens 6 Ziffern: erst damit verschlüsselt das iPad seine Daten (Einstellungen → Face ID & Code: „Datenschutz ist aktiviert“).",
-    "Geführter Zugriff für die Kundenübergabe, mit eigenem Code (Einstellungen → Bedienungshilfen → Geführter Zugriff).",
-    "PDFs nur unter „Auf meinem iPad“ ablegen, nicht in iCloud Drive.",
-    "iCloud-Backup für dieses iPad aus; stattdessen verschlüsseltes Backup über den Mac (Finder → „Lokales Backup verschlüsseln“).",
-    "Regelmäßig die Gesamtsicherung erstellen und zusammen mit den ZIP-Exporten auf den Mac kopieren.",
-    "Safari-Websitedaten löschen oder die Home-Bildschirm-App entfernen löscht Einnahmen, PIN und offene Einwilligung – vorher sichern.",
+    "security.passcode",
+    "security.guidedAccess",
+    "security.onMyIpad",
+    "security.icloudBackup",
+    "security.backup",
+    "security.websiteData",
   ];
   return adminPanel(
-    "Sicherheit dieses iPads",
-    `<ul class="ad-checklist">${items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul><div class="ad-actions-row"><button class="ad-button" type="button" data-admin-page="retention">Aufbewahrung</button></div>`,
-    "Diese Punkte kann die App nicht selbst prüfen. Details in der Anleitung.",
+    th("security.title"),
+    `<ul class="ad-checklist">${items.map((key) => `<li>${th(key)}</li>`).join("")}</ul><div class="ad-actions-row"><button class="ad-button" type="button" data-admin-page="retention">${th("admin.page.retention.label")}</button></div>`,
+    th("security.note"),
   );
 }
 function renderAdminSection() {
   const page = ADMIN_PAGES[adminPage];
-  $("admin-page-title").textContent = page.title;
-  $("admin-page-description").textContent = page.description;
-  $("admin-breadcrumb").textContent = page.label;
+  $("admin-page-title").textContent = t(page.title);
+  $("admin-page-description").textContent = t(page.description);
+  $("admin-breadcrumb").textContent = t(page.label);
   $("admin-error").hidden = true;
   $("admin-nav").innerHTML = Object.entries(ADMIN_PAGES)
     .map(
@@ -1759,7 +1706,7 @@ function renderAdminSection() {
           data-admin-page="${id}"
           ${id === adminPage ? 'aria-current="page"' : ""}
         >
-          ${adminIcon(p.icon)}${p.label}
+          ${adminIcon(p.icon)}${th(p.label)}
         </button>`,
     )
     .join("");
@@ -1768,13 +1715,13 @@ function renderAdminSection() {
     content = `<div id="income-content">${incomeFeature.view()}</div>`;
   } else if (adminPage === "setup") {
     content = `${adminPanel(
-      "Willkommen bei Inkform",
-      `<p class="ad-section-copy">Diese Angaben stehen im Kundenformular, in den Datenschutzhinweisen und auf jedem PDF. Sie werden nur auf diesem Gerät gespeichert.</p>
-      <div class="ad-fields">${adminField("studio.name", "Studio / verantwortliche Person", { placeholder: "Studio und vollständiger Name / Firma", max: 160 })}${adminField("studio.contact", "Datenschutzkontakt / E-Mail", { type: "email", placeholder: "kontakt@dein-studio.de", max: 160 })}${adminField("studio.address", "Vollständige Anschrift", { area: true, rows: 2, placeholder: "Straße, Hausnummer, Postleitzahl und Ort", max: 300 })}${adminField("studio.location", "Ort der Unterschrift", { placeholder: "%%locationPlaceholder%%", max: 100 })}
-      <div class="ad-field"><label for="setup-pdf-years">Aufbewahrung der PDFs in Jahren, optional</label><input id="setup-pdf-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().pdfYears))}"></div>
-      <div class="ad-field"><label for="setup-income-years">Namen in der Einnahmenliste in Jahren, optional</label><input id="setup-income-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().incomeYears))}"></div></div>
-      <p class="ad-preview-note">Formulartexte, Gesundheitsfragen und Datenschutzhinweise sind neutral vorbereitet und vor dem Einsatz zu prüfen. Fristen lassen sich später unter „Aufbewahrung“ eintragen.</p>
-      <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="setup-finish">${adminIcon("check")}Einrichtung abschließen</button></div>`,
+      th("setup.welcome"),
+      `<p class="ad-section-copy">${th("setup.copy")}</p>
+      <div class="ad-fields">${adminField("studio.name", t("studio.name"), { placeholder: t("studio.namePlaceholder"), max: 160 })}${adminField("studio.contact", t("studio.contact"), { type: "email", placeholder: t("studio.contactPlaceholder"), max: 160 })}${adminField("studio.address", t("studio.address"), { area: true, rows: 2, placeholder: t("studio.addressPlaceholder"), max: 300 })}${adminField("studio.location", t("studio.location"), { placeholder: t("studio.locationPlaceholder"), max: 100 })}
+      <div class="ad-field"><label for="setup-pdf-years">${th("setup.pdfYears")}</label><input id="setup-pdf-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().pdfYears))}"></div>
+      <div class="ad-field"><label for="setup-income-years">${th("setup.incomeYears")}</label><input id="setup-income-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().incomeYears))}"></div></div>
+      <p class="ad-preview-note">${th("setup.note")}</p>
+      <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="setup-finish">${adminIcon("check")}${th("setup.finish")}</button></div>`,
     )}${samplePanel()}`;
   } else if (adminPage === "export") {
     content = `<div id="export-content">${exportFeature.view()}</div>`;
@@ -1784,21 +1731,19 @@ function renderAdminSection() {
     const filled = Object.values(adminDraft.studio).filter((v) => v.trim()).length;
     content = /* HTML */ `<div class="ad-stats">
         <div class="ad-stat">
-          <div class="ad-stat-top">Studio-Profil ${adminIcon("building")}</div>
+          <div class="ad-stat-top">${th("overview.profile")} ${adminIcon("building")}</div>
           <strong>${filled}<span style="font-size:14px;color:var(--ad-muted)"> / 6</span></strong
           ><small
-            ><span class="ad-dot"></span>${
-              filled === 6 ? "Bereit für den PDF-Export" : "Studioangaben vervollständigen"
-            }</small
+            ><span class="ad-dot"></span>${th(filled === 6 ? "overview.profileReady" : "overview.profileIncomplete")}</small
           >
         </div>
         <div class="ad-stat">
-          <div class="ad-stat-top">Gesundheitsfragen ${adminIcon("heart")}</div>
-          <strong>${adminDraft.medical.length}</strong><small>Individuell anpassbar</small>
+          <div class="ad-stat-top">${th("admin.page.medical.label")} ${adminIcon("heart")}</div>
+          <strong>${adminDraft.medical.length}</strong><small>${th("overview.medicalNote")}</small>
         </div>
         <div class="ad-stat">
-          <div class="ad-stat-top">Einwilligungen ${adminIcon("doc")}</div>
-          <strong>${adminDraft.legal.length}</strong><small>Mit roten Prüfvermerken</small>
+          <div class="ad-stat-top">${th("admin.page.legal.label")} ${adminIcon("doc")}</div>
+          <strong>${adminDraft.legal.length}</strong><small>${th("overview.legalNote")}</small>
         </div>
       </div>
       ${privacyReminders()}${backupPanel()}${BLANK_EDITION ? samplePanel() : ""}
@@ -1807,22 +1752,19 @@ function renderAdminSection() {
           ${securityChecklist()}
           <section class="ad-panel">
             <div class="ad-panel-header">
-              <h2>Dein Formular konfigurieren</h2>
-              <span class="ad-chip">4 Formularabschnitte</span>
+              <h2>${th("overview.configure")}</h2>
+              <span class="ad-chip">${th("overview.sections")}</span>
             </div>
             ${shortcuts()}
           </section>
           ${adminPanel(
-            "Einstellungen übertragen",
-            /* HTML */ `<p class="ad-section-copy">
-                Die Einstellungen gelten für diesen Browser. Übertrage sie auf ein weiteres Gerät
-                per JSON oder als konfigurierte HTML-Datei.
-              </p>
+            th("overview.transfer"),
+            /* HTML */ `<p class="ad-section-copy">${th("overview.transferCopy")}</p>
               <div class="ad-actions-row">
                 <button class="ad-button" type="button" data-admin-page="appearance">
-                  ${adminIcon("download")}Sicherung & Export</button
+                  ${adminIcon("download")}${th("overview.backupExport")}</button
                 ><button class="ad-button" type="button" data-admin-action="preview">
-                  ${adminIcon("external")}Formular ansehen
+                  ${adminIcon("external")}${th("overview.viewForm")}
                 </button>
               </div>`,
           )}
@@ -1833,42 +1775,42 @@ function renderAdminSection() {
     content = /* HTML */ `<div class="ad-columns">
       <div>
         ${adminPanel(
-          "Studio & Kontakt",
+          th("admin.page.studio.title"),
           /* HTML */ `<div class="ad-fields">
-            ${adminField("studio.name", "Studio / verantwortliche Person", {
-              placeholder: "Studio und vollständiger Name / Firma",
+            ${adminField("studio.name", t("studio.name"), {
+              placeholder: t("studio.namePlaceholder"),
               max: 160,
-              help: "Wird auf jedem PDF als verantwortliches Studio angegeben.",
-            })}${adminField("studio.contact", "Datenschutzkontakt / E-Mail", {
+              help: th("studio.nameHelp"),
+            })}${adminField("studio.contact", t("studio.contact"), {
               type: "email",
-              placeholder: "kontakt@dein-studio.de",
+              placeholder: t("studio.contactPlaceholder"),
               max: 160,
-            })}${adminField("studio.address", "Vollständige Anschrift", {
+            })}${adminField("studio.address", t("studio.address"), {
               area: true,
               rows: 2,
-              placeholder: "Straße, Hausnummer, Postleitzahl und Ort",
+              placeholder: t("studio.addressPlaceholder"),
               max: 300,
-            })}${adminField("studio.location", "Ort der Unterschrift", {
-              placeholder: "%%locationPlaceholder%%",
+            })}${adminField("studio.location", t("studio.location"), {
+              placeholder: t("studio.locationPlaceholder"),
               max: 100,
-            })}${adminField("app.defaultArtist", "Standard-Artist", {
-              placeholder: "Name oder Kürzel",
+            })}${adminField("app.defaultArtist", t("studio.defaultArtist"), {
+              placeholder: t("tattoo.artistPlaceholder"),
               max: 100,
-              help: "Wird in neuen Formularen vorausgefüllt; kann dort geändert werden.",
+              help: th("studio.defaultArtistHelp"),
             })}
           </div>`,
         )}
         <div class="ad-notice">
-          Die sechs Studioangaben für den PDF-Export umfassen auch Speicherdauer und Empfänger.
-          Diese bearbeitest du unter
-          <button
+          ${th("studio.privacyHint", {
+            link: markup(`<button
             class="text-button"
             type="button"
             data-admin-page="privacy"
             style="color:var(--ad-blue);min-height:30px"
           >
-            Datenschutz ${adminIcon("arrow")}</button
-          >.
+            ${th("admin.page.privacy.label")} ${adminIcon("arrow")}</button
+          >`),
+          })}
         </div>
       </div>
       ${adminPreview()}
@@ -1877,49 +1819,46 @@ function renderAdminSection() {
     content = /* HTML */ `<div class="ad-columns">
       <div>
         ${adminPanel(
-          "Identität & Begrüßung",
+          th("content.identity"),
           /* HTML */ `<div class="ad-fields">
-            ${adminField("app.brand", "Name im Formularkopf", {
+            ${adminField("app.brand", t("content.brand"), {
               max: 24,
               placeholder: "INKFORM",
-            })}${adminField("app.formVersion", "Formularversion", {
+            })}${adminField("app.formVersion", t("content.formVersion"), {
               max: 50,
-              help: "Wird zur Dokumentation in jedes PDF übernommen.",
-            })}${adminField("app.eyebrow", "Kleine Überschrift", { max: 120 })}${adminField(
+              help: th("content.formVersionHelp"),
+            })}${adminField("app.eyebrow", t("content.eyebrow"), { max: 120 })}${adminField(
               "app.documentTitle",
-              "Titel des PDFs",
+              t("content.documentTitle"),
               { max: 120 },
-            )}${adminField("app.headline", "Hauptüberschrift", {
+            )}${adminField("app.headline", t("content.headline"), {
               area: true,
               rows: 2,
               max: 160,
-            })}${adminField("app.description", "Einleitung", { area: true, rows: 3, max: 1200 })}
+            })}${adminField("app.description", t("content.description"), { area: true, rows: 3, max: 1200 })}
           </div>`,
         )}${adminPanel(
-          "Fotoeinwilligung",
-          /* HTML */ `<div class="ad-notice review">
-              Entwurf zur rechtlichen Prüfung. Fotoverwendung bleibt eine freiwillige
-              Ja/Nein-Auswahl.
-            </div>
+          th("content.photo"),
+          /* HTML */ `<div class="ad-notice review">${th("content.photoNotice")}</div>
             <div class="ad-fields">
-              ${adminField("app.photoText", "Angebotene Fotoeinwilligung", {
+              ${adminField("app.photoText", t("content.photoText"), {
                 area: true,
                 rows: 7,
                 max: 8000,
-              })}${adminField("app.photoDeniedText", "PDF-Text bei Ablehnung", {
+              })}${adminField("app.photoDeniedText", t("content.photoDenied"), {
                 area: true,
                 rows: 4,
                 max: 4000,
-                help: "Steht im PDF, wenn die Fotoeinwilligung abgelehnt wurde.",
+                help: th("content.photoDeniedHelp"),
               })}
             </div>`,
         )}${adminPanel(
-          "Digitale Unterschrift",
-          adminField("app.signatureText", "Bestätigung über dem Unterschriftsfeld", {
+          th("content.signature"),
+          adminField("app.signatureText", t("content.signatureText"), {
             area: true,
             rows: 4,
             max: 2000,
-            help: "Dieser Wortlaut erscheint auch im PDF.",
+            help: th("content.signatureHelp"),
           }),
         )}
       </div>
@@ -1929,7 +1868,7 @@ function renderAdminSection() {
     const medical = adminPage === "medical",
       key = medical ? "medical" : "legal",
       items = adminDraft[key];
-    content = `${!medical ? '<div class="ad-notice review">Rechtliche Entwürfe bearbeiten und vor Einsatz fachlich prüfen lassen. Die Prüfvermerke für Haftung und Datenschutz bleiben aktiv.</div>' : ""}<div class="ad-panel"><div class="ad-panel-header"><h2>${medical ? "Fragen zur Gesundheit" : "Erklärungen & Bestätigungen"}</h2><span class="ad-chip">${items.length} ${medical ? "Fragen" : "Erklärungen"}</span></div><div class="ad-panel-body">${items
+    content = `${!medical ? `<div class="ad-notice review">${th("editor.legalNotice")}</div>` : ""}<div class="ad-panel"><div class="ad-panel-header"><h2>${th(medical ? "editor.medicalTitle" : "editor.legalTitle")}</h2><span class="ad-chip">${th(medical ? "editor.medicalCount" : "editor.legalCount", { anzahl: items.length })}</span></div><div class="ad-panel-body">${items
       .map(
         (item, index) =>
           /* HTML */ `<details class="ad-editor" ${index === 0 ? "open" : ""}>
@@ -1939,27 +1878,27 @@ function renderAdminSection() {
             </summary>
             <div class="ad-editor-body">
               <div class="ad-fields">
-                ${adminField(`${key}.${index}.title`, medical ? "Frage / Thema" : "Überschrift", {
+                ${adminField(`${key}.${index}.title`, t(medical ? "editor.question" : "settings.itemTitle"), {
                   area: true,
                   rows: 2,
                   max: 250,
                 })}${adminField(
                   `${key}.${index}.${medical ? "hint" : "text"}`,
-                  medical ? "Erläuterung & Beispiele" : "Vollständiger Erklärungstext",
+                  t(medical ? "editor.hint" : "editor.text"),
                   { area: true, rows: medical ? 3 : 5, max: medical ? 3000 : 8000 },
                 )}
               </div>
               <div class="ad-editor-footer">
                 ${
                   medical
-                    ? "<span>Antwortformat: Ja / Nein · Pflichtangabe</span>"
+                    ? `<span>${th("editor.answerFormat")}</span>`
                     : /* HTML */ `<label
                         ><input
                           type="checkbox"
                           data-config-path="${key}.${index}.review"
                           ${item.review ? "checked" : ""}
                           ${["privacy", "liability"].includes(item.id) ? "disabled" : ""}
-                        />Roter Prüfvermerk</label
+                        />${th("editor.reviewMark")}</label
                       >`
                 }${
                   item.id.startsWith("custom")
@@ -1969,9 +1908,9 @@ function renderAdminSection() {
                         data-remove-kind="${key}"
                         data-remove-index="${index}"
                       >
-                        ${adminIcon("trash")}Entfernen
+                        ${adminIcon("trash")}${th("editor.remove")}
                       </button>`
-                    : "<span>Standardfrage</span>"
+                    : `<span>${th("editor.default")}</span>`
                 }
               </div>
             </div>
@@ -1979,181 +1918,137 @@ function renderAdminSection() {
       )
       .join(
         "",
-      )}<button class="ad-button" type="button" data-add-kind="${key}">${adminIcon("plus")}${medical ? "Gesundheitsfrage hinzufügen" : "Erklärung hinzufügen"}</button></div></div>`;
+      )}<button class="ad-button" type="button" data-add-kind="${key}">${adminIcon("plus")}${th(medical ? "editor.addMedical" : "editor.addLegal")}</button></div></div>`;
   } else if (adminPage === "privacy") {
-    content = /* HTML */ `<div class="ad-notice review">
-        <strong>Vor Einsatz rechtlich prüfen.</strong> Die Vorlage muss zum konkreten Studio, den
-        verwendeten Diensten und den tatsächlichen Abläufen passen. Die rote Markierung bleibt auch
-        nach dem Bearbeiten erhalten.
-      </div>
+    content = /* HTML */ `<div class="ad-notice review">${th("privacyPage.notice")}</div>
       ${adminPanel(
-        "Aufbewahrung & Datenempfänger",
+        th("privacyPage.retention"),
         /* HTML */ `<div class="ad-fields">
-          ${adminField("studio.retention", "Speicherdauer / Löschkriterien", {
+          ${adminField("studio.retention", t("privacyPage.retentionField"), {
             area: true,
             rows: 4,
             max: 2000,
-            placeholder: "Konkrete Fristen oder nachvollziehbare Löschkriterien",
-          })}${adminField("studio.recipients", "Empfänger & mögliche Drittlandübermittlungen", {
+            placeholder: t("privacyPage.retentionPlaceholder"),
+          })}${adminField("studio.recipients", t("privacyPage.recipients"), {
             area: true,
             rows: 4,
             max: 2000,
-            placeholder: "Zugriffsberechtigte Personen, Ablage und Dienstleister",
+            placeholder: t("privacyPage.recipientsPlaceholder"),
           })}
         </div>`,
       )}${adminPanel(
-        "Datenschutzhinweise bearbeiten",
-        `${adminField("app.privacyTemplate", "Vollständiger Datenschutzhinweis", { area: true, rows: 20, max: 18000, help: "Platzhalter werden durch deine Studioangaben ersetzt: <code>{{studio.name}}</code>, <code>{{studio.address}}</code>, <code>{{studio.contact}}</code>, <code>{{studio.retention}}</code> und <code>{{studio.recipients}}</code>." })}<div class="ad-notice" style="margin:20px 0 0">Speichere hier ausschließlich allgemeine Studioinformationen. Angaben zu Kundinnen und Kunden gehören in das Kundenformular.</div>`,
+        th("privacyPage.edit"),
+        `${adminField("app.privacyTemplate", t("privacyPage.template"), { area: true, rows: 20, max: 18000, help: th("privacyPage.templateHelp") })}<div class="ad-notice" style="margin:20px 0 0">${th("privacyPage.generalOnly")}</div>`,
       )}`;
   } else if (adminPage === "ipad") {
     const secure = window.isSecureContext,
       ready = !!window.jspdf?.jsPDF;
-    const testFile = new File(["INKFORM"], "Speichertest.pdf", { type: "application/pdf" });
+    const testFile = new File(["INKFORM"], "test.pdf", { type: "application/pdf" });
     const native = canSharePdf(testFile),
       standalone =
         !!navigator.standalone || window.matchMedia("(display-mode: standalone)").matches;
     content =
       adminPanel(
-        "Dein iPad-Check",
+        th("ipad.check"),
         /* HTML */ `<div class="ipad-checks">
           <div>
-            <span>Start der App</span
+            <span>${th("ipad.start")}</span
             ><strong
-              >${location.protocol === "file:" ? "Lokale HTML-Datei" : secure ? "Geschützter Weblink" : "Lokale Vorschau"}</strong
+              >${th(location.protocol === "file:" ? "ipad.startFile" : secure ? "ipad.startSecure" : "ipad.startPreview")}</strong
             >
           </div>
           <div>
-            <span>PDF-Erstellung</span><strong>${ready ? "Bereit" : "Bibliothek lädt noch"}</strong>
+            <span>${th("ipad.pdf")}</span><strong>${th(ready ? "ipad.pdfReady" : "ipad.pdfLoading")}</strong>
           </div>
           <div>
-            <span>Systemdialog für Dateien</span
-            ><strong>${native ? "Verfügbar" : "PDF-Download als Alternative"}</strong>
+            <span>${th("ipad.share")}</span
+            ><strong>${th(native ? "ipad.shareAvailable" : "ipad.shareFallback")}</strong>
           </div>
           <div>
-            <span>Offline-Verfügbarkeit</span>
+            <span>${th("ipad.offline")}</span>
             <strong data-offline-status
-              >${location.protocol === "file:" ? "Lokale Datei bereit" : document.documentElement.dataset.offlineReady === "true" ? "Offline bereit – im Flugmodus testen" : "Wird nach dem Laden geprüft"}</strong
+              >${th(location.protocol === "file:" ? "ipad.offlineFile" : document.documentElement.dataset.offlineReady === "true" ? "offline.ready" : "ipad.offlinePending")}</strong
             >
           </div>
           <div>
-            <span>Start vom Home-Bildschirm</span
-            ><strong>${standalone ? "Aktiv" : "Über Teilen einrichten"}</strong>
+            <span>${th("ipad.home")}</span
+            ><strong>${th(standalone ? "ipad.homeActive" : "ipad.homeSetup")}</strong>
           </div>
         </div>`,
       ) +
       adminPanel(
-        "1. App auf dem Home-Bildschirm ablegen",
-        /* HTML */ `<p class="ad-section-copy">
-            Öffne den später eingerichteten HTTPS-Link auf deinem iPad einmal in Safari. Wähle
-            „Teilen“ → „Zum Home-Bildschirm“ und öffne INKFORM über dieses Symbol. Warte auf die
-            Offline-Bestätigung und teste anschließend im Flugmodus. Formular, Unterschrift und
-            PDF-Erstellung laufen auf dem Gerät; es gibt keinen Upload.
-          </p>
+        th("ipad.step1"),
+        /* HTML */ `<p class="ad-section-copy">${th("ipad.step1Copy")}</p>
           <div class="ad-actions-row">
             <button class="ad-button" type="button" data-admin-action="copy-link">
-              ${adminIcon("external")}App-Link kopieren
+              ${adminIcon("external")}${th("ipad.copyLink")}
             </button>
             <button class="ad-button" type="button" data-admin-action="install">
-              ${adminIcon("tablet")}Zum Home-Bildschirm
+              ${adminIcon("tablet")}${th("admin.home")}
             </button>
           </div>`,
       ) +
       adminPanel(
-        "2. Einen Studioordner in Dateien anlegen",
-        /* HTML */ `<p class="ad-section-copy">
-            Öffne die Dateien-App und lege unter <strong>„Auf meinem iPad“</strong> zum Beispiel den
-            Ordner <strong>%%filesFolder%% / Einwilligungen</strong> an. Verwende keine iCloud-Ablage,
-            wenn die Dokumente ausschließlich auf diesem Gerät bleiben sollen. Diesen Ordner wählst
-            du beim ersten Speichern im Systemdialog aus.
-          </p>
-          <div class="ad-notice" style="margin:0">
-            Safari erlaubt dieser Webseite nicht, einen beliebigen Dateien-Ordner ohne Auswahl zu
-            beschreiben. Bei jedem Dokument bestätigst du die Ablage im iPad-Systemdialog.
-          </div>`,
+        th("ipad.step2"),
+        /* HTML */ `<p class="ad-section-copy">${th("ipad.step2Copy")}</p>
+          <div class="ad-notice" style="margin:0">${th("ipad.step2Notice")}</div>`,
       ) +
       adminPanel(
-        "3. Speicherung jetzt ausprobieren",
-        /* HTML */ `<p class="ad-section-copy">
-            Erzeuge eine Test-PDF ohne Kundendaten. Im Systemdialog „In Dateien sichern“ wählen,
-            deinen Studioordner öffnen und auf „Sichern“ tippen. Prüfe danach in der Dateien-App, ob
-            der Speichertest dort liegt.
-          </p>
+        th("ipad.step3"),
+        /* HTML */ `<p class="ad-section-copy">${th("ipad.step3Copy")}</p>
           <button class="ad-button primary" type="button" data-admin-action="test-files">
-            ${adminIcon("download")}iPad-Speicherung testen
+            ${adminIcon("download")}${th("ipad.test")}
           </button>`,
       ) +
       adminPanel(
-        "Danach bei jedem Kunden",
+        th("ipad.daily"),
         /* HTML */ `<ol class="ipad-steps">
-            <li>Formular ausfüllen und mit Finger oder Apple Pencil unterschreiben.</li>
-            <li>
-              „PDF erstellen & sichern“ wählen; je nach Browser öffnet sich der Systemdialog oder
-              ein Download.
-            </li>
-            <li>„In Dateien sichern“ → Studioordner → „Sichern“.</li>
-            <li>
-              Auf dem Vielen-Dank-Bildschirm als Inhaber mit PIN entsperren und die PDF-Ablage
-              prüfen.
-            </li>
-            <li>Erst danach „PDF ist gespeichert · Nächster Kunde“ bestätigen.</li>
+            <li>${th("ipad.daily1")}</li>
+            <li>${th("ipad.daily2")}</li>
+            <li>${th("ipad.daily3")}</li>
+            <li>${th("ipad.daily4")}</li>
+            <li>${th("ipad.daily5")}</li>
           </ol>
-          <p class="ad-preview-note">
-            Nach der Bestätigung bleibt das unterschriebene PDF für den ZIP-Export unverschlüsselt
-            im Browser-Speicher, bis es als gelöscht markiert wird.
-            Studio-Einstellungen bleiben lokal in diesem Browser gespeichert; Geräte synchronisieren
-            sie nicht automatisch.
-          </p>`,
+          <p class="ad-preview-note">${th("ipad.dailyNote")}</p>`,
       );
   } else if (adminPage === "appearance") {
     content = `${adminPanel(
-      "Erscheinungsbild",
-      /* HTML */ `<p class="ad-section-copy">
-          Helles oder dunkles Farbschema wählen. Das Farbschema gilt für Admin-Konsole und
-          Kundenformular. PDFs bleiben auf weißem Papier.
-        </p>
+      th("appearance.title"),
+      /* HTML */ `<p class="ad-section-copy">${th("appearance.copy")}</p>
         <div class="ad-theme-options">
           <button class="ad-theme-card" data-set-theme="light" type="button">
-            <span class="ad-theme-swatch light"></span><strong>Light Mode</strong
-            ><small>Heller Hintergrund</small></button
+            <span class="ad-theme-swatch light"></span><strong>${th("theme.light")}</strong
+            ><small>${th("appearance.lightNote")}</small></button
           ><button class="ad-theme-card" data-set-theme="dark" type="button">
-            <span class="ad-theme-swatch dark"></span><strong>Dark Mode</strong
-            ><small>Anthrazit mit blauen Akzenten</small>
+            <span class="ad-theme-swatch dark"></span><strong>${th("theme.dark")}</strong
+            ><small>${th("appearance.darkNote")}</small>
           </button>
         </div>`,
     )}${adminPanel(
-      "Sicherung & Gerätewechsel",
-      /* HTML */ `<p class="ad-section-copy">
-          Exportiere deine gespeicherten Einstellungen. Die Sicherung enthält Studioangaben und
-          Formulartexte – keine ausgefüllten Kundenformulare und keine Unterschriften.
-        </p>
+      th("appearance.transfer"),
+      /* HTML */ `<p class="ad-section-copy">${th("appearance.transferCopy")}</p>
         <div class="ad-actions-row">
           <button class="ad-button" type="button" data-admin-action="export-json">
-            ${adminIcon("download")}Einstellungen exportieren</button
+            ${adminIcon("download")}${th("appearance.exportJson")}</button
           ><button class="ad-button" type="button" data-admin-action="import-json">
-            ${adminIcon("upload")}JSON importieren</button
+            ${adminIcon("upload")}${th("appearance.importJson")}</button
           ><button class="ad-button primary" type="button" data-admin-action="export-html">
-            ${adminIcon("doc")}App als HTML exportieren
+            ${adminIcon("doc")}${th("appearance.exportHtml")}
           </button>
         </div>
-        <p class="ad-preview-note">
-          JSON: In dieser Konsole auf einem weiteren Gerät importieren. HTML: Eine vollständige
-          App-Datei mit eingebetteter Konfiguration. Ein Import wird zunächst als Entwurf geöffnet.
-        </p>`,
+        <p class="ad-preview-note">${th("appearance.transferNote")}</p>`,
     )}${adminPanel(
-      "Standardvorlage",
+      th("appearance.defaults"),
       /* HTML */ `<div class="ad-reset-row">
         <div>
-          <strong>Mit der ursprünglichen Vorlage neu beginnen</strong>
-          <p>
-            Lädt die Originaltexte als Entwurf. Deine gespeicherte Konfiguration bleibt bis zum
-            nächsten Speichern bestehen.
-          </p>
+          <strong>${th("appearance.defaultsTitle")}</strong>
+          <p>${th("appearance.defaultsCopy")}</p>
         </div>
         <button class="ad-button danger" type="button" data-admin-action="defaults">
-          ${adminIcon("reset")}Vorlage zurücksetzen
+          ${adminIcon("reset")}${th("appearance.defaultsButton")}
         </button>
       </div>`,
-    )}<div class="ad-notice">Die Admin-Oberfläche ist durch die lokale Inhaber-PIN geschützt. Die PIN verschlüsselt weder Browserdaten noch die im HTML enthaltene Studio-Konfiguration. Studioexporte enthalten keine Einnahmenliste oder PIN. Es gibt keine Server-Benutzerverwaltung.</div>`;
+    )}<div class="ad-notice">${th("appearance.pinNotice")}</div>`;
   }
   $("admin-section").innerHTML = content;
   if (adminPage === "export") {
@@ -2167,19 +2062,17 @@ function updateAdminChrome() {
   const changed = adminChanged();
   $("admin-savebar").hidden = (adminPage === "income" || adminPage === "retention") && !changed;
   $("admin-savebar").classList.toggle("unsaved", changed);
-  $("admin-save-state").textContent = changed
-    ? "Ungespeicherte Änderungen"
-    : "Alles auf dem aktuellen Stand";
+  $("admin-save-state").textContent = t(changed ? "savebar.unsaved" : "savebar.saved");
   $("admin-save-detail").textContent = changed
-    ? "Speichern übernimmt deinen Entwurf ins Formular."
+    ? t("savebar.unsavedDetail")
     : storageWorking
       ? settings.savedAt
-        ? `Zuletzt gespeichert: ${timeFormat(new Date(settings.savedAt))}`
-        : "Studio-Einstellungen werden lokal gespeichert."
-      : "Nur in dieser Sitzung. Bitte JSON oder HTML exportieren.";
+        ? t("savebar.savedAt", { zeit: timeFormat(new Date(settings.savedAt)) })
+        : t("savebar.local")
+      : t("savebar.session");
   $("admin-discard").disabled = !changed;
   const name = (adminDraft?.studio.name || settings.studio.name).trim();
-  $("admin-workspace-name").textContent = name || "Dein Tattoo-Studio";
+  $("admin-workspace-name").textContent = name || t("admin.workspaceDefault");
   $("admin-avatar").textContent = studioInitials(name);
 }
 function configError(message) {
@@ -2213,9 +2106,7 @@ function applySettings(next, { initial = false } = {}) {
     JSON.stringify(previous.studio) !== JSON.stringify(next.studio) ||
     previous.app.privacyTemplate !== next.app.privacyTemplate;
   if (!initial) {
-    clearSignature(
-      "Die Formulareinstellungen wurden geändert. Bitte prüfe die Erklärungen und unterschreibe erneut.",
-    );
+    clearSignature(t("signature.settingsChanged"));
     invalidatePdf();
   }
   settings = next;
@@ -2225,7 +2116,7 @@ function applySettings(next, { initial = false } = {}) {
   renderQuestionnaire();
   renderStudio();
   $("customer-brand").textContent = next.app.brand;
-  document.title = `${studio.name.split(" · ")[0]} · ${next.app.brand} — Tattoo-Einwilligung`;
+  document.title = t("meta.customerTitle", { studio: studio.name.split(" · ")[0], marke: next.app.brand });
   $("customer-headline").textContent = next.app.headline;
   $("customer-description").textContent = next.app.description;
   $("customer-eyebrow").textContent = next.app.eyebrow;
@@ -2282,8 +2173,8 @@ function saveAdmin() {
   $("admin-error").hidden = true;
   toast(
     storageWorking
-      ? "Einstellungen gespeichert und ins Formular übernommen."
-      : "Für diese Sitzung übernommen. Browser-Speicher nicht verfügbar: Bitte JSON oder HTML exportieren.",
+      ? t("savebar.savedToast")
+      : t("savebar.sessionToast"),
   );
   return true;
 }
@@ -2298,7 +2189,7 @@ function openAdminAuthorized(page = "overview") {
   adminOpen = true;
   $("customer-app").hidden = true;
   $("admin-app").hidden = false;
-  document.title = `${studio.name.split(" · ")[0]} · INKFORM — Admin-Konsole`;
+  document.title = t("meta.adminTitle", { studio: studio.name.split(" · ")[0] });
   history.replaceState(null, "", "#admin");
   renderAdminSection();
   window.scrollTo(0, 0);
@@ -2321,7 +2212,7 @@ function finishAdminLeave() {
   $("customer-app").hidden = false;
   adminDraft = null;
   history.replaceState(null, "", "#start");
-  document.title = `${studio.name.split(" · ")[0]} · ${settings.app.brand} — Tattoo-Einwilligung`;
+  document.title = t("meta.customerTitle", { studio: studio.name.split(" · ")[0], marke: settings.app.brand });
   window.scrollTo(0, 0);
   resizeCanvas();
   $("studio-open").focus({ preventScroll: true });
@@ -2335,11 +2226,9 @@ function showCompletion(setup = false) {
   $("customer-app").hidden = true;
   $("admin-app").hidden = true;
   $("completion-screen").hidden = false;
-  $("completion-title").textContent = setup ? "Studio einrichten" : "Vielen Dank";
-  $("completion-copy").textContent = setup
-    ? "Bitte richte als Inhaber zuerst die PIN für den Admin-Bereich ein."
-    : "Bitte gib das iPad an das Studio zurück.";
-  $("completion-unlock").textContent = setup ? "PIN festlegen" : "Studio entsperren";
+  $("completion-title").textContent = t(setup ? "completion.setupTitle" : "completion.title");
+  $("completion-copy").textContent = t(setup ? "completion.setupCopy" : "completion.copy");
+  $("completion-unlock").textContent = t(setup ? "completion.setupUnlock" : "completion.unlock");
   if (!setup)
     try {
       sessionStorage.setItem("inkform.completion", "true");
@@ -2383,16 +2272,14 @@ function downloadFile(blob, name) {
 }
 function exportSettings(kind) {
   if (adminChanged()) {
-    configError(
-      "Bitte speichere deine Änderungen vor dem Export. Exportiert wird der gespeicherte Stand.",
-    );
+    configError(t("exportSettings.unsaved"));
     return;
   }
   const payload = { ...clone(settings), theme: document.documentElement.dataset.theme };
   if (kind === "json")
     downloadFile(
       new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
-      `INKFORM_Einstellungen_${localDate()}.json`,
+      `${t("file.settings")}_${localDate()}.json`,
     );
   else {
     const doc = new DOMParser().parseFromString(APP_SOURCE_HTML, "text/html");
@@ -2406,13 +2293,13 @@ function exportSettings(kind) {
       new Blob(["<!DOCTYPE html>\n" + doc.documentElement.outerHTML], {
         type: "text/html;charset=utf-8",
       }),
-      `INKFORM_Studio_${localDate()}.html`,
+      `${t("file.studioHtml")}_${localDate()}.html`,
     );
   }
   toast(
     kind === "json"
-      ? "Einstellungen als JSON zum Download bereitgestellt."
-      : "Konfigurierte Single-File-App zum Download bereitgestellt.",
+      ? t("exportSettings.json")
+      : t("exportSettings.html"),
   );
 }
 function setTheme(theme, persist = true) {
@@ -2431,11 +2318,8 @@ function updateThemeButtons() {
   document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
     button.innerHTML =
       adminIcon(theme === "dark" ? "sun" : "moon") +
-      /* HTML */ `<span>${theme === "dark" ? "Light Mode" : "Dark Mode"}</span>`;
-    button.setAttribute(
-      "aria-label",
-      theme === "dark" ? "Light Mode aktivieren" : "Dark Mode aktivieren",
-    );
+      /* HTML */ `<span>${th(theme === "dark" ? "theme.light" : "theme.dark")}</span>`;
+    button.setAttribute("aria-label", t(theme === "dark" ? "theme.lightOn" : "theme.darkOn"));
   });
   document
     .querySelectorAll("[data-set-theme]")
@@ -2455,7 +2339,7 @@ $("admin-save").addEventListener("click", saveAdmin);
 $("admin-discard").addEventListener("click", () => {
   adminDraft = clone(settings);
   renderAdminSection();
-  toast("Entwurf verworfen. Gespeicherter Stand wiederhergestellt.");
+  toast(t("savebar.discarded"));
 });
 $("admin-leave-discard").addEventListener("click", () => {
   $("admin-leave-dialog").close();
@@ -2471,7 +2355,7 @@ $("admin-defaults-confirm").addEventListener("click", () => {
   adminDraft = clone(DEFAULT_SETTINGS);
   $("admin-defaults-dialog").close();
   renderAdminSection();
-  toast("Standardvorlage als Entwurf geladen. Zum Übernehmen speichern.");
+  toast(t("defaults.loaded"));
 });
 $("admin-app").addEventListener("change", (event) => {
   if (event.target.id !== "backup-interval" || !adminAccess.isUnlocked()) return;
@@ -2497,7 +2381,7 @@ $("admin-app").addEventListener("input", (event) => {
       .forEach(
         (node) =>
           (node.textContent =
-            event.target.value || (last === "defaultArtist" ? "Dein Artist" : "")),
+            event.target.value || (last === "defaultArtist" ? t("preview.artist") : "")),
       );
   updateAdminChrome();
   $("admin-error").hidden = true;
@@ -2514,7 +2398,7 @@ $("admin-app").addEventListener("click", (event) => {
   if (button.dataset.addKind) {
     const key = button.dataset.addKind;
     if (adminDraft[key].length >= 40) {
-      configError("Es sind maximal 40 Einträge pro Bereich möglich.");
+      configError(t("editor.max"));
       return;
     }
     const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -2522,13 +2406,13 @@ $("admin-app").addEventListener("click", (event) => {
       key === "medical"
         ? {
             id: "customMedical_" + suffix,
-            title: "Weitere Gesundheitsfrage",
-            hint: "Bitte erläutere hier deine Frage.",
+            title: t("editor.newMedicalTitle"),
+            hint: t("editor.newMedicalHint"),
           }
         : {
             id: "customLegal_" + suffix,
-            title: "Weitere Einwilligung",
-            text: "Erklärungstext ergänzen.",
+            title: t("editor.newLegalTitle"),
+            text: t("editor.newLegalText"),
             review: true,
           },
     );
@@ -2572,9 +2456,9 @@ $("admin-app").addEventListener("click", (event) => {
       const bytes = Uint8Array.from(atob(OWNER_GUIDE_BASE64), (ch) => ch.charCodeAt(0));
       presentPdfArtifact(
         new Blob([bytes], { type: "application/pdf" }),
-        "Inkform-Anleitung-iPad-und-Admin.pdf",
+        `${t("file.guide")}.pdf`,
         OWNER_GUIDE_PAGES,
-        { isReport: true, reportTitle: "Anleitung für iPad und Admin" },
+        { isReport: true, reportTitle: t("guide.title") },
       );
       break;
     }
@@ -2591,12 +2475,9 @@ $("admin-app").addEventListener("click", (event) => {
       if (location.protocol === "https:")
         navigator.clipboard
           ?.writeText(location.origin + location.pathname)
-          .then(() => toast("App-Link kopiert."))
-          .catch(() => toast("Bitte den Link aus der Safari-Adresszeile kopieren."));
-      else
-        toast(
-          "Diese lokale Testdatei hat noch keinen Weblink. Die iPad-Adresse wird später eingerichtet.",
-        );
+          .then(() => toast(t("ipad.linkCopied")))
+          .catch(() => toast(t("ipad.linkManual")));
+      else toast(t("ipad.noLink"));
       break;
     case "export-json":
       exportSettings("json");
@@ -2617,16 +2498,13 @@ $("admin-import-file").addEventListener("change", async (event) => {
   if (!file) return;
   try {
     if (file.size > 1024 * 1024)
-      throw new Error("Die Konfigurationsdatei darf maximal 1 MB groß sein.");
+      throw new Error(t("import.tooLarge"));
     const data = JSON.parse(await file.text());
     adminDraft = validateSettings(data);
     renderAdminSection();
-    toast("Einstellungen als Entwurf importiert. Bitte prüfen und speichern.");
+    toast(t("import.done"));
   } catch (error) {
-    configError(
-      "Import nicht möglich: " +
-        (error instanceof SyntaxError ? "Die Datei enthält kein gültiges JSON." : error.message),
-    );
+    configError(t("import.failed", { fehler: error instanceof SyntaxError ? t("import.badJson") : error.message }));
   } finally {
     event.target.value = "";
   }
@@ -2672,7 +2550,7 @@ incomeFeature = createIncomeFeature({
     try {
       rememberRemoved();
     } catch (error) {
-      toast("Gelöschte PDF-Kopien konnten nicht dauerhaft vermerkt werden (Speicher voll?): " + error.message);
+      toast(t("copies.recordFailed", { fehler: error.message }));
     }
     exportFeature?.sync().catch((error) => console.error("Export-Archiv nicht abgeglichen:", error));
   },
@@ -2687,12 +2565,14 @@ incomeFeature = createIncomeFeature({
   removeCopy: (row) => {
     if (
       window.confirm(
-        `PDF-Kopie für ${row.customer} (Termin ${dateFormat(row.date)}) aus der App löschen?\n\nSie ist danach aus der App für immer weg und in keinem ZIP-Export mehr enthalten. Vorher prüfen, ob das PDF in der Dateien-App oder einer ZIP-Datei gesichert ist. Die Datei in der Dateien-App und auf anderen Speichern bleibt unberührt, der Eintrag in der Einnahmenliste bleibt erhalten.`,
+        t("copies.removeOneQuestion", { name: row.customer, datum: dateFormat(row.date) }) +
+          "\n\n" +
+          t("copies.removeOneDetail"),
       )
     )
       removePdfCopies([{ id: row.id, updatedAt: row.updatedAt }]).then(
-        () => toast("PDF-Kopie aus der App gelöscht. Der Eintrag bleibt erhalten."),
-        (error) => toast("PDF-Kopie nicht gelöscht: " + error.message),
+        () => toast(t("copies.removedOne")),
+        (error) => toast(t("copies.removeOneFailed", { fehler: error.message })),
       );
   },
 });
@@ -2728,7 +2608,7 @@ if (BLANK_EDITION) document.querySelectorAll("[data-studio-only]").forEach((node
 if (!OWNER_GUIDE_BASE64) document.querySelectorAll('[data-admin-action="guide"]').forEach((node) => (node.hidden = true));
 if (sessionStorage.getItem("inkform.restored")) {
   sessionStorage.removeItem("inkform.restored");
-  toast("Sicherung wiederhergestellt.");
+  toast(t("restore.done"));
 }
 pendingStore = createPendingStore({
   storage: {

@@ -38,7 +38,7 @@ export function studioInitials(name, fallback = "IS") {
     .map((word) => word.match(/[\p{L}\p{N}]/u)?.[0])
     .filter(Boolean)
     .slice(0, 2);
-  return letters.length ? letters.join("").toLocaleUpperCase("de-DE") : fallback;
+  return letters.length ? letters.join("").toUpperCase() : fallback;
 }
 
 // File-name part from customer names: letters and digits of any script are kept.

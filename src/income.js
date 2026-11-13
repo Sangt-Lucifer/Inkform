@@ -1,4 +1,5 @@
 // Only financial references are persisted. No health answers, signatures or PDFs.
+import { language, markup, t, th } from "./i18n.js";
 import {
   ANONYMIZED,
   anonymizeRecord,
@@ -42,14 +43,14 @@ export function validateIncomeRecord(value) {
     Array.isArray(value) ||
     Object.keys(value).some((k) => !incomeFields.includes(k))
   )
-    throw Error("Ungültiger Einnahmeneintrag; es sind nur die vorgesehenen Finanzangaben erlaubt.");
+    throw Error(t("income.invalidEntry"));
   const text = (key, max, required = false) => {
     const input = value[key];
     if (typeof input !== "string" || input.length > max || /[\u0000-\u001f\u007f]/.test(input))
-      throw Error(`Ungültige Angabe: ${key}.`);
+      throw Error(t("income.invalidField", { feld: key }));
     const result = input.normalize("NFC").trim();
     if (required && !result)
-      throw Error(`Bitte ${key === "customer" ? "den Namen" : key} ergänzen.`);
+      throw Error(key === "customer" ? t("income.nameMissing") : t("income.fieldMissing", { feld: key }));
     return result;
   };
   const row = {
@@ -67,17 +68,17 @@ export function validateIncomeRecord(value) {
     new Date(row.date).toISOString().slice(0, 10) !== row.date ||
     !Number.isFinite(Date.parse(row.updatedAt))
   )
-    throw Error("Kennung, Datum oder Änderungszeit ist ungültig.");
+    throw Error(t("income.invalidIdDate"));
   for (const key of ["totalCents", "depositCents"]) {
     const amount = value[key];
     if (amount !== null && (!Number.isSafeInteger(amount) || amount < 0 || amount > 999999999))
-      throw Error("Beträge müssen gültige Eurobeträge mit höchstens zwei Nachkommastellen sein.");
+      throw Error(t("income.invalidAmount"));
     row[key] = amount;
   }
   if (row.totalCents !== null && row.depositCents !== null && row.depositCents > row.totalCents)
-    throw Error("Die Anzahlung darf die Gesamtkosten nicht überschreiten.");
+    throw Error(t("price.depositTooHigh"));
   if ("pdfMissing" in value && typeof value.pdfMissing !== "boolean")
-    throw Error("Ungültige Angabe: pdfMissing.");
+    throw Error(t("income.invalidPdfMissing"));
   // Stored only when set, so existing entries and backups stay unchanged.
   if (value.pdfMissing === true) row.pdfMissing = true;
   for (const key of ["pdfDeletedAt", "anonymizedAt", "pdfRemovedAt"]) {
@@ -87,12 +88,12 @@ export function validateIncomeRecord(value) {
       !/^\d{4}-\d{2}-\d{2}$/.test(value[key]) ||
       !Number.isFinite(Date.parse(value[key]))
     )
-      throw Error(`Ungültige Angabe: ${key}.`);
+      throw Error(t("income.invalidField", { feld: key }));
     row[key] = value[key];
   }
   // An anonymized entry stays anonymized: no name or PDF reference can be put back.
   if (row.anonymizedAt && (row.customer !== ANONYMIZED || row.source))
-    throw Error(`Ein anonymisierter Eintrag darf keinen Namen und keinen PDF-Dateinamen enthalten.`);
+    throw Error(t("income.anonymizedNamed"));
   return row;
 }
 export function validateIncomeBackup(value) {
@@ -102,18 +103,18 @@ export function validateIncomeBackup(value) {
     !Array.isArray(value.records) ||
     value.records.length > 10000
   )
-    throw Error("Keine unterstützte Einnahmensicherung (Version 1, maximal 10.000 Einträge).");
+    throw Error(t("income.unsupportedBackup"));
   const records = value.records.map(validateIncomeRecord);
   if (new Set(records.map((r) => r.id)).size !== records.length)
-    throw Error("Die Sicherung enthält doppelte Eintragskennungen.");
+    throw Error(t("income.duplicateIds"));
   return records;
 }
 // Anonymization is one-way: no write may turn an anonymized entry back into a named one.
 function keepAnonymized(old, row) {
   if (old?.anonymizedAt && !row.anonymizedAt)
-    throw Error("Ein anonymisierter Eintrag kann nicht wiederhergestellt werden.");
+    throw Error(t("income.anonymizedRestore"));
   if (old?.pdfRemovedAt && !row.pdfRemovedAt)
-    throw Error("Eine aus der App gelöschte PDF-Kopie lässt sich nicht zurückholen.");
+    throw Error(t("income.copyRestore"));
 }
 export function createIncomeStore(storage) {
   function read() {
@@ -126,7 +127,7 @@ export function createIncomeStore(storage) {
     const records = change(before.records);
     const checked = validateIncomeBackup({ schemaVersion: 1, records });
     if (storage.getItem(INCOME_KEY) !== before.raw)
-      throw Error("Die Liste wurde in einem anderen Fenster geändert. Bitte erneut öffnen.");
+      throw Error(t("income.otherWindow"));
     storage.setItem(INCOME_KEY, JSON.stringify({ schemaVersion: 1, records: checked }));
     return checked;
   }
@@ -139,7 +140,7 @@ export function createIncomeStore(storage) {
         const old = records.find((r) => r.id === row.id);
         if (old && JSON.stringify(old) !== JSON.stringify(row))
           throw Error(
-            "Für diese Einwilligung ist bereits ein abweichender Eintrag gespeichert. Bitte den vorhandenen Eintrag bearbeiten.",
+            t("income.conflict"),
           );
         return old ? records : [...records, row];
       }),
@@ -148,7 +149,7 @@ export function createIncomeStore(storage) {
         const row = validateIncomeRecord(record),
           old = records.find((r) => r.id === row.id);
         if (!old || old.updatedAt !== expectedTime)
-          throw Error("Dieser Eintrag wurde inzwischen geändert oder entfernt. Bitte neu öffnen.");
+          throw Error(t("income.changedOrRemoved"));
         keepAnonymized(old, row);
         return records.map((r) => (r.id === row.id ? row : r));
       }),
@@ -162,7 +163,7 @@ export function createIncomeStore(storage) {
           const row = validateIncomeRecord(record),
             old = records.find((r) => r.id === row.id);
           if (!old || old.updatedAt !== expected)
-            throw Error("Ein Eintrag wurde inzwischen geändert oder entfernt. Bitte neu öffnen.");
+            throw Error(t("income.oneChanged"));
           keepAnonymized(old, row);
           changed.set(row.id, row);
         }
@@ -172,7 +173,7 @@ export function createIncomeStore(storage) {
       mutate((records) => {
         const old = records.find((r) => r.id === id);
         if (!old || old.updatedAt !== expectedTime)
-          throw Error("Dieser Eintrag wurde inzwischen geändert. Bitte neu öffnen.");
+          throw Error(t("income.changed"));
         return records.filter((r) => r.id !== id);
       }),
     removeMany: (ids) => mutate((records) => records.filter((r) => !ids.includes(r.id))),
@@ -184,7 +185,7 @@ export function createIncomeStore(storage) {
           const old = existing.get(row.id);
           if (old && JSON.stringify(old) !== JSON.stringify(row))
             throw Error(
-              "Die Sicherung enthält einen inzwischen abweichenden Eintrag. Es wurde nichts überschrieben.",
+              t("income.mergeConflict"),
             );
           existing.set(row.id, row);
         }
@@ -194,7 +195,7 @@ export function createIncomeStore(storage) {
   };
 }
 function normalizeArtist(value) {
-  return value.normalize("NFC").trim().toLocaleLowerCase("de");
+  return value.normalize("NFC").trim().toLowerCase();
 }
 export function selectIncome(
   records,
@@ -212,8 +213,8 @@ export function selectIncome(
     .sort(
       (a, b) =>
         a.date.localeCompare(b.date) ||
-        a.artist.localeCompare(b.artist, "de") ||
-        a.customer.localeCompare(b.customer, "de"),
+        a.artist.localeCompare(b.artist, language().locale) ||
+        a.customer.localeCompare(b.customer, language().locale),
     );
 }
 
@@ -230,40 +231,37 @@ export function incomeCsv(records) {
     if (/^\s*[=+@-]/.test(text)) text = "'" + text;
     return '"' + text.replaceAll('"', '""') + '"';
   };
-  const euros = (cents) => (cents === null ? "" : (cents / 100).toFixed(2).replace(".", ","));
+  const euros = (cents) =>
+    cents === null ? "" : language().number(cents / 100, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
   const rows = [
     [
-      "Datum",
-      "Artist",
-      "Name",
-      "Gesamtkosten EUR",
-      "Anzahlung EUR (nicht zusätzlich summiert)",
-      "Status",
-      "PDF-Referenz",
+      t("csv.date"),
+      t("csv.artist"),
+      t("csv.name"),
+      t("csv.total"),
+      t("csv.deposit"),
+      t("csv.status"),
+      t("csv.reference"),
     ],
     ...records.map((r) => [
       r.date,
-      r.artist || "Nicht zugeordnet",
+      r.artist || t("common.unassigned"),
       r.customer,
       euros(r.totalCents),
       euros(r.depositCents),
-      (r.totalCents === null ? "Preis offen" : "Preis erfasst") +
-        (r.pdfMissing ? " · PDF fehlt" : "") +
-        (r.pdfDeletedAt ? ` · PDF gelöscht ${r.pdfDeletedAt}` : "") +
-        (r.anonymizedAt ? ` · anonymisiert ${r.anonymizedAt}` : ""),
+      [
+        t(r.totalCents === null ? "income.priceOpen" : "csv.priceSet"),
+        r.pdfMissing && t("income.pdfMissing"),
+        r.pdfDeletedAt && t("csv.pdfDeleted", { datum: r.pdfDeletedAt }),
+        r.anonymizedAt && t("csv.anonymized", { datum: r.anonymizedAt }),
+      ]
+        .filter(Boolean)
+        .join(" · "),
       r.source,
     ]),
   ];
   const summary = summarizeIncome(records);
-  rows.push([
-    "Summe der bekannten Gesamtpreise EUR",
-    "",
-    "",
-    euros(summary.totalCents),
-    "",
-    `${summary.open} Preise offen`,
-    "",
-  ]);
+  rows.push([t("csv.sum"), "", "", euros(summary.totalCents), "", t("income.pricesOpen", { anzahl: summary.open }), ""]);
   return "\uFEFF" + rows.map((row) => row.map(cell).join(";")).join("\r\n");
 }
 
@@ -294,20 +292,20 @@ export function createIncomeFeature({
   const editor = document.createElement("dialog");
   editor.id = "income-editor";
   editor.setAttribute("aria-labelledby", "income-editor-title");
-  editor.innerHTML = `<div class="dialog-head"><h2 id="income-editor-title">Eintrag bearbeiten</h2><button type="button" class="close-button" data-income-cancel aria-label="Dialog schließen">×</button></div>
+  editor.innerHTML = `<div class="dialog-head"><h2 id="income-editor-title">${th("income.editTitle")}</h2><button type="button" class="close-button" data-income-cancel aria-label="${th("common.closeDialog")}">×</button></div>
     <form id="income-edit-form" class="dialog-body" novalidate>
     <div class="ad-error" id="income-edit-error" role="alert" tabindex="-1" hidden></div>
     <div class="ad-fields">
-      <div class="ad-field"><label for="income-date">Tattoo-Termin</label><input id="income-date" name="date" type="date" required></div>
-      <div class="ad-field"><label for="income-artist">Artist</label><input id="income-artist" name="artist" maxlength="100" list="income-artists"><datalist id="income-artists"></datalist></div>
-      <div class="ad-field full"><label for="income-customer">Name laut Einwilligung</label><input id="income-customer" name="customer" maxlength="250" required></div>
-      <div class="ad-field"><label for="income-total">Gesamtkosten (€), optional</label><input id="income-total" name="total" inputmode="decimal" maxlength="10" placeholder="Preis noch offen"></div>
-      <div class="ad-field"><label for="income-deposit">Anzahlung (€), optional</label><input id="income-deposit" name="deposit" inputmode="decimal" maxlength="10"></div>
-      <div class="ad-field full"><label for="income-source">PDF-Dateiname / Referenz, optional</label><input id="income-source" name="source" maxlength="400"></div>
-      <div class="ad-field full"><label class="income-check"><input id="income-pdf-missing" name="pdfMissing" type="checkbox"> PDF fehlt (unterschriebene Einwilligung nicht abgelegt)</label></div>
-      <p class="ad-notice full" id="income-anonymized-note" hidden>Dieser Eintrag ist anonymisiert. Name und PDF-Dateiname lassen sich nicht wieder eintragen.</p>
-    </div><p class="ad-section-copy">Die Änderung betrifft nur diese Übersicht. Ein bereits unterschriebenes PDF bleibt unverändert. Kein Gesamtpreis bedeutet „Preis offen“, nicht 0 €.</p>
-    <div class="dialog-actions"><button type="button" class="secondary-button" data-income-cancel>Abbrechen</button><button type="submit" class="primary-button">Eintrag speichern</button></div></form>`;
+      <div class="ad-field"><label for="income-date">${th("income.date")}</label><input id="income-date" name="date" type="date" required></div>
+      <div class="ad-field"><label for="income-artist">${th("csv.artist")}</label><input id="income-artist" name="artist" maxlength="100" list="income-artists"><datalist id="income-artists"></datalist></div>
+      <div class="ad-field full"><label for="income-customer">${th("income.customer")}</label><input id="income-customer" name="customer" maxlength="250" required></div>
+      <div class="ad-field"><label for="income-total">${th("income.total")}</label><input id="income-total" name="total" inputmode="decimal" maxlength="10" placeholder="${th("income.totalPlaceholder")}"></div>
+      <div class="ad-field"><label for="income-deposit">${th("income.deposit")}</label><input id="income-deposit" name="deposit" inputmode="decimal" maxlength="10"></div>
+      <div class="ad-field full"><label for="income-source">${th("income.source")}</label><input id="income-source" name="source" maxlength="400"></div>
+      <div class="ad-field full"><label class="income-check"><input id="income-pdf-missing" name="pdfMissing" type="checkbox"> ${th("income.pdfMissingLabel")}</label></div>
+      <p class="ad-notice full" id="income-anonymized-note" hidden>${th("income.anonymizedNote")}</p>
+    </div><p class="ad-section-copy">${th("income.editNote")}</p>
+    <div class="dialog-actions"><button type="button" class="secondary-button" data-income-cancel>${th("common.cancel")}</button><button type="submit" class="primary-button">${th("income.save")}</button></div></form>`;
   document.body.append(editor);
   const editForm = editor.querySelector("form");
   const input = (key) => editor.querySelector(`[name="${key}"]`);
@@ -317,15 +315,15 @@ export function createIncomeFeature({
     .forEach((b) => b.addEventListener("click", () => editor.close()));
   function failure(error) {
     const node = editor.querySelector("#income-edit-error");
-    node.textContent = "Nicht gespeichert: " + error.message;
+    node.textContent = t("income.notSaved", { fehler: error.message });
     node.hidden = false;
     node.focus();
   }
   function openEdit(record) {
     editing = record || null;
     editor.querySelector("#income-editor-title").textContent = record
-      ? "Eintrag bearbeiten"
-      : "Ältere Einwilligung nachtragen";
+      ? t("income.editTitle")
+      : t("income.addTitle");
     input("date").value = record?.date || today();
     for (const key of ["artist", "customer", "source"]) input(key).value = record?.[key] || "";
     input("pdfMissing").checked = !!record?.pdfMissing;
@@ -356,7 +354,7 @@ export function createIncomeFeature({
   editForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      if (!isUnlocked()) throw Error("Bitte zuerst die Einnahmenansicht entsperren.");
+      if (!isUnlocked()) throw Error(t("income.locked"));
       const total = parseMoney(input("total").value),
         deposit = parseMoney(input("deposit").value);
       const row = validateIncomeRecord({
@@ -380,7 +378,7 @@ export function createIncomeFeature({
       if (
         removesCopy &&
         !window.confirm(
-          "Mit „PDF fehlt“ wird die PDF-Kopie dieses Eintrags aus der App gelöscht. Sie ist danach aus der App für immer weg und in keinem ZIP-Export mehr enthalten. Die Datei in der Dateien-App und auf anderen Speichern bleibt unberührt. Trotzdem speichern?",
+          t("income.missingRemovesCopy"),
         )
       )
         return;
@@ -391,7 +389,7 @@ export function createIncomeFeature({
       originalForm = snapshot();
       editor.close();
       refresh();
-      notify("Eintrag lokal gespeichert.");
+      notify(t("income.saved"));
     } catch (error) {
       failure(error);
     }
@@ -404,23 +402,23 @@ export function createIncomeFeature({
   document.body.append(picker);
   picker.addEventListener("change", async () => {
     try {
-      if (!isUnlocked()) throw Error("Bitte zuerst die Einnahmenansicht entsperren.");
+      if (!isUnlocked()) throw Error(t("income.locked"));
       const file = picker.files[0];
       if (!file) return;
-      if (file.size > 10 * 1024 * 1024) throw Error("Die Sicherung darf maximal 10 MB groß sein.");
+      if (file.size > 10 * 1024 * 1024) throw Error(t("income.backupTooLarge"));
       const backup = JSON.parse(await file.text()),
         rows = validateIncomeBackup(backup);
       if (
         !window.confirm(
-          `${rows.length} Einträge aus der lokalen Einnahmensicherung übernehmen? Bestehende abweichende Einträge werden nicht überschrieben.`,
+          t("income.importQuestion", { anzahl: rows.length }),
         )
       )
         return;
       store.merge(backup);
       refresh();
-      notify("Einnahmensicherung lokal übernommen.");
+      notify(t("income.imported"));
     } catch (error) {
-      notify("Import nicht möglich: " + error.message);
+      notify(t("import.failed", { fehler: error.message }));
     } finally {
       picker.value = "";
     }
@@ -431,10 +429,11 @@ export function createIncomeFeature({
   function option(value, label, selected) {
     return `<option value="${e(value)}"${value === selected ? " selected" : ""}>${e(label)}</option>`;
   }
+  const dateDe = (iso) => language().date(iso, { day: "2-digit", month: "2-digit", year: "numeric" });
   function view() {
     try {
       if (!isUnlocked())
-        return '<p class="ad-notice">Bitte den Admin-Bereich mit der Inhaber-PIN entsperren.</p>';
+        return `<p class="ad-notice">${th("income.unlock")}</p>`;
       const all = store.list(),
         rows = selectIncome(all, filters),
         summary = summarizeIncome(rows),
@@ -445,7 +444,7 @@ export function createIncomeFeature({
           artistNames.set(normalizeArtist(row.artist), row.artist.trim());
       if (filters.artist && !artistNames.has(normalizeArtist(filters.artist)))
         artistNames.set(normalizeArtist(filters.artist), filters.artist);
-      const artists = [...artistNames.values()].sort((a, b) => a.localeCompare(b, "de"));
+      const artists = [...artistNames.values()].sort((a, b) => a.localeCompare(b, language().locale));
       const artistSelection = filters.unassigned
         ? "unassigned"
         : filters.artist
@@ -462,44 +461,50 @@ export function createIncomeFeature({
         day.records.push(r);
         daily.set(group, day);
       }
-      return `<section class="ad-panel"><div class="ad-panel-header"><h2>Einnahmen nach Gesamtpreis</h2></div><div class="ad-panel-body">
-      <p class="ad-section-copy">Summiert wird der vereinbarte Gesamtpreis am Tattoo-Termin. Anzahlungen werden nicht zusätzlich gezählt. Dies ist eine Umsatzübersicht laut Einwilligungen, kein Nachweis tatsächlicher Zahlungseingänge oder des Artist-Gewinns.</p>
+      return `<section class="ad-panel"><div class="ad-panel-header"><h2>${th("income.title")}</h2></div><div class="ad-panel-body">
+      <p class="ad-section-copy">${th("income.intro")}</p>
       <div class="income-filters">
-      <label>Artist<select id="income-filter-artist">${option("", "Alle Artists", artistSelection)}${artists
+      <label>${th("csv.artist")}<select id="income-filter-artist">${option("", t("income.allArtists"), artistSelection)}${artists
         .filter(Boolean)
         .map((a) => option("artist:" + a, a, artistSelection))
         .join(
           "",
-        )}${artists.includes("") ? option("unassigned", "Nicht zugeordnet", artistSelection) : ""}</select></label>
-      <label>Jahr<select id="income-filter-year">${option("", "Alle Jahre", filters.year)}${years.map((y) => option(y, y, filters.year)).join("")}</select></label>
-      <label>Monat<select id="income-filter-month">${option("", "Ganzes Jahr", filters.month)}${Array.from(
+        )}${artists.includes("") ? option("unassigned", t("common.unassigned"), artistSelection) : ""}</select></label>
+      <label>${th("income.year")}<select id="income-filter-year">${option("", t("income.allYears"), filters.year)}${years.map((y) => option(y, y, filters.year)).join("")}</select></label>
+      <label>${th("income.month")}<select id="income-filter-month">${option("", t("income.wholeYear"), filters.month)}${Array.from(
         { length: 12 },
         (_, i) => {
           const n = String(i + 1).padStart(2, "0");
           return option(
             n,
-            new Intl.DateTimeFormat("de", { month: "long" }).format(new Date(2000, i, 1)),
+            language().dateTime(new Date(2000, i, 1), { month: "long" }),
             filters.month,
           );
         },
       ).join("")}</select></label></div>
-      <div class="income-summary"><strong>${money(summary.totalCents)}<small>Summe bekannter Gesamtpreise</small></strong><strong>${summary.count}<small>Einwilligungen</small></strong><strong>${summary.open}<small>Preise offen – nicht in der Summe</small></strong></div>
-      <div class="ad-actions-row income-actions"><button class="ad-button primary" data-income-action="add">Einwilligung nachtragen</button><button class="ad-button" data-income-action="pdf"${rows.length ? "" : " disabled"}>Gefilterte Liste als PDF</button><button class="ad-button" data-income-action="csv"${rows.length ? "" : " disabled"}>Gefilterte Liste als CSV</button></div>
-      <p class="ad-preview-note">Neue Einwilligungen werden übernommen, sobald du als Inhaber die Ablage des unterschriebenen PDFs bestätigst. Ältere PDFs hier nachtragen; die App durchsucht keine Dateien-Ordner.</p>
-      <div class="income-table-wrap"><table class="income-table"><caption>Einwilligungen im gewählten Zeitraum</caption><thead><tr><th>Termin</th><th>Artist</th><th>Name</th><th>Gesamtkosten</th><th>Anzahlung</th><th>Bearbeiten</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td>${e(r.date.split("-").reverse().join("."))}</td><td>${e(r.artist || "Nicht zugeordnet")}</td><td>${e(r.customer)}${r.pdfMissing ? ' <span class="income-open">PDF fehlt</span>' : ""}${r.source ? `<small>${e(r.source)}</small>` : ""}${r.pdfDeletedAt ? `<small>PDF gelöscht am ${e(r.pdfDeletedAt.split("-").reverse().join("."))}</small>` : ""}${r.pdfRemovedAt ? "<small>PDF nicht mehr in der App</small>" : ""}</td><td>${r.totalCents === null ? '<span class="income-open">Preis offen</span>' : money(r.totalCents)}</td><td>${r.depositCents === null ? "–" : money(r.depositCents)}</td><td><button class="ad-button" data-income-edit="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} bearbeiten">Bearbeiten</button><button class="ad-button danger" data-income-remove="${e(r.id)}" aria-label="Eintrag für ${e(r.customer)} entfernen">Entfernen</button>${inApp.has(r.id) ? `<button class="ad-button" data-income-copy="${e(r.id)}" aria-label="PDF-Kopie für ${e(r.customer)} aus der App löschen">PDF-Kopie aus der App löschen</button>` : ""}</td></tr>`).join("") : '<tr><td colspan="6">Keine Einwilligungen für diese Auswahl.</td></tr>'}</tbody></table></div>
-      <details class="income-daily"><summary>Tagessummen je Artist</summary><ul>${
+      <div class="income-summary"><strong>${money(summary.totalCents)}<small>${th("income.sumKnown")}</small></strong><strong>${summary.count}<small>${th("income.consents")}</small></strong><strong>${summary.open}<small>${th("income.openNotInSum")}</small></strong></div>
+      <div class="ad-actions-row income-actions"><button class="ad-button primary" data-income-action="add">${th("income.add")}</button><button class="ad-button" data-income-action="pdf"${rows.length ? "" : " disabled"}>${th("income.listPdf")}</button><button class="ad-button" data-income-action="csv"${rows.length ? "" : " disabled"}>${th("income.listCsv")}</button></div>
+      <p class="ad-preview-note">${th("income.newNote")}</p>
+      <div class="income-table-wrap"><table class="income-table"><caption>${th("income.tableCaption")}</caption><thead><tr><th>${th("pdf.appointment")}</th><th>${th("csv.artist")}</th><th>${th("csv.name")}</th><th>${th("income.colTotal")}</th><th>${th("income.colDeposit")}</th><th>${th("income.edit")}</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.artist || t("common.unassigned"))}</td><td>${e(r.customer)}${r.pdfMissing ? ` <span class="income-open">${th("income.pdfMissing")}</span>` : ""}${r.source ? `<small>${e(r.source)}</small>` : ""}${r.pdfDeletedAt ? `<small>${th("income.pdfDeletedOn", { datum: dateDe(r.pdfDeletedAt) })}</small>` : ""}${r.pdfRemovedAt ? `<small>${th("income.pdfRemoved")}</small>` : ""}</td><td>${r.totalCents === null ? `<span class="income-open">${th("income.priceOpen")}</span>` : money(r.totalCents)}</td><td>${r.depositCents === null ? "–" : money(r.depositCents)}</td><td><button class="ad-button" data-income-edit="${e(r.id)}" aria-label="${th("income.editAria", { name: r.customer })}">${th("income.edit")}</button><button class="ad-button danger" data-income-remove="${e(r.id)}" aria-label="${th("income.removeAria", { name: r.customer })}">${th("editor.remove")}</button>${inApp.has(r.id) ? `<button class="ad-button" data-income-copy="${e(r.id)}" aria-label="${th("income.copyAria", { name: r.customer })}">${th("income.copyRemove")}</button>` : ""}</td></tr>`).join("") : `<tr><td colspan="6">${th("income.none")}</td></tr>`}</tbody></table></div>
+      <details class="income-daily"><summary>${th("income.daily")}</summary><ul>${
         [...daily.values()]
           .map((day) => {
             const s = summarizeIncome(day.records);
-            return `<li>${e(day.date)} · ${e(day.artist || "Nicht zugeordnet")}: <strong>${money(s.totalCents)}</strong> · ${s.count} Termine${s.open ? ` · ${s.open} Preise offen` : ""}</li>`;
+            return `<li>${th(s.open ? "income.dayOpen" : "income.day", {
+              datum: day.date,
+              artist: day.artist || t("common.unassigned"),
+              summe: markup(money(s.totalCents)),
+              termine: s.count,
+              anzahl: s.open,
+            })}</li>`;
           })
-          .join("") || "<li>Keine Einträge.</li>"
+          .join("") || `<li>${th("income.noEntries")}</li>`
       }</ul></details>
-      <div class="ad-notice">Diese Liste wird nur lokal in diesem Browser gespeichert. Browserdaten löschen oder ein Gerätewechsel können sie entfernen. Regelmäßig separat sichern. JSON- und HTML-Exporte der Studioeinstellungen enthalten diese Einnahmenliste nicht.</div>
-      <div class="ad-actions-row income-actions"><button class="ad-button" data-income-action="backup">Alle Einnahmen als JSON sichern</button><button class="ad-button" data-income-action="import">Einnahmensicherung importieren</button></div>
+      <div class="ad-notice">${th("income.localNotice")}</div>
+      <div class="ad-actions-row income-actions"><button class="ad-button" data-income-action="backup">${th("income.backupJson")}</button><button class="ad-button" data-income-action="import">${th("income.importBackup")}</button></div>
       </div></section>`;
     } catch (error) {
-      return `<div class="ad-error" role="alert">Einnahmenliste nicht verfügbar: ${e(error.message)} Vorhandene Daten werden nicht überschrieben.</div>`;
+      return `<div class="ad-error" role="alert">${th("income.unavailable", { fehler: error.message })}</div>`;
     }
   }
   function refresh() {
@@ -509,12 +514,11 @@ export function createIncomeFeature({
     if (retention) retention.innerHTML = retentionView();
     onChange();
   }
-  const dateDe = (iso) => iso.split("-").reverse().join(".");
   // Admin page "Aufbewahrung": deadlines, deletion list for consent PDFs, anonymization.
   function retentionView() {
     try {
       if (!isUnlocked())
-        return '<p class="ad-notice">Bitte den Admin-Bereich mit der Inhaber-PIN entsperren.</p>';
+        return `<p class="ad-notice">${th("income.unlock")}</p>`;
       const { pdfYears, incomeYears } = readRetention(storage),
         all = store.list(),
         day = today();
@@ -525,66 +529,64 @@ export function createIncomeFeature({
       const deleted = all.filter((r) => r.pdfDeletedAt).length,
         anonymized = all.filter((r) => r.anonymizedAt).length;
       const field = (id, label, value, help) =>
-        `<div class="ad-field"><label for="${id}">${label}</label><input id="${id}" type="number" inputmode="numeric" min="1" max="50" step="1" placeholder="keine Frist" value="${value ?? ""}"><small>${help}</small></div>`;
+        `<div class="ad-field"><label for="${id}">${label}</label><input id="${id}" type="number" inputmode="numeric" min="1" max="50" step="1" placeholder="${th("retention.noDeadline")}" value="${value ?? ""}"><small>${help}</small></div>`;
       const pdfRows = pdfDue
         .map(
           (r) =>
-            `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.customer)}</td><td>${r.source ? e(r.source) : "<em>kein Dateiname</em>"}</td><td><button class="ad-button" data-retention-deleted="${e(r.id)}" aria-label="PDF für ${e(r.customer)} als gelöscht markieren">Gelöscht</button></td></tr>`,
+            `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.customer)}</td><td>${r.source ? e(r.source) : `<em>${th("retention.noFile")}</em>`}</td><td><button class="ad-button" data-retention-deleted="${e(r.id)}" aria-label="${th("retention.markAria", { name: r.customer })}">${th("retention.deleted")}</button></td></tr>`,
         )
         .join("");
       const anonRows = anonDue
         .slice(0, 50)
         .map(
           (r) =>
-            `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.artist || "Nicht zugeordnet")}</td><td>${e(r.customer)}</td><td>${r.totalCents === null ? "Preis offen" : money(r.totalCents)}</td></tr>`,
+            `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.artist || t("common.unassigned"))}</td><td>${e(r.customer)}</td><td>${r.totalCents === null ? th("income.priceOpen") : money(r.totalCents)}</td></tr>`,
         )
         .join("");
-      return `<section class="ad-panel"><div class="ad-panel-header"><h2>Fristen</h2></div><div class="ad-panel-body">
-      <p class="ad-section-copy">Die Fristen legt das Studio selbst fest, im Zweifel mit Datenschutz- oder Steuerberatung. Die App gibt keine Fristen vor und löscht nichts von selbst. Gezählt wird ab dem Tattoo-Termin. Ohne Frist wird nichts angezeigt.</p>
-      <div class="ad-fields">${field("retention-pdf-years", "Einwilligungs-PDFs aufbewahren (Jahre)", pdfYears, "Danach erscheint das PDF in der Löschliste.")}${field("retention-income-years", "Namen in der Einnahmenliste behalten (Jahre)", incomeYears, "Danach können Name und PDF-Dateiname entfernt werden; Datum, Artist und Beträge bleiben.")}</div>
-      <div class="ad-actions-row"><button class="ad-button primary" data-retention-action="save">Fristen speichern</button></div>
-      <p class="ad-preview-note">Die Fristen gelten nur auf diesem Gerät und sind nicht Teil der Einstellungs-Sicherung.</p>
+      return `<section class="ad-panel"><div class="ad-panel-header"><h2>${th("retention.title")}</h2></div><div class="ad-panel-body">
+      <p class="ad-section-copy">${th("retention.intro")}</p>
+      <div class="ad-fields">${field("retention-pdf-years", th("retention.pdfYears"), pdfYears, th("retention.pdfYearsHelp"))}${field("retention-income-years", th("retention.incomeYears"), incomeYears, th("retention.incomeYearsHelp"))}</div>
+      <div class="ad-actions-row"><button class="ad-button primary" data-retention-action="save">${th("retention.save")}</button></div>
+      <p class="ad-preview-note">${th("retention.deviceOnly")}</p>
       </div></section>
-      <section class="ad-panel"><div class="ad-panel-header"><h2>Löschliste: Einwilligungs-PDFs</h2><small>${deleted} bereits als gelöscht markiert</small></div><div class="ad-panel-body">
+      <section class="ad-panel"><div class="ad-panel-header"><h2>${th("retention.pdfList")}</h2><small>${th("retention.markedCount", { anzahl: deleted })}</small></div><div class="ad-panel-body">
       ${
         pdfYears === null
-          ? '<p class="ad-notice">Keine Frist eingetragen. Es wird nichts zur Löschung angezeigt.</p>'
-          : `<p class="ad-section-copy">Termine vor dem ${e(dateDe(yearsBefore(day, pdfYears)))}. Die App kann Dateien in der Dateien-App nicht sehen und nicht löschen: Bitte jedes PDF dort löschen (auch in Sicherungen auf dem Mac) und erst dann hier als gelöscht markieren.</p>
-      <div class="income-table-wrap"><table class="income-table" id="retention-pdf-list"><caption>Fällige Einwilligungs-PDFs</caption><thead><tr><th>Termin</th><th>Name</th><th>PDF-Dateiname</th><th>Erledigt</th></tr></thead><tbody>${pdfRows || '<tr><td colspan="4">Keine PDFs fällig.</td></tr>'}</tbody></table></div>`
+          ? `<p class="ad-notice">${th("retention.noPdfDeadline")}</p>`
+          : `<p class="ad-section-copy">${th("retention.pdfDue", { datum: dateDe(yearsBefore(day, pdfYears)) })}</p>
+      <div class="income-table-wrap"><table class="income-table" id="retention-pdf-list"><caption>${th("retention.dueCaption")}</caption><thead><tr><th>${th("pdf.appointment")}</th><th>${th("csv.name")}</th><th>${th("retention.fileName")}</th><th>${th("retention.done")}</th></tr></thead><tbody>${pdfRows || `<tr><td colspan="4">${th("retention.noneDue")}</td></tr>`}</tbody></table></div>`
       }
       </div></section>
-      <section class="ad-panel"><div class="ad-panel-header"><h2>Einnahmenliste anonymisieren</h2><small>${anonymized} Einträge bereits anonymisiert</small></div><div class="ad-panel-body">
+      <section class="ad-panel"><div class="ad-panel-header"><h2>${th("retention.anonTitle")}</h2><small>${th("retention.anonCount", { anzahl: anonymized })}</small></div><div class="ad-panel-body">
       ${
         incomeYears === null
-          ? '<p class="ad-notice">Keine Frist eingetragen. Es wird nichts anonymisiert.</p>'
-          : `<p class="ad-section-copy">${anonDue.length} Einträge mit Termin vor dem ${e(dateDe(yearsBefore(day, incomeYears)))}. Beim Anonymisieren werden Name und PDF-Dateiname durch „${ANONYMIZED}“ bzw. leer ersetzt; Datum, Artist und Beträge bleiben für Summen erhalten. Das lässt sich nicht rückgängig machen. Ältere JSON-Sicherungen enthalten die Namen weiterhin und müssen separat gelöscht werden.</p>
+          ? `<p class="ad-notice">${th("retention.noAnonDeadline")}</p>`
+          : `<p class="ad-section-copy">${th("retention.anonDue", { anzahl: anonDue.length, datum: dateDe(yearsBefore(day, incomeYears)), platzhalter: ANONYMIZED })}</p>
       ${
         waiting
-          ? `<p class="ad-notice">${waiting} weitere Einträge warten, bis ihr PDF als gelöscht markiert ist. Bis dahin bleiben Name und Dateiname erhalten, damit das PDF in der Dateien-App auffindbar ist.</p>
-      <div class="income-table-wrap"><table class="income-table"><caption>Warten auf PDF-Löschung${waiting > 50 ? " (erste 50)" : ""}</caption><thead><tr><th>Termin</th><th>Name</th><th>PDF-Dateiname</th><th>Erledigt</th></tr></thead><tbody>${waitingRows
+          ? `<p class="ad-notice">${th("retention.waiting", { anzahl: waiting })}</p>
+      <div class="income-table-wrap"><table class="income-table"><caption>${th(waiting > 50 ? "retention.waitingCaptionFirst" : "retention.waitingCaption")}</caption><thead><tr><th>${th("pdf.appointment")}</th><th>${th("csv.name")}</th><th>${th("retention.fileName")}</th><th>${th("retention.done")}</th></tr></thead><tbody>${waitingRows
             .slice(0, 50)
             .map(
               (r) =>
-                `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.customer)}</td><td>${r.source ? e(r.source) : "<em>kein Dateiname</em>"}</td><td><button class="ad-button" data-retention-deleted="${e(r.id)}" aria-label="PDF für ${e(r.customer)} als gelöscht markieren">PDF gelöscht</button></td></tr>`,
+                `<tr><td>${e(dateDe(r.date))}</td><td>${e(r.customer)}</td><td>${r.source ? e(r.source) : `<em>${th("retention.noFile")}</em>`}</td><td><button class="ad-button" data-retention-deleted="${e(r.id)}" aria-label="${th("retention.markAria", { name: r.customer })}">${th("retention.pdfDeleted")}</button></td></tr>`,
             )
             .join("")}</tbody></table></div>`
           : ""
       }
-      ${anonRows ? `<div class="income-table-wrap"><table class="income-table"><caption>Vorschau${anonDue.length > 50 ? " (erste 50)" : ""}</caption><thead><tr><th>Termin</th><th>Artist</th><th>Name</th><th>Gesamtkosten</th></tr></thead><tbody>${anonRows}</tbody></table></div>` : ""}
-      <div class="ad-actions-row"><button class="ad-button" data-income-action="backup">Vorher alle Einnahmen als JSON sichern</button><button class="ad-button danger" data-retention-action="anonymize"${anonDue.length ? "" : " disabled"}>${anonDue.length} Einträge anonymisieren</button></div>`
+      ${anonRows ? `<div class="income-table-wrap"><table class="income-table"><caption>${th(anonDue.length > 50 ? "retention.previewFirst" : "retention.preview")}</caption><thead><tr><th>${th("pdf.appointment")}</th><th>${th("csv.artist")}</th><th>${th("csv.name")}</th><th>${th("income.colTotal")}</th></tr></thead><tbody>${anonRows}</tbody></table></div>` : ""}
+      <div class="ad-actions-row"><button class="ad-button" data-income-action="backup">${th("retention.backupFirst")}</button><button class="ad-button danger" data-retention-action="anonymize"${anonDue.length ? "" : " disabled"}>${th("retention.anonymize", { anzahl: anonDue.length })}</button></div>`
       }
       </div></section>`;
     } catch (error) {
-      return `<div class="ad-error" role="alert">Aufbewahrung nicht verfügbar: ${e(error.message)}</div>`;
+      return `<div class="ad-error" role="alert">${th("retention.unavailable", { fehler: error.message })}</div>`;
     }
   }
   // Throws if a name contains characters the PDF font cannot print.
   function reportPdf(rows, scope) {
     const missing = unsupportedChars(rows.map((r) => r.artist + r.customer).join(""));
     if (missing.length)
-      throw Error(
-        `Ein Name enthält Zeichen, die die PDF-Schrift nicht darstellen kann (${missing.join(" ")}). Bitte für diese Liste den CSV-Export verwenden.`,
-      );
+      throw Error(t("report.unsupportedChars", { zeichen: missing.join(" ") }));
     const doc = createPdf({ unit: "mm", format: "a4" });
     let y = 20;
     const line = (text, bold = false) => {
@@ -599,36 +601,49 @@ export function createIncomeFeature({
         y += 6;
       }
     };
-    line("%%reportStudio%% · Einnahmenübersicht", true);
+    line(t("report.title"), true);
     line(scope);
-    line("Gesamtpreise laut Einwilligungen; keine Zahlungseingangs- oder Gewinnabrechnung.");
+    line(t("report.basis"));
     y += 4;
     for (const r of rows) {
       line(
-        `${r.date} | ${r.artist || "Nicht zugeordnet"} | ${r.customer}${r.pdfMissing ? " | PDF fehlt" : ""}`,
+        [r.date, r.artist || t("common.unassigned"), r.customer, r.pdfMissing && t("income.pdfMissing")]
+          .filter(Boolean)
+          .join(" | "),
         true,
       );
       line(
-        `Gesamtkosten: ${r.totalCents === null ? "Preis offen" : money(r.totalCents)} | Anzahlung (nur Info): ${r.depositCents === null ? "nicht angegeben" : money(r.depositCents)}`,
+        t("report.amounts", {
+          gesamt: r.totalCents === null ? t("income.priceOpen") : money(r.totalCents),
+          anzahlung: r.depositCents === null ? t("report.notGiven") : money(r.depositCents),
+        }),
       );
       y += 3;
     }
     const s = summarizeIncome(rows);
-    line(`Summe bekannter Gesamtpreise: ${money(s.totalCents)} | ${s.open} Preise offen`, true);
+    line(t("report.sum", { summe: money(s.totalCents), anzahl: s.open }), true);
     const pages = doc.getNumberOfPages();
     for (let n = 1; n <= pages; n++) {
       doc.setPage(n);
       doc.setFontSize(8);
-      doc.text(`Vertraulich · nur für den Inhaber | Seite ${n} von ${pages}`, 19, 289);
+      doc.text(t("report.footer", { seite: n, seiten: pages }), 19, 289);
     }
     return { blob: doc.output("blob"), pages };
   }
   function report(rows) {
     const { blob, pages } = reportPdf(
       rows,
-      `Artist: ${filters.unassigned ? "Nicht zugeordnet" : filters.artist || "Alle"} | Jahr: ${filters.year || "Alle"} | Monat: ${filters.month || "Alle"}`,
+      t("report.scope", {
+        artist: filters.unassigned ? t("common.unassigned") : filters.artist || t("report.all"),
+        jahr: filters.year || t("report.all"),
+        monat: filters.month || t("report.all"),
+      }),
     );
-    showReport(blob, `Inkform_Einnahmen_${filters.year || "alle-Jahre"}_${filters.month || "alle-Monate"}.pdf`, pages);
+    showReport(
+      blob,
+      `${t("file.income")}_${filters.year || t("file.allYears")}_${filters.month || t("file.allMonths")}.pdf`,
+      pages,
+    );
   }
   document.getElementById("admin-app").addEventListener("change", (event) => {
     const key = {
@@ -655,7 +670,9 @@ export function createIncomeFeature({
         if (
           row &&
           window.confirm(
-            `Ist das PDF ${row.source ? `„${row.source}“` : `für ${row.customer}`} in der Dateien-App und in allen Sicherungen gelöscht? Die Kopie für den ZIP-Export wird dann ebenfalls gelöscht.`,
+            row.source
+              ? t("retention.confirmFile", { datei: row.source })
+              : t("retention.confirmName", { name: row.customer }),
           )
         ) {
           store.updateMany([
@@ -665,7 +682,7 @@ export function createIncomeFeature({
             },
           ]);
           refresh();
-          notify("Als gelöscht markiert.");
+          notify(t("retention.marked"));
         }
       }
       if (button.dataset.retentionAction === "save") {
@@ -674,7 +691,7 @@ export function createIncomeFeature({
           incomeYears: document.getElementById("retention-income-years").value,
         });
         refresh();
-        notify("Fristen gespeichert.");
+        notify(t("retention.saved"));
       }
       if (button.dataset.retentionAction === "anonymize") {
         const day = today(),
@@ -682,12 +699,12 @@ export function createIncomeFeature({
         if (
           rows.length &&
           window.confirm(
-            `${rows.length} Einträge anonymisieren? Name und PDF-Dateiname werden entfernt, Beträge bleiben. Das lässt sich nicht rückgängig machen. Hast du vorher eine Sicherung erstellt?`,
+            t("retention.anonQuestion", { anzahl: rows.length }),
           )
         ) {
           store.updateMany(rows.map((r) => ({ record: anonymizeRecord(r, day), expected: r.updatedAt })));
           refresh();
-          notify(`${rows.length} Einträge anonymisiert.`);
+          notify(t("retention.anonDone", { anzahl: rows.length }));
         }
       }
       if (button.dataset.incomeCopy) {
@@ -701,7 +718,7 @@ export function createIncomeFeature({
         if (
           row &&
           window.confirm(
-            `Eintrag für ${row.customer} vom ${row.date} aus der lokalen Übersicht entfernen? Das PDF in der Dateien-App bleibt erhalten, die Kopie für den ZIP-Export wird gelöscht.`,
+            t("income.removeQuestion", { name: row.customer, datum: row.date }),
           )
         ) {
           beforeRemove([row]);
@@ -718,7 +735,7 @@ export function createIncomeFeature({
             new Blob([JSON.stringify({ schemaVersion: 1, records: store.list() }, null, 2)], {
               type: "application/json",
             }),
-            `Inkform_Einnahmen_Sicherung_${today()}.json`,
+            `${t("file.incomeBackup")}_${today()}.json`,
           );
           break;
         case "import":
@@ -727,7 +744,7 @@ export function createIncomeFeature({
         case "csv":
           download(
             new Blob([incomeCsv(filtered())], { type: "text/csv;charset=utf-8" }),
-            `Inkform_Einnahmen_${filters.year || "alle"}_${filters.month || "alle"}.csv`,
+            `${t("file.income")}_${filters.year || t("file.all")}_${filters.month || t("file.all")}.csv`,
           );
           break;
         case "pdf":
@@ -760,7 +777,7 @@ export function createIncomeFeature({
       store.updateMany(
         entries.map(({ id, updatedAt }) => {
           const r = list.find((row) => row.id === id);
-          if (!r || r.pdfRemovedAt) throw Error("Ein Eintrag wurde inzwischen geändert oder entfernt. Bitte neu öffnen.");
+          if (!r || r.pdfRemovedAt) throw Error(t("income.oneChanged"));
           return { record: { ...r, pdfRemovedAt: day, updatedAt: now }, expected: updatedAt };
         }),
       );

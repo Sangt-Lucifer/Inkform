@@ -16,6 +16,7 @@
 | `schriftgroessen.mjs` | Kundenbereich auf vier iPad-Größen: Eingaben und Fließtext ≥ 16 px, nichts < 14 px, kein seitliches Scrollen; mit `INKFORM_FONT_BASELINE=<datei>` zusätzlich keine Schrift kleiner als vorher |
 | `update.mjs` | App-Update: wartet bei angefangenem Formular, übernimmt im Leerlauf ohne Neuladen und löscht die alte Version aus dem Offline-Speicher |
 | `werkstatt.mjs` | Werkstatt mit Wegwerf-Studios: Schutz (keine Knöpfe), Bauen, neues Studio, Editor (Fehler, Probe, Sperre beim Speichern), Commit, Export-Dialog, Vor-Ort-Fenster mit QR-Code, keine CSP-Fehler. Läuft nur mit Blanko. |
+| `sprachen.mjs` | Neue Sprache nur als Datei: baut die Test-Pseudosprache (`tests/lib/pseudo.mjs`, rechts nach links, gut 60 % längere Texte) neben die echten, wählt sie über den gespeicherten Sprachwert, prüft `lang`/`dir`, alle markierten Texte und Attribute und dass Formular und alle Admin-Seiten auf iPad und Smartphone nicht breiter als der Bildschirm werden. Läuft nur mit dem Beispiel-Profil; die Pseudosprache landet nie in einem echten Build. |
 | `lib.mjs` | gemeinsamer DevTools-Client |
 
 Pfade, Ports und Ausgabeordner kommen aus Umgebungsvariablen (`INKFORM_*`, gesetzt von `run.mjs`). Alle Kundendaten sind erfunden (`LOKALTEST`, `QA-SENTINEL-4892`, `LEDGER-TEST PERSON` …). Ausgaben landen in `test-results/` des jeweiligen Profils.

@@ -1,3 +1,5 @@
+import { applyTexts, t } from "./i18n.js";
+
 export const ADMIN_PIN_KEY = "inkform.admin.pin.v1";
 // Failed attempts and the lockout survive a reload, so reloading does not reset the counter.
 export const ADMIN_LOCK_KEY = "inkform.admin.lock.v1";
@@ -88,7 +90,7 @@ export function createPinLockout(storage, now = () => Date.now()) {
 }
 async function deriveAdminPinHash(pin, salt) {
   if (!globalThis.crypto?.subtle)
-    throw Error("Bitte einen aktuellen Browser mit lokaler WebCrypto-Unterstützung verwenden.");
+    throw Error(t("pin.noCrypto"));
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin), "PBKDF2", false, [
     "deriveBits",
   ]);
@@ -111,26 +113,22 @@ export function createAdminPinStore(storage) {
       !value.salt.every((n) => Number.isInteger(n) && n >= 0 && n <= 255) ||
       !/^[a-f0-9]{64}$/.test(value.hash)
     )
-      throw Error(
-        "Die lokale PIN-Konfiguration ist beschädigt. Vorhandene Daten werden nicht überschrieben. Bitte die separate Einnahmensicherung auf einem anderen Browser wiederherstellen.",
-      );
+      throw Error(t("pin.damaged"));
     return value;
   }
   return {
     configured: () => !!config(),
     async setup(pin, repeat) {
-      if (config()) throw Error("Für diesen Browser ist bereits eine PIN eingerichtet.");
-      if (/\D/.test(pin)) throw Error("Nur Ziffern 0–9 erlaubt, keine Buchstaben, Leer- oder Sonderzeichen.");
-      if (pin.length < 6) throw Error("Die PIN ist zu kurz: mindestens 6 Ziffern.");
-      if (pin.length > 12) throw Error("Die PIN ist zu lang: höchstens 12 Ziffern.");
-      if (!/^\d{6,12}$/.test(pin)) throw Error("Bitte eine PIN mit 6 bis 12 Ziffern wählen.");
-      if (pin !== repeat) throw Error("Die beiden PIN-Eingaben stimmen nicht überein.");
+      if (config()) throw Error(t("pin.exists"));
+      if (/\D/.test(pin)) throw Error(t("pin.digitsOnly"));
+      if (pin.length < 6) throw Error(t("pin.tooShort"));
+      if (pin.length > 12) throw Error(t("pin.tooLong"));
+      if (!/^\d{6,12}$/.test(pin)) throw Error(t("pin.length"));
+      if (pin !== repeat) throw Error(t("pin.mismatch"));
       const salt = [...crypto.getRandomValues(new Uint8Array(16))],
         hash = await deriveAdminPinHash(pin, salt);
       if (config())
-        throw Error(
-          "In einem anderen Fenster wurde bereits eine PIN eingerichtet. Bitte neu öffnen.",
-        );
+        throw Error(t("pin.otherWindow"));
       storage.setItem(ADMIN_PIN_KEY, JSON.stringify({ version: 1, salt, hash }));
     },
     async verify(pin) {
@@ -149,12 +147,13 @@ export function createAdminAccess({ storage, onExternalLock, now = () => Date.no
   const dialog = document.createElement("dialog");
   dialog.id = "admin-pin-dialog";
   dialog.setAttribute("aria-labelledby", "admin-pin-title");
-  dialog.innerHTML = `<div class="dialog-head"><h2 id="admin-pin-title">Studio entsperren</h2><button class="close-button" type="button" id="admin-pin-close" aria-label="Dialog schließen">×</button></div>
+  dialog.innerHTML = `<div class="dialog-head"><h2 id="admin-pin-title" data-t="completion.unlock"></h2><button class="close-button" type="button" id="admin-pin-close" data-t-aria-label="common.closeDialog">×</button></div>
   <form id="admin-pin-form" class="dialog-body" novalidate><p id="admin-pin-copy" class="ad-section-copy"></p><div class="ad-fields">
-  <div class="ad-field"><label for="admin-pin">PIN (6 bis 12 Ziffern, nur Zahlen 0–9)</label><input id="admin-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" required></div>
-  <div class="ad-field" id="admin-pin-repeat-field"><label for="admin-pin-repeat">PIN wiederholen</label><input id="admin-pin-repeat" name="repeat" type="password" inputmode="numeric" autocomplete="off" maxlength="12"></div></div>
-  <p id="admin-pin-error" class="ad-error" role="alert" hidden></p><div class="dialog-actions"><button class="primary-button" type="submit" id="admin-pin-submit">Entsperren</button></div>
-  <p class="ad-preview-note">Die PIN schützt die Admin-Oberfläche auf diesem Gerät. Sie verschlüsselt keine Browserdaten und ersetzt keine Gerätesperre. Es gibt keinen Online-Reset. Einnahmen regelmäßig separat sichern.</p></form>`;
+  <div class="ad-field"><label for="admin-pin" data-t="pin.label"></label><input id="admin-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" required></div>
+  <div class="ad-field" id="admin-pin-repeat-field"><label for="admin-pin-repeat" data-t="pin.repeat"></label><input id="admin-pin-repeat" name="repeat" type="password" inputmode="numeric" autocomplete="off" maxlength="12"></div></div>
+  <p id="admin-pin-error" class="ad-error" role="alert" hidden></p><div class="dialog-actions"><button class="primary-button" type="submit" id="admin-pin-submit" data-t="pin.unlock"></button></div>
+  <p class="ad-preview-note" data-t="pin.note"></p></form>`;
+  applyTexts(dialog);
   document.body.append(dialog);
   const form = dialog.querySelector("form"),
     errorNode = dialog.querySelector("#admin-pin-error");
@@ -171,7 +170,7 @@ export function createAdminAccess({ storage, onExternalLock, now = () => Date.no
       const digits = input.value.replace(/\D/g, "");
       if (digits === input.value) return;
       input.value = digits;
-      errorNode.textContent = "Nur Ziffern 0–9 erlaubt, keine Buchstaben, Leer- oder Sonderzeichen.";
+      errorNode.textContent = t("pin.digitsOnly");
       errorNode.hidden = false;
     });
   dialog.addEventListener("cancel", (event) => {
@@ -189,15 +188,13 @@ export function createAdminAccess({ storage, onExternalLock, now = () => Date.no
     try {
       const wait = lockout.remainingMs();
       if (wait)
-        throw Error(`Zu viele Fehlversuche. Bitte noch ${Math.ceil(wait / 1000)} Sekunden warten.`);
+        throw Error(t("pin.wait", { anzahl: Math.ceil(wait / 1000) }));
       const configured = pins.configured();
       if (configured) {
         if (!(await pins.verify(form.elements.pin.value))) {
           lockout.fail();
           throw Error(
-            lockout.remainingMs()
-              ? "PIN nicht korrekt. Zu viele Fehlversuche: Bitte 30 Sekunden warten."
-              : "PIN nicht korrekt.",
+            t(lockout.remainingMs() ? "pin.wrongLocked" : "pin.wrong"),
           );
         }
       } else await pins.setup(form.elements.pin.value, form.elements.repeat.value);
@@ -230,16 +227,10 @@ export function createAdminAccess({ storage, onExternalLock, now = () => Date.no
     errorNode.hidden = true;
     try {
       const configured = pins.configured();
-      dialog.querySelector("#admin-pin-title").textContent = configured
-        ? "Studio entsperren"
-        : "PIN bei der ersten Einrichtung festlegen";
-      dialog.querySelector("#admin-pin-copy").textContent = configured
-        ? "Nur der Inhaber darf den Admin-Bereich öffnen. Bitte die lokale PIN eingeben."
-        : "Lege als Inhaber jetzt die PIN für den gesamten Admin-Bereich fest. Gib diese PIN nicht an Kunden weiter und verwahre sie sicher.";
+      dialog.querySelector("#admin-pin-title").textContent = t(configured ? "completion.unlock" : "pin.setupTitle");
+      dialog.querySelector("#admin-pin-copy").textContent = t(configured ? "pin.copy" : "pin.setupCopy");
       dialog.querySelector("#admin-pin-repeat-field").hidden = configured;
-      dialog.querySelector("#admin-pin-submit").textContent = configured
-        ? "Entsperren"
-        : "PIN lokal speichern";
+      dialog.querySelector("#admin-pin-submit").textContent = t(configured ? "pin.unlock" : "pin.save");
     } catch (error) {
       errorNode.textContent = error.message;
       errorNode.hidden = false;

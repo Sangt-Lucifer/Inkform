@@ -7,7 +7,8 @@
 //   node scripts/build.mjs --check [...]                     fail if the output is outdated
 //
 // Shared code lives in src/. Studio-specific texts are %%token%% placeholders that are
-// filled from <profil>/profile.json. Logo, icons, manifest and owner guide come from the
+// filled from <profil>/profile.json. Interface texts come from the language files in src/sprachen/
+// (see scripts/sprachen.mjs); every file there is one language of the app. Logo, icons, manifest and owner guide come from the
 // profile folder. Nothing is fetched at runtime: every script, style and image is embedded.
 // A profile with "blank": true is the neutral edition without a studio: no owner guide, a setup
 // assistant at the first start and optional sample data.
@@ -20,6 +21,7 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { loadPdfFonts } from "./fonts.mjs";
+import { BASE_LANGUAGE, checkKeyUsage, checkLanguages, languagesForApp, loadLanguages } from "./sprachen.mjs";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
 const TOKEN = /%%(\w+)%%/g;
@@ -28,6 +30,7 @@ const TOKEN = /%%(\w+)%%/g;
 export const UNSAFE = /["`\\<>\r\n]|\$\{/;
 const TEMPLATED = [
   "src/index.html",
+  "src/i18n.js",
   "src/styles.css",
   "src/defaults.js",
   "src/income.js",
@@ -113,13 +116,31 @@ function fillTokens(source, text, name, used = new Set()) {
   });
 }
 
-export async function buildProfile(ref) {
+export const LANGUAGE_DIR = path.join(root, "src", "sprachen");
+
+// Language files of the app, checked against each other and against the code.
+export async function readLanguages(dir = LANGUAGE_DIR) {
+  const languages = await loadLanguages(dir);
+  const sources = {};
+  for (const name of [...TEMPLATED, "src/register-worker.js"])
+    sources[name] = await readFile(path.join(root, name), "utf8");
+  const errors = checkLanguages(languages);
+  if (!errors.length) errors.push(...checkKeyUsage(languages[BASE_LANGUAGE].texts, sources));
+  if (errors.length) throw new Error(`Sprachdateien in ${path.relative(root, dir) || dir}:\n${errors.join("\n")}`);
+  return languages;
+}
+
+// `languages` (a folder of language files) is for tests only; a real build reads src/sprachen/.
+export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR } = {}) {
   const profile = await loadProfile(ref);
   const id = profile.id;
   const read = (name) => readFile(path.join(root, name), "utf8");
   const used = new Set();
   const filled = {};
   for (const name of TEMPLATED) filled[name] = fillTokens(await read(name), profile.text, name, used);
+  const languages = languagesForApp(await readLanguages(languageDir), (text) =>
+    fillTokens(text, profile.text, "src/sprachen", used),
+  );
   const unused = Object.keys(profile.text).filter((key) => !used.has(key));
   if (unused.length) throw new Error(`${id}: ungenutzte Profiltexte: ${unused.join(", ")}`);
 
@@ -137,6 +158,7 @@ export async function buildProfile(ref) {
     defaults = filled["src/defaults.js"],
     income = filled["src/income.js"],
     access = filled["src/access.js"],
+    i18n = filled["src/i18n.js"],
     fonts = filled["src/pdf-fonts.js"]
       .replace("__PDF_FONT_REGULAR__", () => pdfFonts.normal)
       .replace("__PDF_FONT_BOLD__", () => pdfFonts.bold)
@@ -155,19 +177,22 @@ export async function buildProfile(ref) {
   // All modules are concatenated into one script, so their imports of each other are removed.
   const local = /^import\s*\{[^}]*\}\s*from\s*["']\.\/[\w-]+\.js["'];?\s*/gm;
   const bundledJs = [
-    defaults.replace(/^export\s+(?=const\s)/gm, ""),
-    access.replace(/^export\s+(?=(?:const|(?:async\s+)?function)\s)/gm, ""),
-    retention.replace(exported, ""),
-    income.replace(local, "").replace(/^export\s+(?=(?:const|function)\s)/gm, ""),
-    fonts.replace(exported, ""),
-    pending.replace(exported, ""),
-    consent.replace(exported, ""),
-    zip.replace(exported, ""),
-    exporter.replace(local, "").replace(exported, ""),
-    backup.replace(local, "").replace(exported, ""),
-    sample.replace(exported, ""),
-    app.replace(local, ""),
-  ].join("\n");
+    i18n.replace(exported, "") + `\nregisterLanguages(${JSON.stringify(languages)});`,
+    defaults,
+    access,
+    retention,
+    income,
+    fonts,
+    pending,
+    consent,
+    zip,
+    exporter,
+    backup,
+    sample,
+    app,
+  ]
+    .map((source) => source.replace(local, "").replace(exported, ""))
+    .join("\n");
   if (/^\s*(?:import|export)\s/m.test(bundledJs) || /__PDF_FONT_\w+__|__BLANK_EDITION__/.test(bundledJs))
     throw new Error("Bundle enthält noch Modul-Importe/-Exporte oder Schrift-Platzhalter.");
   const escapeScript = (source) => source.replace(/<\/script/gi, "<\\/script");
@@ -210,7 +235,7 @@ export async function buildProfile(ref) {
     );
   hosted = hosted.replace(
     "</body>",
-    () => `  <script data-hosted-only>\n${escapeScript(registration)}\n</script>\n</body>`,
+    () => `  <script data-hosted-only>\n${escapeScript(registration.replace(local, ""))}\n</script>\n</body>`,
   );
   // Every file the service worker caches goes into its version: a changed manifest or icon alone
   // also makes a new worker, so installed iPads pick it up.

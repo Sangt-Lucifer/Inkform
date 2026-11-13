@@ -1,5 +1,7 @@
 // Retention help (no DOM): reminders for deleting consent PDFs and anonymizing the income list.
 // The deadlines are set by the studio; without a deadline nothing is listed. Not legal advice.
+import { t } from "./i18n.js";
+
 export const RETENTION_KEY = "inkform.retention.v1";
 export const LAST_BACKUP_KEY = "inkform.backup.v1";
 export const ANONYMIZED = "anonymisiert";
@@ -10,7 +12,7 @@ function years(value) {
   if (value === null || value === undefined || value === "") return null;
   const n = typeof value === "string" ? Number(value.trim()) : value;
   if (!Number.isInteger(n) || n < 1 || n > 50)
-    throw Error("Fristen bitte als ganze Jahre zwischen 1 und 50 angeben oder leer lassen.");
+    throw Error(t("retention.invalidYears"));
   return n;
 }
 export function validateRetention(value) {

@@ -3,6 +3,7 @@
 // Not included: the PIN (the restoring device keeps its own) and an open, unconfirmed consent.
 // Copies deleted from the app on purpose stay deleted: the list of their ids travels with the
 // backup and is merged with the device's own list when restoring.
+import { t } from "./i18n.js";
 import { validateIncomeBackup } from "./income.js";
 import { validateRetention } from "./retention.js";
 import { exportable, validateExportLog, validateRemovedIds } from "./export.js";
@@ -48,26 +49,26 @@ export function createFullBackup({ settings, theme, retention, backupDays, expor
 // Checks the whole file before anything is written. validateSettings comes from the app.
 export function readFullBackup(value, validateSettings) {
   if (value?.kind !== BACKUP_KIND || value.schemaVersion !== 1)
-    throw Error("Diese Datei ist keine INKFORM-Gesamtsicherung (Version 1).");
+    throw Error(t("backup.invalid"));
   if (typeof value.createdAt !== "string" || Number.isNaN(Date.parse(value.createdAt)))
-    throw Error("Die Sicherung hat kein gültiges Erstellungsdatum.");
-  if (!["dark", "light"].includes(value.theme)) throw Error("Die Sicherung enthält kein gültiges Farbschema.");
-  if (!BACKUP_INTERVALS.includes(value.backupDays)) throw Error("Die Sicherung enthält keinen gültigen Erinnerungsabstand.");
+    throw Error(t("backup.invalidDate"));
+  if (!["dark", "light"].includes(value.theme)) throw Error(t("backup.invalidTheme"));
+  if (!BACKUP_INTERVALS.includes(value.backupDays)) throw Error(t("backup.invalidInterval"));
   const records = validateIncomeBackup(value.income),
     removed = validateRemovedIds(value.pdfRemoved ?? []),
     allowed = new Set(records.filter((r) => exportable(r) && !removed.includes(r.id)).map((r) => r.id)),
     seen = new Set();
-  if (!Array.isArray(value.pdfs)) throw Error("Die Sicherung enthält keine PDF-Liste.");
+  if (!Array.isArray(value.pdfs)) throw Error(t("backup.noPdfs"));
   const pdfs = value.pdfs.map((entry) => {
     if (!allowed.has(entry?.id) || seen.has(entry.id))
-      throw Error("Die Sicherung enthält ein PDF ohne passenden Einnahmeneintrag.");
+      throw Error(t("backup.orphanPdf"));
     seen.add(entry.id);
     let bytes;
     try {
       bytes = typeof entry.pdf === "string" && /^[A-Za-z0-9+/]*={0,2}$/.test(entry.pdf) ? fromBase64(entry.pdf) : null;
     } catch (_) {}
     if (!bytes || String.fromCharCode(...bytes.subarray(0, 5)) !== "%PDF-")
-      throw Error("Die Sicherung enthält ein beschädigtes PDF.");
+      throw Error(t("backup.damagedPdf"));
     return { id: entry.id, bytes };
   });
   return {

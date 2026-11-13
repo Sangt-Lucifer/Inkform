@@ -2,6 +2,7 @@
 // The PDFs live in their own IndexedDB database, keyed by the income entry's id; a PDF is kept only
 // while its entry may still have a PDF (see exportable), sync() removes all others.
 import { fileSlug } from "./consent.js";
+import { applyTexts, language, languageCodes, t, th, translator } from "./i18n.js";
 import { incomeCsv } from "./income.js";
 import { pdfMayExist } from "./retention.js";
 import { createZip } from "./zip.js";
@@ -13,14 +14,14 @@ export const EXPORT_LOG_KEY = "inkform.export.v1";
 export const PDF_REMOVED_KEY = "inkform.pdf-removed.v1";
 // From this total size the export page suggests deleting copies of checked periods.
 export const COPY_HINT_BYTES = 200 * 1024 * 1024;
-export const EXPORT_TYPES = { all: "Alles", consents: "Nur Einwilligungen", income: "Nur Einnahmen" };
+export const EXPORT_TYPES = { all: "export.type.all", consents: "export.type.consents", income: "export.type.income" };
 
 // Calendar day YYYY-MM-DD that really exists (no 30 February).
 function checkedDay(text, label) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text ?? ""),
     d = m && new Date(Date.UTC(+m[1], m[2] - 1, +m[3]));
   if (!d || d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== m[2] - 1 || d.getUTCDate() !== +m[3])
-    throw Error(`${label}: Bitte ein gültiges Datum wählen.`);
+    throw Error(t("export.invalidDay", { feld: label }));
   return text;
 }
 
@@ -28,22 +29,22 @@ function checkedDay(text, label) {
 // of the device never moves an entry into another period.
 export function exportPeriod({ kind, month = "", year = "", from = "", to = "" }) {
   if (kind === "month") {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw Error("Bitte Monat und Jahr wählen.");
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw Error(t("export.chooseMonth"));
     const [y, m] = month.split("-").map(Number),
       last = new Date(Date.UTC(y, m, 0)).getUTCDate();
     return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}`, label: month };
   }
   if (kind === "year") {
-    if (!/^\d{4}$/.test(String(year))) throw Error("Bitte ein Jahr mit vier Ziffern angeben.");
+    if (!/^\d{4}$/.test(String(year))) throw Error(t("export.chooseYear"));
     return { from: `${year}-01-01`, to: `${year}-12-31`, label: String(year) };
   }
   if (kind === "range") {
-    checkedDay(from, "Von");
-    checkedDay(to, "Bis");
-    if (from > to) throw Error("„Von“ darf nicht nach „Bis“ liegen.");
+    checkedDay(from, t("export.from"));
+    checkedDay(to, t("export.to"));
+    if (from > to) throw Error(t("export.fromAfterTo"));
     return { from, to, label: `${from}_bis_${to}` };
   }
-  throw Error("Unbekannter Zeitraum.");
+  throw Error(t("export.unknownPeriod"));
 }
 
 export const previousMonth = (today) => {
@@ -56,7 +57,7 @@ export const exportable = (r) => pdfMayExist(r) && !r.anonymizedAt && !r.pdfRemo
 
 export function validateRemovedIds(value) {
   if (!Array.isArray(value) || value.length > 100000 || value.some((id) => typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(id)))
-    throw Error("Ungültige Liste gelöschter PDF-Kopien.");
+    throw Error(t("export.invalidRemoved"));
   return [...new Set(value)];
 }
 export function readRemovedIds(storage) {
@@ -66,18 +67,23 @@ export function addRemovedIds(storage, ids) {
   storage.setItem(PDF_REMOVED_KEY, JSON.stringify(validateRemovedIds([...readRemovedIds(storage), ...ids])));
 }
 
-const GENERATED = /^Tattoo_Einwilligung_(.+)_\d{4}-\d{2}-\d{2}_\d{6}_[A-Z0-9]{4}\.pdf$/u;
+// Generated PDF names start with the file name of any language the app has.
+const generated = () => {
+  const prefixes = new Set(languageCodes().map((code) => translator(code).t("file.consent")));
+  const alternatives = [...prefixes].map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  return new RegExp(`^(?:${alternatives})_(.+)_\\d{4}-\\d{2}-\\d{2}_\\d{6}_[A-Z0-9]{4}\\.pdf$`, "u");
+};
 // "JJJJ-MM-TT_Nachname_Vorname.pdf": the name part of the generated PDF name (as signed), otherwise
 // the income entry's "Vorname Nachname".
 export function consentFileName(record) {
   const words = record.customer.trim().split(/\s+/),
-    name = record.source.normalize("NFC").match(GENERATED)?.[1] ?? [words.at(-1), ...words.slice(0, -1)].join("_");
-  return `${record.date}_${fileSlug(name) || "Unbekannt"}.pdf`;
+    name = record.source.normalize("NFC").match(generated())?.[1] ?? [words.at(-1), ...words.slice(0, -1)].join("_");
+  return `${record.date}_${fileSlug(name) || t("file.unknown")}.pdf`;
 }
 
 // File systems may treat names case-insensitively and in any Unicode normalization (APFS).
 export function uniqueNames(names) {
-  const key = (name) => name.normalize("NFC").toLocaleLowerCase("de-DE"),
+  const key = (name) => name.normalize("NFC").toLowerCase(),
     seen = new Set();
   return names.map((name) => {
     const dot = name.lastIndexOf(".");
@@ -92,7 +98,7 @@ export function uniqueNames(names) {
 export function exportPlan(records, archivedIds, period, type) {
   const inPeriod = records
     .filter((r) => r.date >= period.from && r.date <= period.to)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.customer.localeCompare(b.customer, "de") || a.id.localeCompare(b.id));
+    .sort((a, b) => a.date.localeCompare(b.date) || a.customer.localeCompare(b.customer, language().locale) || a.id.localeCompare(b.id));
   const consents = type === "income" ? [] : inPeriod.filter((r) => exportable(r) && archivedIds.has(r.id)),
     names = uniqueNames(consents.map(consentFileName));
   return {
@@ -105,10 +111,10 @@ export function exportPlan(records, archivedIds, period, type) {
 
 // Saved ZIP files: { from, to, type, at }. Used for the reminder about months not yet exported.
 export function validateExportLog(value) {
-  if (!Array.isArray(value) || value.length > 1000) throw Error("Ungültiges Export-Protokoll.");
+  if (!Array.isArray(value) || value.length > 1000) throw Error(t("export.invalidLog"));
   return value.map((entry) => {
     if (!entry || typeof entry.at !== "string" || !Object.hasOwn(EXPORT_TYPES, entry.type))
-      throw Error("Ungültiger Eintrag im Export-Protokoll.");
+      throw Error(t("export.invalidLogEntry"));
     const { from, to } = exportPeriod({ kind: "range", from: entry.from, to: entry.to });
     return { from, to, type: entry.type, at: entry.at };
   });
@@ -133,7 +139,7 @@ export function unexportedMonths(records, archivedIds, log, today) {
 
 export function formatSize(bytes) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
-  return `${(bytes / 1024 / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB`;
+  return `${language().number(bytes / 1024 / 1024, { maximumFractionDigits: 1 })} MB`;
 }
 
 export function createExportFeature({
@@ -151,7 +157,7 @@ export function createExportFeature({
   today,
 }) {
   const e = escape,
-    dateDe = (iso) => iso.split("-").reverse().join(".");
+    dateDe = (iso) => language().date(iso, { day: "2-digit", month: "2-digit", year: "numeric" });
   const state = {
     kind: "month",
     month: previousMonth(today()),
@@ -171,8 +177,8 @@ export function createExportFeature({
       return new Set(records().filter((r) => exportable(r) && !removed.has(r.id)).map((r) => r.id));
     },
     allowed = (id) => allowedIds().has(id),
-    periodText = (period) => `${dateDe(period.from)} bis ${dateDe(period.to)}`,
-    copiesText = (n) => `${n} ${n === 1 ? "PDF-Kopie" : "PDF-Kopien"}`;
+    periodText = (period) => t("export.period", { von: dateDe(period.from), bis: dateDe(period.to) }),
+    copiesText = (n) => t("export.copies", { anzahl: n });
 
   async function prepare() {
     const period = exportPeriod(state),
@@ -191,10 +197,10 @@ export function createExportFeature({
     if (plan.income.length) {
       const base = `Einnahmen/Einnahmen_${period.label}`;
       try {
-        const pdf = incomeReport(plan.income, `Zeitraum: ${dateDe(period.from)} bis ${dateDe(period.to)}`);
+        const pdf = incomeReport(plan.income, t("export.reportScope", { zeitraum: periodText(period) }));
         files.push({ name: `${base}.pdf`, data: new Uint8Array(await pdf.arrayBuffer()) });
       } catch (error) {
-        note = ` Einnahmenübersicht nur als CSV: ${error.message}`;
+        note = t("export.csvOnly", { fehler: error.message });
       }
       files.push({ name: `${base}.csv`, data: new TextEncoder().encode(incomeCsv(plan.income)) });
     }
@@ -215,24 +221,20 @@ export function createExportFeature({
   }
 
   function summary({ files, consents, withoutPdf, removed, note }) {
-    const marked = removed ? ` Davon ${removed} mit dem Vermerk „PDF nicht mehr in der App“.` : "";
     if (!files.length)
-      return (
-        "Im gewählten Zeitraum gibt es keine Dokumente. Es wird keine ZIP-Datei erstellt." +
-        (removed ? ` ${removed} ${removed === 1 ? "Eintrag hat" : "Einträge haben"} den Vermerk „PDF nicht mehr in der App“.` : "")
-      );
+      return [t("export.empty"), removed && t("export.emptyRemoved", { anzahl: removed })].filter(Boolean).join(" ");
     const pdfs = files.filter((f) => f.name.endsWith(".pdf")).length,
       csv = files.length - pdfs,
       size = files.reduce((sum, f) => sum + f.data.length, 0);
-    return (
-      `${pdfs} ${pdfs === 1 ? "PDF" : "PDFs"}${csv ? " und 1 CSV" : ""}, ${formatSize(size)}. ` +
-      `Davon ${consents} ${consents === 1 ? "Einwilligung" : "Einwilligungen"}.` +
-      (withoutPdf
-        ? ` ${withoutPdf} ${withoutPdf === 1 ? "Eintrag" : "Einträge"} im Zeitraum ohne PDF in der App (gelöscht, „PDF fehlt“, anonymisiert, Kopie aus der App gelöscht oder vor diesem Update abgelegt).`
-        : "") +
-      marked +
-      note
-    );
+    return [
+      t(csv ? "export.filesCsv" : "export.files", { anzahl: pdfs, groesse: formatSize(size) }),
+      t("export.consentCount", { anzahl: consents }),
+      withoutPdf && t("export.withoutPdf", { anzahl: withoutPdf }),
+      removed && t("export.removed", { anzahl: removed }),
+      note,
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
 
   async function preview() {
@@ -244,7 +246,7 @@ export function createExportFeature({
     button.disabled = true;
     $("export-delete").disabled = true;
     host.classList.remove("ad-warn");
-    host.textContent = "Vorschau wird berechnet …";
+    host.textContent = t("export.computing");
     try {
       const result = await prepare();
       if (current !== run) return;
@@ -254,10 +256,10 @@ export function createExportFeature({
       button.disabled = !result.files.length;
       $("export-delete").disabled = !result.copies.length;
       $("export-delete").textContent = result.copies.length
-        ? `${copiesText(result.copies.length)} dieses Zeitraums aus der App löschen …`
+        ? t("export.deletePeriod", { anzahl: result.copies.length })
         : result.type === "income"
-          ? "Zum Löschen „Alles“ oder „Nur Einwilligungen“ wählen"
-          : "Keine PDF-Kopien in diesem Zeitraum";
+          ? t("export.deleteChooseType")
+          : t("export.noCopies");
     } catch (error) {
       if (current !== run) return;
       host.textContent = error.message;
@@ -271,7 +273,7 @@ export function createExportFeature({
       status = $("export-status");
     if (!ready?.files.length || sharing) return;
     if (JSON.stringify(records()) !== ready.basis) {
-      notify("Die Einträge haben sich geändert. Bitte die neue Vorschau prüfen.");
+      notify(t("export.changed"));
       preview();
       return;
     }
@@ -283,48 +285,48 @@ export function createExportFeature({
           logExport({ from: ready.period.from, to: ready.period.to, type: ready.type, at: new Date().toISOString() });
           status.textContent =
             way === "download"
-              ? `${file.name} an den Browser übergeben. Prüfe die Datei in der Dateien-App im Downloadordner.`
-              : `Systemdialog abgeschlossen. Prüfe in der Dateien-App, ob ${file.name} im gewählten Ordner liegt.`;
+              ? t("export.downloaded", { datei: file.name })
+              : t("export.shared", { datei: file.name });
           if (ready.copies.length) {
             offered = { entries: ready.copyEntries, period: ready.period, bytes: ready.copyBytes, zip: file.name };
-            $("export-offer-text").textContent = `Die ${ready.copies.length} PDFs dieses Zeitraums jetzt aus der App löschen? Das spart Speicher auf dem iPad. Vorher die ZIP-Datei prüfen; „Später löschen“ ist jederzeit möglich, ohne dass etwas verloren geht.`;
+            $("export-offer-text").textContent = t("export.offer", { anzahl: ready.copies.length });
             $("export-offer").hidden = false;
           }
         },
         (error) =>
           (status.textContent =
             error.name === "AbortError"
-              ? "Speichern abgebrochen. Über „ZIP erstellen und sichern“ erneut versuchen."
-              : "Der Systemdialog konnte nicht geöffnet werden. Bitte erneut versuchen."),
+              ? t("export.aborted")
+              : t("export.dialogFailed")),
       )
       .finally(() => (sharing = false));
   }
 
   function view() {
-    if (!isUnlocked()) return '<p class="ad-notice">Bitte den Admin-Bereich mit der Inhaber-PIN entsperren.</p>';
+    if (!isUnlocked()) return `<p class="ad-notice">${th("income.unlock")}</p>`;
     const option = (value, label, selected) =>
       `<option value="${e(value)}"${value === selected ? " selected" : ""}>${e(label)}</option>`;
     const field = (kind, html) => `<label data-export-for="${kind}"${state.kind === kind ? "" : " hidden"}>${html}</label>`;
-    return `<section class="ad-panel"><div class="ad-panel-header"><h2>ZIP-Datei nach Zeitraum</h2></div><div class="ad-panel-body">
-      <p class="ad-section-copy">Enthält die Einwilligungs-PDFs, die auf diesem Gerät abgelegt wurden, in „Einwilligungen/“ und die Einnahmenübersicht als PDF und CSV in „Einnahmen/“. Maßgeblich ist das Termindatum. Einwilligungs-PDFs, die als gelöscht markiert, als „PDF fehlt“ gebucht, entfernt oder anonymisiert sind, sind nicht enthalten. Die Einnahmenübersicht enthält wie die Einnahmenliste alle Einträge des Zeitraums; Namen entfallen erst beim Anonymisieren.</p>
+    return `<section class="ad-panel"><div class="ad-panel-header"><h2>${th("export.zipTitle")}</h2></div><div class="ad-panel-body">
+      <p class="ad-section-copy">${th("export.intro")}</p>
       <div class="income-filters">
-      <label>Zeitraum<select id="export-kind">${option("month", "Ein Monat", state.kind)}${option("year", "Ein Jahr", state.kind)}${option("range", "Von – bis", state.kind)}</select></label>
-      ${field("month", `Monat<input id="export-month" type="month" value="${e(state.month)}">`)}
-      ${field("year", `Jahr<input id="export-year" type="number" inputmode="numeric" min="2000" max="2100" value="${e(state.year)}">`)}
-      ${field("range", `Von<input id="export-from" type="date" value="${e(state.from)}">`)}
-      ${field("range", `Bis<input id="export-to" type="date" value="${e(state.to)}">`)}
-      <label>Dokumente<select id="export-type">${Object.entries(EXPORT_TYPES)
-        .map(([value, label]) => option(value, label, state.type))
+      <label>${th("export.periodLabel")}<select id="export-kind">${option("month", t("export.kind.month"), state.kind)}${option("year", t("export.kind.year"), state.kind)}${option("range", t("export.kind.range"), state.kind)}</select></label>
+      ${field("month", `${th("income.month")}<input id="export-month" type="month" value="${e(state.month)}">`)}
+      ${field("year", `${th("income.year")}<input id="export-year" type="number" inputmode="numeric" min="2000" max="2100" value="${e(state.year)}">`)}
+      ${field("range", `${th("export.from")}<input id="export-from" type="date" value="${e(state.from)}">`)}
+      ${field("range", `${th("export.to")}<input id="export-to" type="date" value="${e(state.to)}">`)}
+      <label>${th("export.documents")}<select id="export-type">${Object.entries(EXPORT_TYPES)
+        .map(([value, label]) => option(value, t(label), state.type))
         .join("")}</select></label></div>
       <p id="export-preview" class="ad-section-copy" role="status" aria-live="polite"></p>
-      <div class="ad-actions-row"><button class="ad-button primary" type="button" id="export-save" disabled>ZIP erstellen und sichern</button></div>
+      <div class="ad-actions-row"><button class="ad-button primary" type="button" id="export-save" disabled>${th("export.save")}</button></div>
       <p id="export-status" class="ad-preview-note" role="status"></p>
-      <div id="export-offer" class="ad-notice" hidden><p id="export-offer-text"></p><div class="ad-actions-row"><button class="ad-button danger" type="button" id="export-offer-delete">Prüfen und löschen …</button><button class="ad-button" type="button" id="export-offer-later">Später löschen</button></div></div>
+      <div id="export-offer" class="ad-notice" hidden><p id="export-offer-text"></p><div class="ad-actions-row"><button class="ad-button danger" type="button" id="export-offer-delete">${th("export.checkDelete")}</button><button class="ad-button" type="button" id="export-offer-later">${th("export.later")}</button></div></div>
       </div></section>
-      <section class="ad-panel"><div class="ad-panel-header"><h2>PDF-Kopien in der App</h2></div><div class="ad-panel-body">
-      <p id="copies-usage" class="ad-section-copy" role="status">Speicher wird berechnet …</p>
-      <p class="ad-section-copy">Gelöscht werden hier nur die Kopien im Speicher dieser App. PDFs in der Dateien-App, auf dem Mac, auf USB-Sticks oder in ZIP-Dateien werden nie berührt. Die Einträge in der Einnahmenliste bleiben vollständig und bekommen den Vermerk „PDF nicht mehr in der App“. Diese PDFs sind danach in keinem ZIP-Export mehr enthalten. Gelöscht wird nur, wenn du es selbst auslöst.</p>
-      <div class="ad-actions-row"><button class="ad-button danger" type="button" id="export-delete" disabled>PDF-Kopien dieses Zeitraums aus der App löschen …</button></div>
+      <section class="ad-panel"><div class="ad-panel-header"><h2>${th("export.copiesTitle")}</h2></div><div class="ad-panel-body">
+      <p id="copies-usage" class="ad-section-copy" role="status">${th("export.usageComputing")}</p>
+      <p class="ad-section-copy">${th("export.copiesIntro")}</p>
+      <div class="ad-actions-row"><button class="ad-button danger" type="button" id="export-delete" disabled>${th("export.deleteButton")}</button></div>
       </div></section>`;
   }
 
@@ -336,14 +338,15 @@ export function createExportFeature({
       const ok = allowedIds(),
         sizes = [...(await archive.sizes())].filter(([id]) => ok.has(id)),
         bytes = sizes.reduce((sum, [, size]) => sum + size, 0);
-      host.textContent = `${copiesText(sizes.length)} in der App, zusammen ${sizes.length ? formatSize(bytes) : "0 KB"}.${
-        bytes >= COPY_HINT_BYTES
-          ? " Das ist viel Speicher: Zeiträume, die als ZIP gesichert und geprüft sind, können aus der App gelöscht werden."
-          : ""
-      }`;
+      host.textContent = [
+        t("export.usage", { anzahl: sizes.length, groesse: sizes.length ? formatSize(bytes) : "0 KB" }),
+        bytes >= COPY_HINT_BYTES && t("export.usageHigh"),
+      ]
+        .filter(Boolean)
+        .join(" ");
       host.classList.toggle("ad-warn", bytes >= COPY_HINT_BYTES);
     } catch (error) {
-      host.textContent = "Speicher nicht lesbar: " + error.message;
+      host.textContent = t("export.usageFailed", { fehler: error.message });
     }
   }
 
@@ -351,29 +354,35 @@ export function createExportFeature({
   const dialog = document.createElement("dialog");
   dialog.id = "copy-delete-dialog";
   dialog.setAttribute("aria-labelledby", "copy-delete-title");
-  dialog.innerHTML = `<div class="dialog-head"><h2 id="copy-delete-title">PDF-Kopien aus der App löschen</h2><button class="close-button" type="button" data-copy-later aria-label="Dialog schließen">×</button></div>
+  dialog.innerHTML = `<div class="dialog-head"><h2 id="copy-delete-title" data-t="export.dialogTitle"></h2><button class="close-button" type="button" data-copy-later data-t-aria-label="common.closeDialog">×</button></div>
     <div class="dialog-body"><p id="copy-delete-summary" class="ad-section-copy"></p>
-    <p id="copy-delete-never" class="ad-error" hidden>Dieser Zeitraum wurde noch nie als ZIP-Datei gesichert. Bitte zuerst eine ZIP-Datei erstellen, sichern und prüfen.</p>
-    <p class="ad-error">Gelöschte PDFs sind aus der App für immer weg und lassen sich nicht wiederherstellen. Beim Speichern können Fehler passieren. Prüfe deshalb vorher die ZIP-Datei.</p>
-    <ol class="ad-checklist"><li id="copy-delete-step-open">Die ZIP-Datei in der Dateien-App öffnen; ein Tippen entpackt sie in einen Ordner.</li><li id="copy-delete-step-count"></li><li>Ein oder zwei PDFs stichprobenartig öffnen und prüfen, ob sie vollständig und lesbar sind.</li></ol>
-    <p class="ad-preview-note">Nur die Kopien in dieser App werden gelöscht. PDFs in der Dateien-App, auf dem Mac, auf USB-Sticks und in ZIP-Dateien bleiben unberührt. Die Einträge in der Einnahmenliste bleiben vollständig.</p>
-    <label class="income-check"><input type="checkbox" id="copy-delete-checked"> Ich habe die ZIP-Datei geöffnet und geprüft</label>
-    <div class="dialog-actions"><button class="secondary-button" type="button" data-copy-later>Später löschen</button><button class="primary-button" type="button" id="copy-delete-confirm" disabled></button></div></div>`;
+    <p id="copy-delete-never" class="ad-error" hidden data-t="export.neverSaved"></p>
+    <p class="ad-error" data-t="export.dialogWarning"></p>
+    <ol class="ad-checklist"><li id="copy-delete-step-open"></li><li id="copy-delete-step-count"></li><li data-t="export.stepSample"></li></ol>
+    <p class="ad-preview-note" data-t="export.dialogNote"></p>
+    <label class="income-check"><input type="checkbox" id="copy-delete-checked"> <span data-t="export.checked"></span></label>
+    <div class="dialog-actions"><button class="secondary-button" type="button" data-copy-later data-t="export.later"></button><button class="primary-button" type="button" id="copy-delete-confirm" disabled></button></div></div>`;
+  applyTexts(dialog);
   document.body.append(dialog);
   let pending = null,
     offered = null;
   function openDelete(target) {
     pending = target;
     const n = target.entries.length;
-    $("copy-delete-summary").textContent = `${copiesText(n)} für ${periodText(target.period)}, zusammen ${formatSize(target.bytes)}.`;
+    applyTexts(dialog);
+    $("copy-delete-summary").textContent = t("export.dialogSummary", {
+      kopien: copiesText(n),
+      zeitraum: periodText(target.period),
+      groesse: formatSize(target.bytes),
+    });
     $("copy-delete-never").hidden = periodExported(exportLog(), target.period);
-    $("copy-delete-step-count").textContent = `Im Ordner „Einwilligungen“ die PDFs zählen: Es müssen genau ${n} sein.`;
+    $("copy-delete-step-count").textContent = t("export.stepCount", { anzahl: n });
     $("copy-delete-step-open").textContent = target.zip
-      ? `Die ZIP-Datei „${target.zip}“ in der Dateien-App öffnen; ein Tippen entpackt sie in einen Ordner.`
-      : "Die ZIP-Datei dieses Zeitraums in der Dateien-App öffnen; ein Tippen entpackt sie in einen Ordner.";
+      ? t("export.stepOpenFile", { datei: target.zip })
+      : t("export.stepOpen");
     $("copy-delete-checked").checked = false;
     $("copy-delete-confirm").disabled = true;
-    $("copy-delete-confirm").textContent = `${copiesText(n)} löschen`;
+    $("copy-delete-confirm").textContent = t("export.deleteCount", { anzahl: n });
     dialog.showModal();
   }
   dialog.addEventListener("change", (event) => {
@@ -388,7 +397,7 @@ export function createExportFeature({
     if (!event.target.closest("#copy-delete-confirm") || !pending || !$("copy-delete-checked").checked || !isUnlocked()) return;
     const target = pending,
       n = target.entries.length;
-    if (!window.confirm(`Letzte Rückfrage: ${copiesText(n)} für ${periodText(target.period)} endgültig aus der App löschen?`)) return;
+    if (!window.confirm(t("export.lastQuestion", { kopien: copiesText(n), zeitraum: periodText(target.period) }))) return;
     pending = null;
     dialog.close();
     // Only exactly what was confirmed: every entry unchanged, still in the period, copy still kept.
@@ -399,15 +408,15 @@ export function createExportFeature({
       return r && r.updatedAt === updatedAt && r.date >= target.period.from && r.date <= target.period.to && ok.has(id);
     });
     try {
-      if (!unchanged) throw Error("Die Einträge haben sich inzwischen geändert. Es wurde nichts gelöscht; bitte die Vorschau neu prüfen.");
+      if (!unchanged) throw Error(t("export.changedNothingDeleted"));
       await removeCopies(target.entries);
-      notify(`${copiesText(n)} aus der App gelöscht. Die Einträge in der Einnahmenliste bleiben erhalten.`);
+      notify(t("export.deleted", { kopien: copiesText(n) }));
       if (offered === target) {
         offered = null;
         $("export-offer").hidden = true;
       }
     } catch (error) {
-      notify("PDF-Kopien nicht gelöscht: " + error.message);
+      notify(t("export.deleteFailed", { fehler: error.message }));
     }
     preview();
     usage();
