@@ -7,7 +7,7 @@ import { cp, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { root } from "../scripts/build.mjs";
-import { summarizeBrowser, summarizeBuild, summarizeTests, testFileArgs } from "../werkstatt/runs.mjs";
+import { summarizeBrowser, summarizeBuild, summarizeTests, TEST_ARGS, testFileArgs } from "../werkstatt/runs.mjs";
 import { listStudios } from "../werkstatt/status.mjs";
 import { startWerkstatt } from "../werkstatt/server.mjs";
 import { snapshot } from "./lib/werkstatt.mjs";
@@ -162,6 +162,11 @@ test("test files are passed relative to the core (folder names with [brackets] a
   const args = await testFileArgs();
   assert.ok(args.length >= 10);
   assert.ok(args.every((a) => /^tests\/[\w.-]+\.test\.mjs$/.test(a)), args.join());
+});
+
+test("the tests run with the same options as npm test, including the language setup", async () => {
+  const script = JSON.parse(await readFile(path.join(root, "package.json"), "utf8")).scripts.test;
+  assert.equal(script, `node ${TEST_ARGS.join(" ")} tests/*.test.mjs`);
 });
 
 // ---------- concurrent runs and read-only Git ----------

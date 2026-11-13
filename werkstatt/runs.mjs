@@ -59,9 +59,12 @@ export function summarizeBrowser(output, code) {
   };
 }
 
+export const TEST_ARGS = ["--import", "./tests/lib/sprachen.mjs", "--test", "--test-concurrency=1", "--test-timeout=60000"];
+
 const STEPS = {
   build: (ref) => ({ args: [path.join(root, "scripts/build.mjs"), "--profile", ref], summarize: summarizeBuild }),
-  // npm test: every *.test.mjs, leak tests across all profiles (they only read other studios).
+  // Same as npm test: every *.test.mjs with the language setup, leak tests across all profiles
+  // (they only read other studios).
   test: () => ({ glob: true, summarize: summarizeTests }),
   browser: (ref) => ({ args: [path.join(root, "tests/browser/run.mjs"), "--profile", ref], summarize: summarizeBrowser }),
 };
@@ -86,7 +89,7 @@ export function createRunner({ stateDir, env = process.env, fs = { mkdir, writeF
   // Errors before the process starts (e.g. reading the test list) reject and end the run as red.
   async function step(kind, ref, record) {
     const spec = STEPS[kind](ref);
-    const args = spec.glob ? ["--test", "--test-timeout=60000", ...(await listTests())] : spec.args;
+    const args = spec.glob ? [...TEST_ARGS, ...(await listTests())] : spec.args;
     return new Promise((resolve) => {
       record.log += `\n▶ ${KINDS[kind].label}\n`;
       const child = spawn(process.execPath, args, { cwd: root, env: { ...env, FORCE_COLOR: "0" } });
