@@ -3047,3 +3047,11 @@ html[data-theme="dark"] dialog::backdrop {
 .backup-restore strong {
   font-size: 12px;
 }
+.logo-setting {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+.logo-setting .ad-section-copy {
+  margin-top: 0;
+}

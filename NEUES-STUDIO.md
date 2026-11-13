@@ -21,7 +21,7 @@ Knopf „Neues Studio“, dann Kennung und Name eingeben. Die Kennung hat 3 bis 
 
 - **Kennzeichen:** alles, woran man das Studio erkennt, also Name in allen Schreibweisen, Inhaber, Adresse, E-Mail, Website und Social-Media-Namen. Die Probe zeigt, wo ein Kennzeichen im Build steht. Zu allgemeine Wörter, die auch im Beispiel oder einem anderen Studio vorkommen, werden abgelehnt.
 - **Texte:** Alle Texte ersetzen; keiner darf noch auf das Musterstudio verweisen. Aufbewahrung, Zugriff und Aufsichtsbehörde müssen dem echten Ablauf entsprechen und rechtlich geprüft sein.
-- **Anleitung, Logo, Manifest:** Das Logo ist ein quadratisches PNG; die Icons entstehen daraus.
+- **Anleitung, Logo, Manifest:** Das Logo ist ein quadratisches PNG; die Icons entstehen daraus. Es ist das eingebaute Logo. In der App kann der Inhaber unter „Studio & Kontakt“ ein eigenes hochladen, das in der Gesamtsicherung mitreist; Home-Bildschirm-Symbol und Manifest bleiben die des Profils.
 
 Gespeichert wird erst, wenn die Prüfung keinen Fehler mehr meldet. Das Anleitungs-PDF erzeugt der Editor nicht. Bis es neu erzeugt ist (siehe README, „Anleitung als PDF“), bleibt der Leak-Test für das Studio rot.
 

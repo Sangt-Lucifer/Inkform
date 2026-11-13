@@ -10,7 +10,7 @@ import { HELPERS, ORIGIN, connect } from "./lib.mjs";
 const { cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors } = await connect();
 await cmd("Emulation.setDeviceMetricsOverride", { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
 const reset = await cmd("Page.addScriptToEvaluateOnNewDocument", {
-  source: `try{localStorage.clear();sessionStorage.clear();indexedDB.deleteDatabase('inkform-pending');indexedDB.deleteDatabase('inkform-archive')}catch(_){}`,
+  source: `try{localStorage.clear();sessionStorage.clear();indexedDB.deleteDatabase('inkform-pending');indexedDB.deleteDatabase('inkform-archive');indexedDB.deleteDatabase('inkform-logo')}catch(_){}`,
 });
 await navigate(ORIGIN + "/index.html");
 await cmd("Page.removeScriptToEvaluateOnNewDocument", { identifier: reset.identifier });
@@ -41,6 +41,9 @@ await until(`adminAccess.isUnlocked() && adminPage==='setup' && !!document.getEl
 
 // Setup assistant ---------------------------------------------------------------------------
 check("Nach der PIN öffnet der Einrichtungsassistent, Felder leer", await ev(`document.getElementById('admin-page-title').textContent==='Einrichtung'&&['name','contact','address','location'].every(k=>document.getElementById('admin-studio-'+k).value==='')`));
+await ev(`(async()=>{const c=document.createElement('canvas');c.width=c.height=64;c.getContext('2d').fillRect(8,8,48,48);const b=await new Promise(r=>c.toBlob(r,'image/png'));const dt=new DataTransfer();dt.items.add(new File([b],'logo.png',{type:'image/png'}));const i=document.getElementById('logo-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
+await until(`document.querySelector('.studio-logo').src.startsWith('blob:')`);
+check("Logo schon im Assistenten hochladbar, gilt sofort", await ev(`adminPage==='setup'&&!!document.querySelector('[data-admin-action="logo-remove"]')&&document.querySelector('.ad-brand .studio-logo').src.startsWith('blob:')`));
 await screenshot("blanko-einrichtung");
 await ev(`openAdminAuthorized('export')`);
 check("Vor der Einrichtung führt jede Admin-Seite zum Assistenten", await ev(`adminPage==='setup'`));

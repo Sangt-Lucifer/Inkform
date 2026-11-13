@@ -3,6 +3,8 @@
 //   - the backup holds settings, theme, deadlines, income, export log, interval and PDFs
 //   - restore: cancel and damaged files change nothing; a confirmed restore replaces everything
 //     and keeps the PIN
+//   - own logo: shrunk on upload, kept across restarts, part of the backup; an older backup
+//     without a logo leaves it in place
 // Synthetic test data only.
 import { writeFile } from "node:fs/promises";
 import { HELPERS, OUT, ORIGIN, connect } from "./lib.mjs";
@@ -10,7 +12,7 @@ import { HELPERS, OUT, ORIGIN, connect } from "./lib.mjs";
 const { cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors } = await connect();
 await cmd("Emulation.setDeviceMetricsOverride", { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
 const reset = await cmd("Page.addScriptToEvaluateOnNewDocument", {
-  source: `try{localStorage.clear();sessionStorage.clear();indexedDB.deleteDatabase('inkform-pending');indexedDB.deleteDatabase('inkform-archive')}catch(_){}`,
+  source: `try{localStorage.clear();sessionStorage.clear();indexedDB.deleteDatabase('inkform-pending');indexedDB.deleteDatabase('inkform-archive');indexedDB.deleteDatabase('inkform-logo')}catch(_){}`,
 });
 await navigate(ORIGIN + "/index.html");
 await cmd("Page.removeScriptToEvaluateOnNewDocument", { identifier: reset.identifier });
@@ -67,6 +69,39 @@ await ev(`writeRetention(localStorage,{pdfYears:10,incomeYears:null});setTheme('
 await ev(`(()=>{const el=document.getElementById('backup-interval');el.value='1';el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
 check("Erinnerungsabstand gespeichert", await ev(`localStorage.getItem(BACKUP_INTERVAL_KEY)==='1'&&document.getElementById('backup-interval').value==='1'`));
 
+// Own logo: an invented 900 × 300 JPEG, stored as a PNG of at most 512 pixels -----------------
+const chooseLogo = (file) =>
+  ev(`(async()=>{const dt=new DataTransfer();dt.items.add(await (${file}));const i=document.getElementById('logo-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
+const toastSays = (text) => until(`!document.getElementById('toast').hidden&&document.getElementById('toast').textContent.includes(${JSON.stringify(text)})`);
+const ownLogo = () =>
+  ev(`storedLogo().then(b=>{const s=b&&pngSize(b);const shown=[...document.querySelectorAll('.studio-logo')].every(i=>i.src.startsWith('blob:'))&&document.querySelector('link[rel="icon"]').href.startsWith('blob:');return s?s.width+'x'+s.height+(shown?' sichtbar':' unsichtbar'):'keins'})`);
+await ev(`openAdminAuthorized('studio')`);
+check("Logo-Bereich unter Studio & Kontakt mit Hinweis zum Home-Bildschirm", await ev(`!!document.querySelector('[data-admin-action="logo-choose"]')&&document.getElementById('admin-app').textContent.includes('Home-Bildschirm gehören zur installierten App')`));
+await chooseLogo(`new File(['%PDF-1.7 kein Bild'],'logo.png',{type:'image/png'})`);
+await toastSays("Logo nicht übernommen");
+check("Falsche Datei als Logo abgelehnt", (await ev(`document.getElementById('toast').textContent.includes('PNG- oder JPEG')`)) && (await ownLogo()) === "keins");
+await chooseLogo(`new Promise(r=>{const c=document.createElement('canvas');c.width=900;c.height=300;const g=c.getContext('2d');g.fillStyle='#c33';g.fillRect(0,0,900,300);g.fillStyle='#fff';g.fillRect(100,100,300,100);c.toBlob(b=>r(new File([b],'logo.jpg',{type:'image/jpeg'})),'image/jpeg',0.9)})`);
+await toastSays("Logo gespeichert");
+check("Logo verkleinert gespeichert und überall angezeigt", (await ownLogo()) === "512x171 sichtbar" && (await ev(`!!document.querySelector('[data-admin-action="logo-remove"]')`)));
+await ev(`document.querySelector('.logo-setting').closest('.ad-panel').scrollIntoView({block:'start'});new Promise(r=>setTimeout(r,300))`);
+await screenshot("logo-studio");
+await reload();
+await ev(HELPERS);
+await until(`document.querySelector('.studio-logo').src.startsWith('blob:')&&document.querySelector('.studio-logo').complete`);
+check("Nach dem Neustart (offline) ist das Logo noch da", (await ownLogo()) === "512x171 sichtbar" && (await ev(`document.querySelector('.studio-logo').naturalWidth===512`)));
+await ev(`openAdmin('studio')`);
+await until(`document.getElementById('admin-pin-dialog').open`);
+await ev(`unlockAdmin()`);
+await until(`adminAccess.isUnlocked() && !document.getElementById('admin-pin-dialog').open`);
+// Drawn before the stored logo has loaded, the panel follows as soon as it has.
+await ev(`showLogo(null)`);
+const removeShown = () => ev(`!!document.querySelector('[data-admin-action="logo-remove"]')`);
+const beforeLoad = await removeShown();
+await ev(`loadLogo()`);
+await until(`!!document.querySelector('[data-admin-action="logo-remove"]')`);
+check("Logo-Bereich zeigt „Logo entfernen“, sobald das gespeicherte Logo geladen ist", !beforeLoad && (await ownLogo()) === "512x171 sichtbar");
+await ev(`openAdminAuthorized('overview');navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]}`);
+
 // Create and save the backup -----------------------------------------------------------------
 await ev(`window.__shared=null;document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`);
 await until(`!document.querySelector('[data-backup-ready]').hidden`);
@@ -89,6 +124,7 @@ check(
     backup.pdfs.length === 2 &&
     backup.pdfs.every((p) => Buffer.from(p.pdf, "base64").subarray(0, 5).toString() === "%PDF-"),
 );
+check("Sicherung enthält das Logo (PNG, 512 × 171)", backup.schemaVersion === 2 && Buffer.from(backup.logo, "base64").readUInt32BE(16) === 512 && Buffer.from(backup.logo, "base64").readUInt32BE(20) === 171);
 check("Keine PIN in der Sicherung", !/839274|"salt"|"hash"/.test(json));
 check("Nach der Sicherung keine Sicherungs-Erinnerung", !(await reminder()).includes("Gesamtsicherung"));
 
@@ -103,6 +139,9 @@ await ev(`openAdminAuthorized('income');(()=>{const el=document.getElementById('
 await ev(`document.querySelector('[data-income-remove="'+incomeRecords().find(r=>r.customer==='Gül Şahin').id+'"]').click()`);
 await until(`incomeRecords().length===1`);
 await until(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length===1)`);
+await ev(`openAdminAuthorized('studio');window.__c=window.confirm;window.confirm=()=>true;document.querySelector('[data-admin-action="logo-remove"]').click();window.confirm=window.__c`);
+await toastSays("Eigenes Logo entfernt");
+check("Logo entfernt: wieder das eingebaute", (await ownLogo()) === "keins" && (await ev(`document.querySelector('.studio-logo').src.startsWith('data:image/png')`)));
 await ev(`openAdminAuthorized('studio');(l=>{l.value='Anders';l.dispatchEvent(new Event('input',{bubbles:true}))})(document.getElementById('admin-studio-location'));saveAdmin();setTheme('dark');openAdminAuthorized('overview')`);
 const restore = (source) =>
   ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([${source}],'sicherung.json',{type:'application/json'}));const i=document.getElementById('backup-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
@@ -118,7 +157,7 @@ check(
   "Rückfrage nennt Datum, Inhalt und was ersetzt wird",
   question.includes("wiederherstellen?") && question.includes("2 Einträge, 2 PDFs") && question.includes("aktuell 1 Einträge") && question.includes("nicht rückgängig") && question.includes("Die PIN bleibt"),
 );
-check("Abbrechen ändert nichts", (await unchanged()) && (await archived()) === 1);
+check("Abbrechen ändert nichts", (await unchanged()) && (await archived()) === 1 && (await ownLogo()) === "keins");
 
 await ev(`window.confirm=window.__confirm`);
 await restore(`window.__backupText.replace(/"id":"[^"]+","pdf"/,'"id":"fremd","pdf"')`);
@@ -127,6 +166,13 @@ check("Beschädigte Sicherung wird abgelehnt, nichts geändert", (await ev(`docu
 await restore(`'{"kind":"etwas"}'`);
 await until(`document.getElementById('toast').textContent.includes('keine INKFORM-Gesamtsicherung')`);
 check("Fremde JSON-Datei wird abgelehnt", await unchanged());
+
+// A restore that fails after the logo was written puts the device's own logo back.
+await ev(`window.__restorePdfs=exportFeature.restore;exportFeature.restore=()=>Promise.reject(Error('Testfehler'));window.__c2=window.confirm;window.confirm=()=>true`);
+await restore(`window.__backupText`);
+await toastSays("Testfehler");
+check("Scheitert das Wiederherstellen nach dem Logo, bleibt das Logo des Geräts", (await ownLogo()) === "keins" && (await unchanged()));
+await ev(`exportFeature.restore=window.__restorePdfs;window.confirm=window.__c2`);
 
 // Confirmed restore: everything replaced, page reloads, PIN unchanged.
 await restore(`window.__backupText`);
@@ -138,6 +184,8 @@ check(
   (await ev(`incomeRecords().length===2&&settings.studio.location==='Sicherungsort'&&document.documentElement.dataset.theme==='light'&&readRetention(localStorage).pdfYears===10&&localStorage.getItem(BACKUP_INTERVAL_KEY)==='1'&&readExportLog(localStorage).length===1`)) &&
     (await archived()) === 2,
 );
+await until(`document.querySelector('.studio-logo').src.startsWith('blob:')`);
+check("Logo wie in der Sicherung", (await ownLogo()) === "512x171 sichtbar");
 await ev(`openAdmin('export')`);
 await until(`document.getElementById('admin-pin-dialog').open`);
 await ev(`unlockAdmin()`);
@@ -146,6 +194,17 @@ check("Die PIN des Geräts gilt weiter", await ev(`adminAccess.isUnlocked()`));
 await ev(`(()=>{const el=document.getElementById('export-month');el.value='2026-03';el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
 await until(`document.getElementById('export-preview').textContent.includes('Davon')`);
 check("Wiederhergestelltes PDF steht wieder für den Export bereit", await ev(`document.getElementById('export-preview').textContent.includes('Davon 1 Einwilligung.')`));
+
+// A backup from before the logo (version 1) still restores and leaves the logo in place.
+const old = JSON.parse(json);
+old.schemaVersion = 1;
+delete old.logo;
+await ev(`window.__oldBackup=${JSON.stringify(JSON.stringify(old))}`);
+await restore(`window.__oldBackup`);
+await until(`typeof adminAccess!=='undefined' && !window.__oldBackup && document.readyState==='complete' && document.getElementById('toast').textContent.includes('Sicherung wiederhergestellt')`);
+await ev(HELPERS);
+await until(`document.querySelector('.studio-logo').src.startsWith('blob:')`);
+check("Ältere Sicherung ohne Logo: wiederhergestellt, Logo bleibt", (await ev(`incomeRecords().length===2`)) && (await ownLogo()) === "512x171 sichtbar");
 
 check("Keine Netzwerkzugriffe außer der lokalen Vorschau", requests.every((u) => !/^https?:/.test(u) || u.startsWith(ORIGIN)));
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0);

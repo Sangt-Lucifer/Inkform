@@ -25,7 +25,8 @@ Nach dem ersten Start mit Internet läuft Inkform auch im Flugmodus. Zum Prüfen
 
 Alles liegt im Speicher dieser App auf diesem iPad: Einstellungen, PIN, Einnahmenliste und die unterschriebenen PDFs für den ZIP-Export. Die Daten gehören zur Adresse der App. Wechselt die Adresse oder wird die App vom Home-Bildschirm entfernt oder werden die Safari-Websitedaten gelöscht, sind sie weg.
 
-- **Gesamtsicherung** (Übersicht): eine Datei mit Einstellungen, Einnahmen, Fristen und PDFs. Sie enthält Gesundheitsangaben und Unterschriften; nur auf dem iPad („Auf meinem iPad“) oder einem eigenen Rechner ablegen, nicht in iCloud Drive. Die PIN ist nicht enthalten.
+- **Logo:** im Einrichtungsassistenten oder unter „Studio & Kontakt“ als PNG oder JPEG hochladen; die App verkleinert es selbst. Symbol und Name auf dem Home-Bildschirm bleiben die der App.
+- **Gesamtsicherung** (Übersicht): eine Datei mit Einstellungen, Logo, Einnahmen, Fristen und PDFs. Sie enthält Gesundheitsangaben und Unterschriften; nur auf dem iPad („Auf meinem iPad“) oder einem eigenen Rechner ablegen, nicht in iCloud Drive. Die PIN ist nicht enthalten.
 - **Erinnerung:** Die Übersicht erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist.
 - **Wiederherstellen:** prüft die Datei, fragt nach und ersetzt dann alle Daten außer der PIN. So zieht Inkform auch auf ein neues Gerät oder eine neue Adresse um.
 

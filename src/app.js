@@ -47,6 +47,7 @@ import {
   readRemovedIds,
 } from "./export.js";
 import { isSample, sampleRecords } from "./sample.js";
+import { LOGO_DB, LOGO_EDGE, LOGO_KEY, checkLogo, shrinkLogo } from "./logo.js";
 import {
   BACKUP_INTERVALS,
   BACKUP_INTERVAL_KEY,
@@ -1694,6 +1695,7 @@ async function createBackup() {
       backup = createFullBackup({
         settings,
         theme: document.documentElement.dataset.theme,
+        logo: await storedLogo(),
         retention: readRetention(localStorage),
         backupDays: readBackupDays(localStorage),
         exports: readExportLog(localStorage),
@@ -1766,17 +1768,24 @@ backupPicker.addEventListener("change", async () => {
       )
     )
       return;
-    // The PDFs first: if writing them fails, nothing else (also not the list of deleted copies)
-    // has changed yet.
-    await exportFeature.restore(pdfs);
-    localStorage.setItem(PDF_REMOVED_KEY, JSON.stringify([...removed]));
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
-    localStorage.setItem(THEME_KEY, data.theme);
-    writeRetention(localStorage, data.retention);
-    localStorage.setItem(BACKUP_INTERVAL_KEY, String(data.backupDays));
-    localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(data.exports));
-    localStorage.setItem(INCOME_KEY, JSON.stringify({ schemaVersion: 1, records }));
-    localStorage.setItem(LAST_BACKUP_KEY, data.createdAt);
+        // The logo first: if writing it fails, nothing has changed. If a later step fails, the
+    // device's own logo is put back.
+    const previousLogo = data.logo === undefined ? undefined : await logoStore.get(LOGO_KEY);
+    await writeLogo(data.logo);
+    try {
+      await exportFeature.restore(pdfs);
+      localStorage.setItem(PDF_REMOVED_KEY, JSON.stringify([...removed]));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
+      localStorage.setItem(THEME_KEY, data.theme);
+      writeRetention(localStorage, data.retention);
+      localStorage.setItem(BACKUP_INTERVAL_KEY, String(data.backupDays));
+      localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(data.exports));
+      localStorage.setItem(INCOME_KEY, JSON.stringify({ schemaVersion: 1, records }));
+      localStorage.setItem(LAST_BACKUP_KEY, data.createdAt);
+    } catch (error) {
+      await writeLogo(previousLogo).catch(() => {});
+      throw error;
+    }
     await exportFeature.sync();
     sessionStorage.setItem("inkform.restored", data.createdAt);
     location.reload();
@@ -1784,6 +1793,85 @@ backupPicker.addEventListener("change", async () => {
     toast(t("restore.failed", { fehler: error.message }));
   }
 });
+// The studio logo chosen on this device (see logo.js); shown wherever the built-in one is.
+const logoStore = createIndexedDbFiles(globalThis.indexedDB, LOGO_DB),
+  BUILT_IN_LOGO = document.querySelector(".studio-logo").getAttribute("src");
+let logoUrl = null;
+// Also redraws the logo panel, so its buttons match once the stored logo has loaded.
+function showLogo(blob) {
+  if (logoUrl) URL.revokeObjectURL(logoUrl);
+  logoUrl = blob ? URL.createObjectURL(blob) : null;
+  const src = logoUrl || BUILT_IN_LOGO;
+  document.querySelectorAll(".studio-logo").forEach((img) => (img.src = src));
+  document.querySelector('link[rel="icon"]')?.setAttribute("href", src);
+  const panel = document.querySelector("[data-logo-panel]");
+  if (panel) panel.outerHTML = logoPanel();
+}
+// undefined: leave the logo as it is; null: back to the built-in one; a Blob or PNG bytes.
+async function writeLogo(logo) {
+  if (logo === null) await logoStore.delete(LOGO_KEY);
+  else if (logo) await logoStore.put(LOGO_KEY, logo instanceof Blob ? logo : new Blob([logo], { type: "image/png" }));
+}
+async function storedLogo() {
+  const blob = await logoStore.get(LOGO_KEY);
+  return blob && checkLogo(new Uint8Array(await blob.arrayBuffer()));
+}
+function loadLogo() {
+  return storedLogo().then(
+    (bytes) => showLogo(bytes && new Blob([bytes], { type: "image/png" })),
+    (error) => console.info("Eigenes Logo nicht geladen:", error.message),
+  );
+}
+function logoPanel() {
+  return `<div data-logo-panel>${adminPanel(
+    th("logo.title"),
+    /* HTML */ `<div class="logo-setting">
+        <img class="studio-logo" src="${logoUrl || BUILT_IN_LOGO}" alt="" width="72" height="72" />
+        <div>
+          <p class="ad-section-copy">${th(logoUrl ? "logo.custom" : "logo.builtIn")}</p>
+          <div class="ad-actions-row">
+            <button class="ad-button primary" type="button" data-admin-action="logo-choose">
+              ${adminIcon("upload")}${th("logo.choose")}</button
+            >${logoUrl
+              ? /* HTML */ `<button class="ad-button" type="button" data-admin-action="logo-remove">
+                  ${th("logo.remove")}
+                </button>`
+              : ""}
+          </div>
+        </div>
+      </div>
+      <p class="ad-preview-note">${th("logo.note", { pixel: LOGO_EDGE })}</p>`,
+  )}</div>`;
+}
+const logoPicker = document.createElement("input");
+logoPicker.type = "file";
+logoPicker.accept = "image/png,image/jpeg";
+logoPicker.hidden = true;
+logoPicker.id = "logo-file";
+document.body.append(logoPicker);
+logoPicker.addEventListener("change", async () => {
+  const file = logoPicker.files[0];
+  logoPicker.value = "";
+  if (!file || !adminAccess.isUnlocked()) return;
+  try {
+    const blob = await shrinkLogo(file);
+    await logoStore.put(LOGO_KEY, blob);
+    showLogo(blob);
+    toast(t("logo.saved"));
+  } catch (error) {
+    toast(t("logo.failed", { fehler: error.message }));
+  }
+});
+async function removeLogo() {
+  if (!window.confirm(t("logo.removeQuestion"))) return;
+  try {
+    await logoStore.delete(LOGO_KEY);
+    showLogo(null);
+    toast(t("logo.removed"));
+  } catch (error) {
+    toast(t("logo.failed", { fehler: error.message }));
+  }
+}
 const SETUP_FIELDS = ["name", "contact", "address", "location"];
 // The neutral edition is set up once all four studio details are saved.
 // Deletes copies in the app only (entries: { id, updatedAt } as confirmed). The ids are recorded for
@@ -2057,7 +2145,7 @@ function renderAdminSection() {
       <div class="ad-field"><label for="setup-income-years">${th("setup.incomeYears")}</label><input id="setup-income-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().incomeYears))}"></div></div>
       <p class="ad-preview-note">${th("setup.note")}</p>
       <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="setup-finish">${adminIcon("check")}${th("setup.finish")}</button></div>`,
-    )}${samplePanel()}`;
+    )}${logoPanel()}${samplePanel()}`;
   } else if (adminPage === "export") {
     content = `<div id="export-content">${exportFeature.view()}</div>`;
   } else if (adminPage === "retention") {
@@ -2135,6 +2223,7 @@ function renderAdminSection() {
             })}
           </div>`,
         )}
+        ${logoPanel()}
         <div class="ad-notice">
           ${th("studioPage.privacyHint", {
             link: markup(`<button
@@ -2940,6 +3029,12 @@ $("admin-app").addEventListener("click", (event) => {
     case "backup-restore":
       backupPicker.click();
       break;
+    case "logo-choose":
+      logoPicker.click();
+      break;
+    case "logo-remove":
+      removeLogo();
+      break;
     case "pending":
       if (pendingConsent && !pendingConsent.confirmed) renderPdfArtifact(pendingConsent);
       break;
@@ -3107,6 +3202,7 @@ try {
   initialTheme = localStorage.getItem(THEME_KEY) || initialTheme;
 } catch (_) {}
 setTheme(initialTheme, false);
+loadLogo();
 if (configLoadError) toast(configLoadError);
 if (BLANK_EDITION) document.querySelectorAll("[data-studio-only]").forEach((node) => (node.hidden = true));
 if (!OWNER_GUIDE_BASE64) document.querySelectorAll('[data-admin-action="guide"]').forEach((node) => (node.hidden = true));

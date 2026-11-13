@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "node --check src/i18n.js && node --check src/languages.js && node --check src/app.js && node --check src/access.js && node --check src/income.js && node --check src/defaults.js && node --check src/zip.js && node --check src/export.js && node --check src/backup.js && node --check src/sample.js && node --check src/service-worker.js && node --check src/register-worker.js && node --check scripts/sprachen.mjs && node --check scripts/build.mjs && node scripts/build.mjs --check",
+    "check": "node --check src/i18n.js && node --check src/languages.js && node --check src/app.js && node --check src/access.js && node --check src/income.js && node --check src/defaults.js && node --check src/zip.js && node --check src/export.js && node --check src/logo.js && node --check src/backup.js && node --check src/sample.js && node --check src/service-worker.js && node --check src/register-worker.js && node --check scripts/sprachen.mjs && node --check scripts/build.mjs && node scripts/build.mjs --check",
     "preview": "node scripts/build.mjs && node scripts/serve.mjs",
     "test": "node --import ./tests/lib/sprachen.mjs --test --test-concurrency=1 --test-timeout=60000 tests/*.test.mjs",
     "test:browser": "node tests/browser/run.mjs && node tests/browser/run.mjs --profile blanko",

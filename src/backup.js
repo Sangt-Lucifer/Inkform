@@ -1,5 +1,5 @@
-// Full backup of this device's app data as one JSON file: settings, theme, income list, retention
-// deadlines, export log, reminder interval and the consent PDFs kept for the ZIP export.
+// Full backup of this device's app data as one JSON file: settings, theme, logo, income list,
+// retention deadlines, export log, reminder interval and the consent PDFs kept for the ZIP export.
 // Not included: the PIN (the restoring device keeps its own) and an open, unconfirmed consent.
 // Copies deleted from the app on purpose stay deleted: the list of their ids travels with the
 // backup and is merged with the device's own list when restoring.
@@ -7,6 +7,7 @@ import { t } from "./i18n.js";
 import { validateIncomeBackup } from "./income.js";
 import { validateRetention } from "./retention.js";
 import { exportable, validateExportLog, validateRemovedIds } from "./export.js";
+import { checkLogo } from "./logo.js";
 
 export const BACKUP_INTERVAL_KEY = "inkform.backup.interval.v1";
 export const BACKUP_INTERVALS = [1, 3, 7, 14, 30];
@@ -29,14 +30,15 @@ export function fromBase64(text) {
   return bytes;
 }
 
-// pdfs: [{ id, bytes: Uint8Array }]
-export function createFullBackup({ settings, theme, retention, backupDays, exports, records, pdfs, removed, now = new Date() }) {
+// pdfs: [{ id, bytes: Uint8Array }]; logo: PNG bytes, or null for the logo built into the app.
+export function createFullBackup({ settings, theme, logo = null, retention, backupDays, exports, records, pdfs, removed, now = new Date() }) {
   return {
     kind: BACKUP_KIND,
-    schemaVersion: 1,
+    schemaVersion: 2,
     createdAt: now.toISOString(),
     settings,
     theme,
+    logo: logo && toBase64(logo),
     retention,
     backupDays,
     exports,
@@ -47,12 +49,14 @@ export function createFullBackup({ settings, theme, retention, backupDays, expor
 }
 
 // Checks the whole file before anything is written. validateSettings comes from the app.
+// Version 1 has no logo: logo is then undefined and the device keeps its own.
 export function readFullBackup(value, validateSettings) {
-  if (value?.kind !== BACKUP_KIND || value.schemaVersion !== 1)
+  if (value?.kind !== BACKUP_KIND || ![1, 2].includes(value.schemaVersion))
     throw Error(t("backup.invalid"));
   if (typeof value.createdAt !== "string" || Number.isNaN(Date.parse(value.createdAt)))
     throw Error(t("backup.invalidDate"));
   if (!["dark", "light"].includes(value.theme)) throw Error(t("backup.invalidTheme"));
+  const logo = value.schemaVersion === 1 ? undefined : readLogo(value.logo);
   if (!BACKUP_INTERVALS.includes(value.backupDays)) throw Error(t("backup.invalidInterval"));
   const records = validateIncomeBackup(value.income),
     removed = validateRemovedIds(value.pdfRemoved ?? []),
@@ -75,6 +79,7 @@ export function readFullBackup(value, validateSettings) {
     createdAt: value.createdAt,
     settings: validateSettings(value.settings),
     theme: value.theme,
+    logo,
     retention: validateRetention(value.retention),
     backupDays: value.backupDays,
     exports: validateExportLog(value.exports),
@@ -82,6 +87,16 @@ export function readFullBackup(value, validateSettings) {
     removed,
     pdfs,
   };
+}
+
+function readLogo(value) {
+  if (value === null) return null;
+  try {
+    if (typeof value !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw Error(t("logo.notPng"));
+    return checkLogo(fromBase64(value));
+  } catch (error) {
+    throw Error(t("backup.invalidLogo", { fehler: error.message }));
+  }
 }
 
 // What a restore writes. Deleted from the app is whatever either list names or either side marks;

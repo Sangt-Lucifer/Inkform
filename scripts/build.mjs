@@ -44,6 +44,7 @@ const TEMPLATED = [
   "src/retention.js",
   "src/zip.js",
   "src/export.js",
+  "src/logo.js",
   "src/backup.js",
   "src/sample.js",
   "src/app.js",
@@ -255,6 +256,7 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
     retention = filled["src/retention.js"],
     zip = filled["src/zip.js"],
     exporter = filled["src/export.js"],
+    logoModule = filled["src/logo.js"],
     backup = filled["src/backup.js"],
     sample = filled["src/sample.js"],
     app = filled["src/app.js"].replace('"__BLANK_EDITION__"', profile.blank ? '"true"' : '"false"');
@@ -275,6 +277,7 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
     consent,
     zip,
     exporter,
+    logoModule,
     backup,
     sample,
     app,
