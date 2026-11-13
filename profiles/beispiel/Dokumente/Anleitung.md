@@ -132,7 +132,7 @@ Ein Eintrag wird beim Erstellen des unterschriebenen Kunden-PDFs automatisch ang
 
 ## Gesamtsicherung
 
-In der Übersicht erstellt Gesamtsicherung erstellen eine Datei mit allem, was zum Wiederherstellen nötig ist: Studioeinstellungen, Farbschema, Einnahmenliste, Fristen, Export-Protokoll, Erinnerungsabstand und die PDF-Kopien in der App. Nicht enthalten sind die PIN und eine noch offene Einwilligung. Danach In Dateien sichern wählen und die Datei Auf meinem iPad sowie zusätzlich auf dem Mac in einem verschlüsselten Ordner ablegen. Die Datei enthält Gesundheitsangaben und Unterschriften; nicht in iCloud Drive ablegen.
+In der Übersicht unter Gesamtsicherung erstellt Sicherung erstellen eine Datei mit allem, was zum Wiederherstellen nötig ist: Studioeinstellungen, Farbschema, Einnahmenliste, Fristen, Export-Protokoll, Erinnerungsabstand und die PDF-Kopien in der App. Nicht enthalten sind die PIN und eine noch offene Einwilligung. Danach erscheint ein grüner Kasten mit Anzahl und Größe: Jetzt in Dateien sichern tippen, im Teilen-Fenster In Dateien sichern wählen und die Datei Auf meinem iPad sowie zusätzlich auf dem Mac in einem verschlüsselten Ordner ablegen. Die Datei enthält Gesundheitsangaben und Unterschriften; nicht in iCloud Drive ablegen.
 
 Die Übersicht erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist (1, 3, 7, 14 oder 30 Tage, Standard 7). Mindestens wöchentlich sichern, besser nach jedem Arbeitstag, zusätzlich vor Updates, Gerätewechseln oder dem Löschen von Browserdaten.
 

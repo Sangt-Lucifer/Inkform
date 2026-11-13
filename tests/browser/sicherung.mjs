@@ -69,8 +69,8 @@ check("Erinnerungsabstand gespeichert", await ev(`localStorage.getItem(BACKUP_IN
 
 // Create and save the backup -----------------------------------------------------------------
 await ev(`window.__shared=null;document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`);
-await until(`!document.querySelector('[data-admin-action="backup-save"]').hidden`);
-check("Vor dem Speichern: Anzahl und Größe", /Sicherung bereit: 2 Einträge, 2 PDFs, \d+ KB/.test(await ev(`document.getElementById('backup-note').textContent`)));
+await until(`!document.querySelector('[data-backup-ready]').hidden`);
+check("Vor dem Speichern: Anzahl und Größe", /✓ Sicherung bereit: 2 Einträge, 2 PDFs, \d+ KB/.test(await ev(`document.getElementById('backup-summary').textContent`)));
 await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
 await until(`!!window.__shared && document.getElementById('admin-app').textContent.includes('Letzte Gesamtsicherung vor 0 Tagen')`);
 const name = await ev(`window.__shared.name`);

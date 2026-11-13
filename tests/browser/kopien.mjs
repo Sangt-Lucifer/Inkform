@@ -49,7 +49,7 @@ await until(`document.getElementById('admin-pin-dialog').open`);
 await ev(`unlockAdmin()`);
 await until(`adminAccess.isUnlocked() && !document.getElementById('admin-pin-dialog').open`);
 await ev(`navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]};document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`);
-await until(`!document.querySelector('[data-admin-action="backup-save"]').hidden`);
+await until(`!document.querySelector('[data-backup-ready]').hidden`);
 await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
 await until(`!!window.__shared && window.__shared.name.startsWith('Inkform_Sicherung')`);
 await ev(`window.__shared.text().then(t=>window.__backup=t)`);

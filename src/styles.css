@@ -2991,3 +2991,34 @@ html[data-theme="dark"] dialog::backdrop {
   font: inherit;
   font-size: 12px;
 }
+.backup-ready {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  border: 1px solid #4f8a5f80;
+  background: #4f8a5f14;
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 14px;
+}
+.backup-ready strong {
+  font-size: 13px;
+}
+.backup-ready p,
+.backup-restore p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--ad-muted);
+}
+.backup-restore {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  border-top: 1px solid var(--ad-line);
+  margin-top: 20px;
+  padding-top: 16px;
+}
+.backup-restore strong {
+  font-size: 12px;
+}

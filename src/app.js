@@ -1662,15 +1662,32 @@ function backupPanel() {
     `<p class="ad-section-copy${age === null || age >= days ? " ad-warn" : ""}">${escapeHtml(status)}</p>
     <p class="ad-section-copy">${th("backup.copy")}</p>
     <div class="income-filters"><label>${th("backup.interval")}<select id="backup-interval">${BACKUP_INTERVALS.map((d) => `<option value="${d}"${d === days ? " selected" : ""}>${th("backup.days", { anzahl: d })}</option>`).join("")}</select></label></div>
-    <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="backup-create">${adminIcon("download")}${th("backup.create")}</button><button class="ad-button primary" type="button" data-admin-action="backup-save" hidden>${adminIcon("share")}${th("pdf.share")}</button><button class="ad-button" type="button" data-admin-action="backup-restore">${adminIcon("upload")}${th("backup.restore")}</button></div>
-    <p class="ad-preview-note" id="backup-note" role="status"></p>`,
+    <div class="backup-flow" id="backup-flow">
+      <div class="ad-actions-row" data-backup-start><button class="ad-button primary" type="button" data-admin-action="backup-create">${adminIcon("download")}<span>${th("backup.create")}</span></button></div>
+      <div class="backup-ready" data-backup-ready hidden>
+        <strong id="backup-summary"></strong>
+        <button class="ad-button primary" type="button" data-admin-action="backup-save">${adminIcon("share")}${th("backup.save")}</button>
+        <p>${th("backup.saveHint")}</p>
+      </div>
+      <p class="ad-preview-note" id="backup-note" role="status"></p>
+    </div>
+    <div class="backup-restore">
+      <strong>${th("backup.restoreTitle")}</strong>
+      <p>${th("backup.restoreCopy")}</p>
+      <button class="ad-button" type="button" data-admin-action="backup-restore">${adminIcon("upload")}${th("backup.restore")}</button>
+    </div>`,
   );
 }
 async function createBackup() {
-  const note = $("backup-note");
+  const note = $("backup-note"),
+    start = document.querySelector("[data-backup-start] button"),
+    ready = document.querySelector("[data-backup-ready]");
   preparedBackup = null;
-  document.querySelector('[data-admin-action="backup-save"]').hidden = true;
-  note.textContent = t("backup.creating");
+  ready.hidden = true;
+  note.textContent = "";
+  start.disabled = true;
+  start.querySelector("span").textContent = t("backup.creating");
+  $("backup-flow").scrollIntoView({ behavior: "instant", block: "center" });
   try {
     // PDFs first: entries and the list are read afterwards, so a copy deleted meanwhile is marked.
     const pdfs = await exportFeature.pdfs(),
@@ -1685,14 +1702,19 @@ async function createBackup() {
         removed: readRemovedIds(localStorage),
       });
     preparedBackup = new File([JSON.stringify(backup)], `${t("file.backup")}_${localDate()}.json`, { type: "application/json" });
-    note.textContent = t("backup.ready", {
+    $("backup-summary").textContent = t("backup.ready", {
       eintraege: backup.income.records.length,
       pdfs: backup.pdfs.length,
       groesse: formatSize(preparedBackup.size),
     });
-    document.querySelector('[data-admin-action="backup-save"]').hidden = false;
+    start.parentElement.hidden = true;
+    ready.hidden = false;
+    ready.querySelector("button").focus();
   } catch (error) {
     note.textContent = t("backup.failed", { fehler: error.message });
+  } finally {
+    start.disabled = false;
+    start.querySelector("span").textContent = t("backup.create");
   }
 }
 function saveBackup() {
@@ -2361,6 +2383,9 @@ function renderAdminSection() {
       th("appearance.transfer"),
       /* HTML */ `<p class="ad-section-copy">${th("appearance.transferCopy")}</p>
         <div class="ad-actions-row">
+          <button class="ad-button" type="button" data-admin-page="overview">
+            ${adminIcon("download")}${th("appearance.toBackup")}</button
+          >
           <button class="ad-button" type="button" data-admin-action="export-json">
             ${adminIcon("download")}${th("appearance.exportJson")}</button
           ><button class="ad-button" type="button" data-admin-action="import-json">
