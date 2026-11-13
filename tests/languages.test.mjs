@@ -7,7 +7,7 @@ import test from "node:test";
 import { buildProfile, root } from "../scripts/build.mjs";
 import { languagesForApp, loadLanguages } from "../scripts/sprachen.mjs";
 import { registerLanguages } from "../src/i18n.js";
-import { contentIn, offeredLanguages, validCurrency, validateLocale, validateTranslations } from "../src/languages.js";
+import { contentIn, offeredLanguages, validCurrency, validateLocale, validateTranslations, withDefaultTranslations, withoutStale } from "../src/languages.js";
 import { PSEUDO, writePseudoLanguages } from "./lib/pseudo.mjs";
 
 const FALLBACK = { content: "de", studio: "de", customer: ["de"], currency: "EUR", note: {} };
@@ -146,6 +146,46 @@ test("profiles: shipped English drafts are complete but only offered once the ow
   }
 });
 
+test("translations: a base text edited while its translation stayed the same drops that translation", async () => {
+  await withPseudo(() => {
+    const previous = { ...base, locale: { ...FALLBACK, customer: ["de", PSEUDO] }, translations: validateTranslations({ [PSEUDO]: full }, base, "de") };
+    assert.ok(contentIn(previous, PSEUDO));
+    const edited = { ...previous, legal: [{ ...base.legal[0], text: "Neuer Text" }] };
+    const next = withoutStale(edited, previous);
+    assert.equal(next.translations[PSEUDO].legal.privacy.text, undefined);
+    assert.equal(next.translations[PSEUDO].legal.privacy.title, "Privacy");
+    assert.equal(contentIn(next, PSEUDO), null);
+    assert.deepEqual(offeredLanguages(next), ["de"]);
+    assert.equal(previous.translations[PSEUDO].legal.privacy.text, "Text", "the previous settings are not changed");
+
+    // Translated anew together with the base text (e.g. a restored backup): kept.
+    const retranslated = { ...edited, translations: { [PSEUDO]: { ...full, legal: { privacy: { title: "Privacy", text: "New text" } } } } };
+    assert.equal(withoutStale(retranslated, previous).translations[PSEUDO].legal.privacy.text, "New text");
+    assert.deepEqual(withoutStale(previous, previous), previous);
+  });
+});
+
+test("translations: missing texts come from the profile's defaults only where the base text is the profile's own", async () => {
+  await withPseudo(() => {
+    const defaults = { ...base, locale: FALLBACK, translations: { [PSEUDO]: { ...structuredClone(full), draft: true } } };
+    const installed = { ...base, locale: FALLBACK, translations: {} };
+    const filled = withDefaultTranslations(installed, defaults);
+    assert.ok(contentIn(filled, PSEUDO));
+    assert.equal(filled.translations[PSEUDO].draft, true);
+    assert.deepEqual(installed.translations, {}, "the input is not changed");
+
+    const edited = withDefaultTranslations({ ...installed, legal: [{ ...base.legal[0], text: "Eigener Text" }] }, defaults);
+    assert.equal(edited.translations[PSEUDO].legal.privacy.text, undefined);
+    assert.equal(contentIn(edited, PSEUDO), null);
+
+    const own = { ...installed, translations: { [PSEUDO]: { ...structuredClone(full), app: { ...full.app, headline: "Own" } } } };
+    const kept = withDefaultTranslations(own, defaults);
+    assert.equal(kept.translations[PSEUDO].app.headline, "Own");
+    assert.equal(kept.translations[PSEUDO].draft, undefined, "nothing added, so a reviewed translation stays reviewed");
+    assert.equal(withDefaultTranslations({ ...installed, locale: { ...FALLBACK, content: PSEUDO } }, defaults).translations[PSEUDO], undefined);
+  });
+});
+
 test("profile: default translations for other languages are validated and baked in, ids beyond the defaults are dropped", async () => {
   await withPseudo(async (languages) => {
     const dir = await mkdtemp(path.join(tmpdir(), "inkform-profil-"));
@@ -163,16 +203,27 @@ test("profile: default translations for other languages are validated and baked 
           app: { headline: "[head]" },
           medical: { allergies: { title: "[allergy]" }, notReal: { title: "x" } },
           legal: { privacy: { text: "[privacy text]" } },
+          basedOn: { healthStudio: json.text.healthStudio, revocationContact: json.text.revocationContact },
         },
       };
-      const { bundledJs } = await build({ languages: { customer: [PSEUDO] }, translations });
+      const { bundledJs, warnings } = await build({ languages: { customer: [PSEUDO] }, translations });
+      assert.deepEqual(warnings, []);
       assert.ok(!bundledJs.includes("Should be skipped"));
       assert.ok(bundledJs.includes("[head]"));
       assert.ok(bundledJs.includes("[allergy]"));
       assert.ok(!bundledJs.includes("notReal"));
       await assert.rejects(build({ translations: { xx: { app: { headline: "x" } } } }), /translations\.xx hat keine Sprachdatei/);
-      await assert.rejects(build({ translations: { [PSEUDO]: { app: { headline: "x".repeat(18001) } } } }), /ungültig oder zu lang/);
+      await assert.rejects(build({ translations: { [PSEUDO]: { app: { headline: "x".repeat(18001) } } } }), /ungültig, zu lang/);
       await assert.rejects(build({ translations: { [PSEUDO]: { draft: "ja" } } }), /draft muss true oder false sein/);
+      await assert.rejects(build({ translations: { [PSEUDO]: { app: { headline: "a <!-- <script> b" } } } }), /enthält < oder >/);
+      await assert.rejects(build({ translations: { [PSEUDO]: { legal: { privacy: { text: "x" } } } } }), /basedOn fehlt für healthStudio, revocationContact/);
+
+      // A profile text changed after translating: the fields that spell it out are left out, so the
+      // language is no longer complete; the others stay.
+      const changed = await build({ text: { ...json.text, revocationContact: "per Post" }, translations });
+      assert.equal(changed.warnings.length, 1);
+      assert.match(changed.warnings[0], /legal\.privacy\.text passt nicht mehr zu revocationContact/);
+      assert.ok(!changed.bundledJs.includes("[privacy text]") && changed.bundledJs.includes("[allergy]"));
       assert.ok((await build({ translations: { [PSEUDO]: { draft: true } } })).bundledJs.includes(`\\"draft\\":true`));
     } finally {
       await rm(dir, { recursive: true, force: true });

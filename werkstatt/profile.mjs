@@ -333,7 +333,9 @@ export async function checkDraft({ dir, id, draft, logoBase64, env }) {
     let files, trial;
     try {
       trial = await trialFolder(base, dir, id, draft, logo);
-      ({ files } = await buildProfile(trial));
+      const built = await buildProfile(trial);
+      files = built.files;
+      warnings.push(...built.warnings.map((w) => w.replaceAll(base, "<entwurf>")));
     } catch (error) {
       errors.push(`Probe-Build: ${error.message.replaceAll(base, "<entwurf>")}`);
       return { errors, probe, logo, warnings };

@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { loadPdfFonts } from "./fonts.mjs";
 import { DEFAULT_SETTINGS } from "../src/defaults.js";
-import { TRANSLATED, validCurrency } from "../src/languages.js";
+import { dropField, fieldOf, readTranslation, translatedFields, validCurrency } from "../src/languages.js";
 import { BASE_LANGUAGE, checkKeyUsage, checkLanguages, languagesForApp, loadLanguages } from "./sprachen.mjs";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
@@ -162,52 +162,48 @@ function profileLocale(profile, languages, manifest) {
   return { content, studio, customer, currency, note };
 }
 
-// profile.json "translations": default settings.translations content for additional languages,
-// same shape and limits as validateTranslations (src/languages.js) at runtime. Lets a profile ship
-// a language's legal and form texts, e.g. an unreviewed English draft, without the owner having to
-// type them into the admin console first; the language is still only offered once the owner picks
-// it on the studio page (see languages.js offeredLanguages).
+// profile.json "translations": the default settings.translations for additional languages, read like
+// validateTranslations at runtime. A language is still only offered once the owner picks it.
+// Translations spell out what profile texts (%%token%%) say in the base language; "basedOn" records
+// those texts as they were when translated. A translated field whose profile text has changed since
+// is left out with a warning, so the language is no longer complete and not offered.
+const TOKEN_USE = new Map([...translatedFields(DEFAULT_SETTINGS)].map(([field, text]) => [field, [...new Set([...text.matchAll(TOKEN)].map((m) => m[1]))]]));
 function profileTranslations(profile, languages, content) {
   const where = `${profile.id}: profile.json`;
   const value = profile.translations;
-  const output = {};
-  if (value === undefined) return output;
+  const output = {},
+    warnings = [];
+  if (value === undefined) return { translations: output, warnings };
   if (!value || typeof value !== "object") throw new Error(`${where}: translations muss ein Objekt sein.`);
-  const text = (input, max, field) => {
-    if (input === undefined || input === "") return undefined;
-    if (typeof input !== "string" || input.length > max)
-      throw new Error(`${where}: translations.${field} ist ungültig oder zu lang.`);
-    return input.normalize("NFC").trim() || undefined;
-  };
   for (const [code, tr] of Object.entries(value)) {
     if (code === content) continue;
     if (!Object.hasOwn(languages, code))
       throw new Error(`${where}: translations.${code} hat keine Sprachdatei in src/sprachen/.`);
     if (!tr || typeof tr !== "object") throw new Error(`${where}: translations.${code} muss ein Objekt sein.`);
-    const own = { app: {}, studio: {}, medical: {}, legal: {} };
-    for (const part of ["app", "studio"])
-      for (const key of TRANSLATED[part]) {
-        const v = text(tr[part]?.[key], 18000, `${code}.${part}.${key}`);
-        if (v !== undefined) own[part][key] = v;
-      }
-    for (const [part, items] of [
-      ["medical", DEFAULT_SETTINGS.medical],
-      ["legal", DEFAULT_SETTINGS.legal],
-    ])
-      for (const item of items) {
-        const entry = {};
-        for (const key of TRANSLATED[part]) {
-          const v = text(tr[part]?.[item.id]?.[key], 8000, `${code}.${part}.${item.id}.${key}`);
-          if (v !== undefined) entry[key] = v;
-        }
-        if (Object.keys(entry).length) own[part][item.id] = entry;
-      }
     if (tr.draft !== undefined && typeof tr.draft !== "boolean")
       throw new Error(`${where}: translations.${code}.draft muss true oder false sein.`);
-    if (tr.draft) own.draft = true;
+    const own = readTranslation(tr, DEFAULT_SETTINGS, (input, max, field) => {
+      if (input === undefined || input === "") return undefined;
+      if (typeof input !== "string" || input.length > max || /[<>]/.test(input))
+        throw new Error(`${where}: translations.${code}.${field} ist ungültig, zu lang oder enthält < oder >.`);
+      return input.normalize("NFC").trim() || undefined;
+    });
+    const basedOn = tr.basedOn ?? {};
+    if (typeof basedOn !== "object" || Array.isArray(basedOn))
+      throw new Error(`${where}: translations.${code}.basedOn muss ein Objekt sein.`);
+    const used = [...TOKEN_USE].filter(([field]) => fieldOf(own, field) !== undefined);
+    const missing = [...new Set(used.flatMap(([, tokens]) => tokens))].filter((k) => typeof basedOn[k] !== "string");
+    if (missing.length)
+      throw new Error(`${where}: translations.${code}.basedOn fehlt für ${missing.join(", ")} (der Profiltext, von dem übersetzt wurde).`);
+    for (const [field, tokens] of used) {
+      const changed = tokens.filter((k) => basedOn[k] !== profile.text[k]);
+      if (!changed.length) continue;
+      dropField(own, field);
+      warnings.push(`${where}: translations.${code}.${field} passt nicht mehr zu ${changed.join(", ")} und wird weggelassen; ${code} wird erst wieder angeboten, wenn die Übersetzung nachgezogen ist.`);
+    }
     output[code] = own;
   }
-  return output;
+  return { translations: output, warnings };
 }
 
 // `languages` (a folder of language files) is for tests only; a real build reads src/sprachen/.
@@ -226,7 +222,7 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
     languages,
     JSON.parse(await readFile(path.join(profile.dir, "manifest.webmanifest"), "utf8")),
   );
-  const translations = profileTranslations(profile, languages, locale.content);
+  const { translations, warnings } = profileTranslations(profile, languages, locale.content);
   const unused = Object.keys(profile.text).filter((key) => !used.has(key));
   if (unused.length) throw new Error(`${id}: ungenutzte Profiltexte: ${unused.join(", ")}`);
 
@@ -350,7 +346,7 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
     ["dist/sw.js", worker],
     ...assets,
   ]);
-  return { profile, files, bundledJs };
+  return { profile, files, bundledJs, warnings };
 }
 
 function assertOutAllowed(profileDir, out) {
@@ -372,7 +368,8 @@ async function main(argv) {
     const dir = resolveProfileDir(ref);
     const out = outs.length ? path.resolve(outs[0]) : defaultOut(dir);
     assertOutAllowed(dir, out);
-    const { files, profile } = await buildProfile(dir);
+    const { files, profile, warnings } = await buildProfile(dir);
+    for (const warning of warnings) console.warn(`Warnung: ${warning}`);
     const id = profile.id;
     const shown = path.relative(process.cwd(), out) || ".";
     if (check) {

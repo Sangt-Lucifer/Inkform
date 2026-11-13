@@ -437,6 +437,7 @@ export default {
     "languages.customer": "Sprachen für Kunden",
     "languages.customerHelp": "Die Studiosprache ist immer dabei. Ab zwei Sprachen erscheint auf dem Formular eine Sprachauswahl.",
     "languages.draft": "(Entwurf, nicht juristisch geprüft)",
+    "languages.markReviewed": "Juristisch geprüft: {sprache} (Entwurfsvermerk entfernen)",
     "languages.missingTexts": "(Formulartexte fehlen)",
     "languages.note": "Hinweis im PDF",
     "languages.noteFor": "Hinweis im PDF ({sprache}), optional",

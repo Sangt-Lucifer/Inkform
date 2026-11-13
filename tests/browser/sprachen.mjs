@@ -93,6 +93,36 @@ check(
       && !settings.locale.customer.includes('en');
   })()`),
 );
+check(
+  "Ältere Installation ohne Übersetzungen bekommt den englischen Entwurf aus dem Profil",
+  await ev(`(() => {
+    const stored = JSON.parse(JSON.stringify(settings));
+    stored.translations = {};
+    const loaded = validateSettings(stored);
+    return !!contentIn(loaded, 'en') && loaded.translations.en.draft === true;
+  })()`),
+);
+check(
+  "Als geprüft markiert: Entwurfsvermerk nach dem Speichern weg",
+  await ev(`(() => {
+    const box = document.querySelector('[data-locale-reviewed="en"]');
+    box.checked = true;
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+    saveAdmin();
+    return settings.translations.en.draft === undefined && !document.querySelector('[data-locale-reviewed="en"]');
+  })()`),
+);
+check(
+  "Deutscher Text geändert: Englisch wird nicht mehr angeboten",
+  await ev(`(() => {
+    adminDraft.locale.customer = [adminDraft.locale.studio, 'en'];
+    saveAdmin();
+    const before = offeredLanguages(settings).includes('en');
+    adminDraft.legal.find((item) => item.id === 'privacy').text += ' Geändert.';
+    saveAdmin();
+    return before && !offeredLanguages(settings).includes('en') && settings.translations.en.legal.privacy.text === undefined;
+  })()`),
+);
 
 // Form texts in the pseudo language, offered to customers next to the studio language.
 await ev(`(() => {

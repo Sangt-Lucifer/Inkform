@@ -436,6 +436,7 @@ export default {
     "languages.customer": "Languages for Customers",
     "languages.customerHelp": "The studio language is always included. From two languages on, a language selector appears on the form.",
     "languages.draft": "(draft, not legally reviewed)",
+    "languages.markReviewed": "Legally reviewed: {sprache} (remove draft marker)",
     "languages.missingTexts": "(form texts missing)",
     "languages.note": "Note in the PDF",
     "languages.noteFor": "Note in the PDF ({sprache}), optional",

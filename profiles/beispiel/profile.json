@@ -43,6 +43,17 @@
   "translations": {
     "en": {
       "draft": true,
+      "basedOn": {
+        "accessText": "Beispieltext, vor dem Einsatz vom Studio anzupassen: Zugriff auf das Einwilligungs-PDF und die darin enthaltenen Gesundheitsdaten hat ausschließlich der Inhaber Max Mustermann. Ablage und Sicherung erfolgen lokal; es gibt keine automatische Cloud-Synchronisierung oder Übermittlung durch diese App. Eine etwa gesetzlich erforderliche Offenlegung bleibt vorbehalten. Die gesondert gewählte Veröffentlichung von Tattoo-Fotos umfasst nicht die Weitergabe dieses Formulars, der Gesundheitsdaten oder der Unterschrift.",
+        "complaintAuthority": "der für dein Studio zuständigen Datenschutzaufsichtsbehörde beschweren. Die zuständige Behörde ist vom Studio zu ergänzen",
+        "eyebrowPrefix": "MUSTERSTUDIO · ",
+        "healthStudio": "das Musterstudio (Beispiel), Inhaber Max Mustermann,",
+        "photoChannels": "auf www.musterstudio.example sowie auf dem eigenen Instagram-Profil @musterstudio.example",
+        "photoStudio": "dem Musterstudio (Beispiel)",
+        "retentionText": "Beispieltext, vor dem Einsatz vom Studio anzupassen: Die Dokumentation wird während der Terminvorbereitung und Durchführung und anschließend nur so lange aufbewahrt, wie sie zum Nachweis der Einwilligung oder zur Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen erforderlich ist. Maßgeblich sind die jeweils einschlägigen Verjährungsfristen und die Erforderlichkeit im Einzelfall. Bei Ansprüchen wegen Körper- oder Gesundheitsschäden kann die Verjährungshöchstfrist nach § 199 Abs. 2 BGB 30 Jahre betragen; daraus folgt keine pauschale Aufbewahrungspflicht von 30 Jahren. Entfallen die Zwecke und besteht keine weitere Rechtsgrundlage, löscht der Inhaber die Unterlagen einschließlich der Kopien im Speicher der App und der lokalen Sicherungskopien. Bei einem konkreten Rechtsstreit bleiben die hierfür erforderlichen Unterlagen bis zu dessen Abschluss und dem Wegfall weiterer Aufbewahrungsgründe erhalten.",
+        "revocationContact": "per E-Mail an datenschutz@musterstudio.example",
+        "welcomeStudio": "im Musterstudio"
+      },
       "app": {
         "documentTitle": "Tattoo Consent",
         "eyebrow": "MUSTERSTUDIO · CUSTOMER FORM",

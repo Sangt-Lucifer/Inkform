@@ -46,7 +46,45 @@ export function validateLocale(value, fallback) {
   return { content, studio, customer, currency, note };
 }
 
-// Keeps only known parts, ids of the base texts and strings within the base limits.
+// Every translatable text of the settings, as "part.key" or "part.id.key" -> base text.
+export function translatedFields(settings) {
+  const out = new Map();
+  for (const part of ["app", "studio"]) for (const key of TRANSLATED[part]) out.set(`${part}.${key}`, settings[part]?.[key] ?? "");
+  for (const part of ["medical", "legal"])
+    for (const item of settings[part] ?? []) for (const key of TRANSLATED[part]) out.set(`${part}.${item.id}.${key}`, item[key] ?? "");
+  return out;
+}
+export function fieldOf(tr, field) {
+  const [part, a, b] = field.split(".");
+  return b === undefined ? tr?.[part]?.[a] : tr?.[part]?.[a]?.[b];
+}
+function setField(tr, field, value) {
+  const [part, a, b] = field.split(".");
+  tr[part] ??= {};
+  if (b === undefined) tr[part][a] = value;
+  else (tr[part][a] ??= {})[b] = value;
+}
+export function dropField(tr, field) {
+  const [part, a, b] = field.split(".");
+  if (b === undefined) delete tr[part]?.[a];
+  else if (tr[part]?.[a]) {
+    delete tr[part][a][b];
+    if (!Object.keys(tr[part][a]).length) delete tr[part][a];
+  }
+}
+const emptyTranslation = () => ({ app: {}, studio: {}, medical: {}, legal: {} });
+
+// One language of settings.translations with the fields of base only; `text` checks each value.
+export function readTranslation(tr, base, text) {
+  const own = emptyTranslation();
+  for (const field of translatedFields(base).keys()) {
+    const v = text(fieldOf(tr, field), /^(app|studio)\./.test(field) ? 18000 : 8000, field);
+    if (v !== undefined) setField(own, field, v);
+  }
+  if (tr.draft === true) own.draft = true;
+  return own;
+}
+
 export function validateTranslations(value, base, content) {
   const output = {};
   if (!value || typeof value !== "object") return output;
@@ -55,27 +93,48 @@ export function validateTranslations(value, base, content) {
     if (typeof input !== "string" || input.length > max) throw new Error(t("languages.badTranslation"));
     return input.normalize("NFC").trim() || undefined;
   };
-  for (const [code, tr] of Object.entries(value)) {
-    if (!hasLanguage(code) || code === content || !tr || typeof tr !== "object") continue;
-    const own = { app: {}, studio: {}, medical: {}, legal: {} };
-    for (const part of ["app", "studio"])
-      for (const key of TRANSLATED[part]) {
-        const v = text(tr[part]?.[key], 18000);
-        if (v !== undefined) own[part][key] = v;
-      }
-    for (const part of ["medical", "legal"])
-      for (const item of base[part]) {
-        const entry = {};
-        for (const key of TRANSLATED[part]) {
-          const v = text(tr[part]?.[item.id]?.[key], 8000);
-          if (v !== undefined) entry[key] = v;
-        }
-        if (Object.keys(entry).length) own[part][item.id] = entry;
-      }
-    if (tr.draft === true) own.draft = true;
-    output[code] = own;
-  }
+  for (const [code, tr] of Object.entries(value))
+    if (hasLanguage(code) && code !== content && tr && typeof tr === "object") output[code] = readTranslation(tr, base, text);
   return output;
+}
+
+// A translation that stayed the same while its base text changed no longer says the same thing. It
+// is removed, so the language counts as incomplete and is not offered until it is translated again.
+export function withoutStale(next, previous) {
+  const before = translatedFields(previous),
+    translations = structuredClone(next.translations ?? {});
+  for (const [field, text] of translatedFields(next)) {
+    if (!before.has(field) || before.get(field) === text) continue;
+    for (const [code, tr] of Object.entries(translations)) {
+      const value = fieldOf(tr, field);
+      if (value !== undefined && value === fieldOf(previous.translations?.[code], field)) dropField(tr, field);
+    }
+  }
+  return { ...next, translations };
+}
+
+// Missing translated texts come from the profile's default translations wherever the base text is
+// still the profile's own, so an installation from before a language was shipped gets it too.
+export function withDefaultTranslations(settings, defaults) {
+  if (settings.locale.content !== defaults.locale.content) return settings;
+  const shippedBase = translatedFields(defaults),
+    same = (a, b) => String(a).normalize("NFC").trim() === String(b).normalize("NFC").trim(),
+    translations = structuredClone(settings.translations);
+  for (const [code, shipped] of Object.entries(defaults.translations ?? {})) {
+    if (code === settings.locale.content || !hasLanguage(code)) continue;
+    const tr = translations[code] ?? emptyTranslation();
+    let added = false;
+    for (const [field, text] of translatedFields(settings)) {
+      const value = fieldOf(shipped, field);
+      if (value === undefined || fieldOf(tr, field) !== undefined || !shippedBase.has(field) || !same(shippedBase.get(field), text)) continue;
+      setField(tr, field, value);
+      added = true;
+    }
+    if (!added) continue;
+    if (shipped.draft) tr.draft = true;
+    translations[code] = tr;
+  }
+  return { ...settings, translations };
 }
 
 // The settings as the form shows them in one language, or null if a text is missing there.

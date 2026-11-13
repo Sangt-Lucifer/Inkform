@@ -11,7 +11,7 @@ import {
   th,
   translator,
 } from "./i18n.js";
-import { contentIn, offeredLanguages, validateLocale, validateTranslations } from "./languages.js";
+import { contentIn, offeredLanguages, validateLocale, validateTranslations, withDefaultTranslations, withoutStale } from "./languages.js";
 import { createAdminAccess } from "./access.js";
 import { INCOME_KEY, createIncomeFeature, incomeId } from "./income.js";
 import { PROFILE_LOCALE, STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
@@ -199,7 +199,7 @@ function validateSettings(value) {
   if (new Set(ids).size !== ids.length)
     throw new Error(t("settings.duplicateIds"));
   const locale = validateLocale(value.locale, PROFILE_LOCALE);
-  const result = {
+  const result = withDefaultTranslations({
     schemaVersion: 1,
     savedAt:
       typeof value.savedAt === "string" && Number.isFinite(Date.parse(value.savedAt))
@@ -211,7 +211,7 @@ function validateSettings(value) {
     legal,
     locale,
     translations: validateTranslations(value.translations, { medical, legal }, locale.content),
-  };
+  }, DEFAULT_SETTINGS);
   // The studio language needs all texts of the form, like every language offered to customers.
   if (!contentIn(result, locale.studio)) {
     locale.studio = locale.content;
@@ -1422,7 +1422,8 @@ function languagePanel() {
   const locale = adminDraft.locale;
   const boxes = languageCodes()
     .map((code) => {
-      const complete = !!contentIn(adminDraft, code);
+      const complete = !!contentIn(adminDraft, code),
+        draft = complete && !!adminDraft.translations[code]?.draft;
       return /* HTML */ `<label class="income-check"
         ><input
           type="checkbox"
@@ -1430,8 +1431,15 @@ function languagePanel() {
           ${locale.customer.includes(code) ? "checked" : ""}
           ${code === locale.studio || !complete ? "disabled" : ""}
         />
-        <span lang="${code}">${escapeHtml(translator(code).name)}</span>${complete ? "" : ` <small>${th("languages.missingTexts")}</small>`}${complete && adminDraft.translations[code]?.draft ? ` <small>${th("languages.draft")}</small>` : ""}</label
-      >`;
+        <span lang="${code}">${escapeHtml(translator(code).name)}</span>${complete ? "" : ` <small>${th("languages.missingTexts")}</small>`}${draft ? ` <small>${th("languages.draft")}</small>` : ""}</label
+      >${
+        draft
+          ? `<label class="income-check"
+          ><input type="checkbox" data-locale-reviewed="${code}" />
+          <span>${th("languages.markReviewed", { sprache: translator(code).name })}</span></label
+        >`
+          : ""
+      }`;
     })
     .join("");
   const notes = locale.customer
@@ -2333,7 +2341,7 @@ $("customer-language").addEventListener("change", (event) => switchCustomerLangu
 function saveAdmin() {
   let next;
   try {
-    next = validateSettings(adminDraft);
+    next = validateSettings(withoutStale(validateSettings(adminDraft), settings));
   } catch (error) {
     configError(error.message);
     return false;
@@ -2560,6 +2568,8 @@ $("admin-app").addEventListener("change", (event) => {
     const code = el.dataset.localeCustomer,
       others = adminDraft.locale.customer.filter((c) => c !== code);
     adminDraft.locale.customer = el.checked ? [...others, code] : others;
+  } else if (adminDraft && el.dataset.localeReviewed && el.checked) {
+    delete adminDraft.translations[el.dataset.localeReviewed].draft;
   } else return;
   renderAdminSection();
   updateAdminChrome();
