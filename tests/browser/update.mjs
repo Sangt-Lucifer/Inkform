@@ -41,8 +41,7 @@ try {
   // Back in the foreground during the customer's turn (e.g. from the share sheet): no request,
   // even if the app has not asked yet today.
   await ev(`localStorage.removeItem('inkform.update-day.v1');document.dispatchEvent(new Event('visibilitychange'))`);
-  await new Promise((r) => setTimeout(r, 1500));
-  check("Während ein Formular in Arbeit ist, fragt die App nicht nach Updates", await ev(`navigator.serviceWorker.getRegistration().then(r=>!r.waiting&&!r.installing)`));
+  check("Während ein Formular in Arbeit ist, fragt die App nicht nach Updates", await ev(`(()=>{const c=window.inkformUpdateChecks().at(-1);return c.reason==='visible'&&c.asked===false&&localStorage.getItem('inkform.update-day.v1')===null})()`));
   // An update found just before the customer started waits until the form is cleared.
   await ev(`navigator.serviceWorker.getRegistration().then(r=>r.update())`);
   await until(`navigator.serviceWorker.getRegistration().then(r=>!!r.waiting)`);
@@ -56,9 +55,9 @@ try {
 
   // Idle and back in the foreground: the app asks by itself once a day (Safari does not).
   await writeFile(swFile, original.replace(/inkform-app-[0-9a-f]+/, "inkform-app-testupdate2"));
+  const before = await ev(`JSON.stringify(window.inkformUpdateChecks())`);
   await ev(`localStorage.setItem('inkform.update-day.v1',new Date().toDateString());document.dispatchEvent(new Event('visibilitychange'))`);
-  await new Promise((r) => setTimeout(r, 1500));
-  check("Am selben Tag fragt die App nicht noch einmal von selbst", await ev(`navigator.serviceWorker.getRegistration().then(r=>!r.waiting&&!r.installing)`));
+  check("Am selben Tag fragt die App nicht noch einmal von selbst", (await ev(`JSON.stringify(window.inkformUpdateChecks())`)) === before);
   await ev(`localStorage.setItem('inkform.update-day.v1',new Date(Date.now()-864e5).toDateString());document.dispatchEvent(new Event('visibilitychange'))`);
   await until(`caches.keys().then(k=>k.includes('inkform-app-testupdate2')&&!k.includes('inkform-app-testupdate'))`, 200);
   check("Erster Start eines neuen Tages: fragt selbst nach der neuen Version", await ev(`localStorage.getItem('inkform.update-day.v1')===new Date().toDateString()`));
