@@ -77,6 +77,10 @@ await helpers();
 check("Mehrfaches Neuladen bucht nichts", await ev(`incomeRecords().length===0&&!document.getElementById('completion-screen').hidden`));
 await unlockFromThanks();
 check("Inhaber bekommt nach dem Neuladen das unveränderte PDF", await ev(`pdfArtifact===pendingConsent&&pendingConsent.blob.size===${size}&&document.getElementById('pdf-title').textContent==='Dein PDF ist bereit.'&&!document.getElementById('pdf-next').hidden&&document.getElementById('pdf-missing').hidden`));
+// Only the file goes to the share sheet: a title would become an extra .txt in the Files app.
+await ev(`window.__shareData=null;navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shareData=d};savePdfToFiles()`);
+await until(`!!window.__shareData && !nativeShareInFlight`);
+check("„In Dateien sichern“: nur die PDF, kein Titel (keine zusätzliche Textdatei)", await ev(`Object.keys(window.__shareData).join()==='files'&&window.__shareData.files.length===1&&window.__shareData.files[0].type==='application/pdf'`));
 await ev(`document.getElementById('pdf-next').click()`);
 await until(`!document.getElementById('customer-app').hidden`);
 await until(`(async()=>!localStorage.getItem(PENDING_KEY) && (await createIndexedDbFiles().keys()).length===0)()`);

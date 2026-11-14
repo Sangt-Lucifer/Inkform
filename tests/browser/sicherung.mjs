@@ -114,7 +114,7 @@ const beforeLoad = await removeShown();
 await ev(`loadLogo()`);
 await until(`!!document.querySelector('[data-admin-action="logo-remove"]')`);
 check("Logo-Bereich zeigt „Logo entfernen“, sobald das gespeicherte Logo geladen ist", !beforeLoad && (await ownLogo()) === "512x171 sichtbar");
-await ev(`openAdminAuthorized('backup');navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]}`);
+await ev(`openAdminAuthorized('backup');navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0];window.__shareKeys=Object.keys(d).join()}`);
 
 // Create and save the backup -----------------------------------------------------------------
 await ev(`adminDraft.studio.location='Ungespeichert';updateAdminChrome();window.__shared=null;document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`);
@@ -135,15 +135,21 @@ await ev(`document.getElementById('backup-flow').scrollIntoView({block:'center'}
 const topBefore = await panelTop();
 await cmd("Runtime.evaluate", { expression: `document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`, userGesture: true });
 await until(`!!window.__shared`);
-check("Ein Tipp genügt, wenn die Sicherung schnell bereit ist: Teilen öffnet sofort, ohne Sprung", (await ev(`window.__shared.name===window.__firstShared.name`)) && Math.abs((await panelTop()) - topBefore) < 120);
+check("Ein Tipp genügt, wenn die Sicherung schnell bereit ist: Teilen öffnet sofort, ohne Sprung", (await ev(`[window.__shared,window.__firstShared].every(f=>/^\\d{8}_\\d{4}_Inkform_Sicherung\\.json$/.test(f.name))`)) && Math.abs((await panelTop()) - topBefore) < 120);
+check("Sicherung: nur die Datei ans Teilen-Menü, kein Titel (keine zusätzliche Textdatei)", (await ev(`window.__shareKeys`)) === "files");
 await ev(`window.__shared=window.__firstShared`);
 const name = await ev(`window.__shared.name`);
 const json = await ev(`window.__shared.text()`);
 await writeFile(`${OUT}/${name}`, json);
 const backup = JSON.parse(json);
+const stampOf = (iso) => {
+  const d = new Date(iso), two = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}_${two(d.getHours())}${two(d.getMinutes())}`;
+};
 check(
-  "Sicherung enthält Einstellungen, Farbschema, Fristen, Einnahmen, Export-Protokoll, Abstand und beide PDFs",
-  /^Inkform_Sicherung_\d{4}-\d{2}-\d{2}\.json$/.test(name) &&
+  "Dateiname Datum_Uhrzeit_Inkform_Sicherung; Sicherung enthält Einstellungen, Farbschema, Fristen, Einnahmen, Export-Protokoll, Abstand und beide PDFs",
+  /^\d{8}_\d{4}_Inkform_Sicherung\.json$/.test(name) &&
+    name.slice(0, 13) === stampOf(backup.createdAt) &&
     backup.settings.studio.location === "Sicherungsort" &&
     backup.theme === "light" &&
     backup.retention.pdfYears === 10 &&

@@ -273,6 +273,9 @@ const $ = (id) => document.getElementById(id);
 const form = $("consent-form");
 const localDate = (date = new Date()) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+// "20261114_1430": sorts by name in the Files app, local time like localDate.
+const fileStamp = (date = new Date()) =>
+  `${localDate(date).replaceAll("-", "")}_${String(date.getHours()).padStart(2, "0")}${String(date.getMinutes()).padStart(2, "0")}`;
 const dateFormat = (value) => (value ? language().date(value) : t("common.notGiven"));
 const timeFormat = (date) => language().dateTime(date, { dateStyle: "medium", timeStyle: "long" });
 const fieldValue = (id) => $(id).value.trim();
@@ -1193,15 +1196,9 @@ async function savePdfToFiles() {
   nativeShareInFlight = true;
   $("pdf-share").disabled = true;
   try {
-    // Invoke before the first await to retain Safari user activation.
-    await navigator.share({
-      files: [file],
-      title: artifact.isReport
-        ? artifact.reportTitle
-        : artifact.isTest
-          ? t("share.testTitle")
-          : t("share.consentTitle"),
-    });
+    // Invoke before the first await to retain Safari user activation. Only the file: with a title
+    // or text, "In Dateien sichern" on iPadOS also stores that as an extra .txt file.
+    await navigator.share({ files: [file] });
     if (pdfArtifact === artifact)
       $("share-status").textContent = t("share.done");
   } catch (error) {
@@ -1906,7 +1903,7 @@ async function createBackup() {
         records: incomeFeature.list(),
         removed: readRemovedIds(localStorage),
       });
-    preparedBackup = new File([JSON.stringify(backup)], `${t("file.backup")}_${localDate()}.json`, { type: "application/json" });
+    preparedBackup = new File([JSON.stringify(backup)], `${fileStamp(new Date(backup.createdAt))}_${t("file.backup")}.json`, { type: "application/json" });
     $("backup-summary").textContent = t("backup.ready", {
       eintraege: backup.income.records.length,
       pdfs: backup.pdfs.length,
@@ -3414,7 +3411,7 @@ function saveFile(file) {
     downloadFile(file, file.name);
     return Promise.resolve("download");
   }
-  return navigator.share({ files: [file], title: file.name }).then(() => "share");
+  return navigator.share({ files: [file] }).then(() => "share");
 }
 function downloadFile(blob, name) {
   const url = URL.createObjectURL(blob),
