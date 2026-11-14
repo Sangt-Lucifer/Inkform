@@ -101,3 +101,7 @@ npm run pages          # geprüften Blanko-Build als Commit in den lokalen Zweig
 | `tests/` | Unit-, Migrations-, Profil- und Leak-Tests, `tests/browser/` Browser-Prüfungen, `tests/fixtures/` Dateien älterer Formate |
 
 Aufbau, Verhalten der App, Migration der Einstellungen und Prüfungen im Detail: [docs/ENTWICKLUNG.md](docs/ENTWICKLUNG.md).
+
+## Lizenz
+
+[MIT mit Commons Clause](LICENSE): Nutzen, verändern und kostenlos weitergeben darf jeder, privat wie im Unternehmen, also auch ein Studio für seine Einwilligungen. Nicht erlaubt ist, Inkform zu verkaufen: gegen Geld oder eine andere Gegenleistung ein Produkt oder einen Dienst anzubieten, dessen Wert ganz oder wesentlich aus Inkform kommt, etwa die App selbst oder ihr Hosting. Bezahlte Einrichtung oder bezahlter Support fallen darunter, wenn ihr Wert im Wesentlichen aus Inkform kommt. Wer Inkform weitergibt, gibt die Lizenz mit; die App liefert sie als `licenses/Inkform.txt` mit. Fremde Teile in `public/vendor/` behalten ihre eigenen Lizenzen (jsPDF und Tailwind MIT, Noto Sans SIL OFL 1.1).

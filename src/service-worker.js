@@ -9,6 +9,7 @@ const URLS = [
   "manifest.webmanifest",
   "icons/icon-192.png",
   "icons/icon-512.png",
+  "licenses/Inkform.txt",
   "licenses/jsPDF.txt",
   "licenses/Tailwind.txt",
   "licenses/NotoSans.txt",

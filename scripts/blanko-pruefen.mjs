@@ -29,6 +29,7 @@ export const BLANKO_FILES = [
   "dist/manifest.webmanifest",
   "dist/icons/icon-192.png",
   "dist/icons/icon-512.png",
+  "dist/licenses/Inkform.txt",
   "dist/licenses/jsPDF.txt",
   "dist/licenses/Tailwind.txt",
   "dist/licenses/NotoSans.txt",

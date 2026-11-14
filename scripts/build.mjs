@@ -346,6 +346,7 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
   // also makes a new worker, so installed iPads pick it up.
   const assets = [
     ["dist/manifest.webmanifest", await readFile(path.join(profile.dir, "manifest.webmanifest"))],
+    ["dist/licenses/Inkform.txt", await readFile(path.join(root, "LICENSE"))],
     ["dist/licenses/jsPDF.txt", await readFile(path.join(root, "public/vendor/LICENSE-jsPDF.txt"))],
     ["dist/licenses/Tailwind.txt", await readFile(path.join(root, "public/vendor/LICENSE-Tailwind.txt"))],
     ["dist/licenses/NotoSans.txt", await readFile(path.join(root, "public/vendor/LICENSE-NotoSans.txt"))],
