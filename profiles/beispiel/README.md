@@ -40,7 +40,7 @@ Safari und Home-Bildschirm-App können getrennte lokale Daten verwenden. Studio-
 
 Studioangaben, Datenschutzkontakt, Aufbewahrung und Empfänger sind mit dem **erfundenen Musterstudio** (Max Mustermann, Musterstadt, `datenschutz@musterstudio.example`) vorbelegt. Alle Angaben sind fiktiv und müssen vor dem Einsatz vollständig durch die echten Studioangaben ersetzt werden. Vorlage 1.2 ersetzt einen Haftungsverzicht durch eine Nachsorge-Erklärung mit unveränderten gesetzlichen Ansprüchen. Die dokumentierte Vorprüfung und verbleibende Punkte stehen unter `Dokumente/Rechtstexte-Pruefung.md`; es gibt keine anwaltliche Freigabe.
 
-Eigene ältere Studioeinstellungen werden erhalten. Vor einem Wechsel auf die aktuelle Standardvorlage zuerst unter **Sichern & Wiederherstellen** eine Gesamtsicherung erstellen, dann unter **Darstellung** die Vorlage als Entwurf laden, vergleichen und speichern. PDF-Dateien und Einnahmenliste werden dadurch nicht überschrieben. Die App führt keinen automatischen Löschlauf für gespeicherte PDFs aus.
+Eigene ältere Studioeinstellungen werden erhalten. Vor einem Wechsel auf die aktuelle Standardvorlage zuerst unter **Sichern & Wiederherstellen** eine Gesamtsicherung erstellen, dann unter **iPad & Einstellungen** die Vorlage als Entwurf laden, vergleichen und speichern. PDF-Dateien und Einnahmenliste werden dadurch nicht überschrieben. Die App führt keinen automatischen Löschlauf für gespeicherte PDFs aus.
 
 ## Entwickeln und prüfen
 

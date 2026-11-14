@@ -1421,6 +1421,7 @@ html[data-theme="dark"] .choice input:focus-visible + span,
   position: sticky;
   top: 0;
   height: 100dvh;
+  overflow: hidden auto;
   display: flex;
   flex-direction: column;
   padding: calc(30px + env(safe-area-inset-top)) 18px 20px;
@@ -1459,6 +1460,9 @@ html[data-theme="dark"] .choice input:focus-visible + span,
   font-weight: 700;
   flex-shrink: 0;
 }
+.ad-workspace > span:last-child {
+  min-width: 0;
+}
 .ad-workspace strong {
   font-size: 11px;
   font-weight: 600;
@@ -1470,6 +1474,9 @@ html[data-theme="dark"] .choice input:focus-visible + span,
 }
 .ad-workspace small {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10px;
   color: var(--ad-muted);
   margin-top: 4px;
@@ -1514,6 +1521,41 @@ html[data-theme="dark"] .choice input:focus-visible + span,
 .ad-nav .icon {
   width: 17px;
   height: 17px;
+}
+.ad-nav-group {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--ad-muted);
+  padding: 12px 14px 2px;
+}
+.ad-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 22px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ad-line);
+}
+.ad-tabs button {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ad-muted);
+  font-size: 13px;
+  font-weight: 550;
+}
+.ad-tabs button:hover {
+  background: var(--ad-hover);
+  color: var(--ad-text);
+}
+.ad-tabs button[aria-current="page"] {
+  background: var(--ad-blue-soft);
+  color: var(--ad-blue);
+  font-weight: 650;
 }
 .ad-nav-spacer {
   flex: 1;
@@ -2341,6 +2383,7 @@ html[data-theme="light"] #admin-setup-finish {
   .ad-sidebar {
     position: static;
     height: auto;
+    overflow: visible;
     border: 0;
     padding: calc(19px + env(safe-area-inset-top)) 18px 0;
     border-bottom: 1px solid var(--ad-line);
@@ -2354,6 +2397,7 @@ html[data-theme="light"] #admin-setup-finish {
   }
   .ad-workspace,
   .ad-nav-label,
+  .ad-nav-group,
   .ad-nav-spacer,
   .ad-local,
   .ad-sidebar-foot {

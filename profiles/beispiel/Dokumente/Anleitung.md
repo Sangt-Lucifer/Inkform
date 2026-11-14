@@ -13,9 +13,9 @@ Mit Inkform füllt der Kunde seine Tattoo-Einwilligung aus und unterschreibt auf
 
 ## Für den täglichen Einsatz vorbereiten
 
-- Einen lokalen Ordner INKFORM / Einwilligungen anlegen und unter iPad & Dateien eine Test-PDF speichern. Die tatsächlich gespeicherte Datei anschließend öffnen.
+- Einen lokalen Ordner INKFORM / Einwilligungen anlegen und unter iPad & Einstellungen eine Test-PDF speichern. Die tatsächlich gespeicherte Datei anschließend öffnen.
 - Alle Erklärungen, Pflegehinweise und tatsächlichen Studioabläufe vor dem Kundeneinsatz abstimmen. Ein Formular ersetzt kein persönliches Aufklärungsgespräch.
-- Bei einer bereits früher verwendeten Version zuerst eine Gesamtsicherung erstellen (Sichern & Wiederherstellen). Alte gespeicherte Texte werden nicht automatisch überschrieben; unter Darstellung die aktuelle Standardvorlage vergleichen und bei Bedarf übernehmen.
+- Bei einer bereits früher verwendeten Version zuerst eine Gesamtsicherung erstellen (Sichern & Wiederherstellen). Alte gespeicherte Texte werden nicht automatisch überschrieben; unter iPad & Einstellungen die aktuelle Standardvorlage vergleichen und bei Bedarf übernehmen.
 
 Wichtig: Die unterschriebene Einwilligung ist das PDF in der Dateien-App. Zusätzlich behält die App eine Kopie jedes bestätigten PDFs für den ZIP-Export, bis diese Kopie gelöscht wird. Einnahmenliste und Studioeinstellungen liegen ebenfalls nur in der App; gesichert wird alles zusammen mit der Gesamtsicherung.
 
@@ -30,7 +30,7 @@ Für den gewünschten Start über ein Symbol muss die vorbereitete Ausgabe dist/
 - Im Admin den Button Zum Home-Bildschirm wählen. Er zeigt die Anleitung; iPadOS verlangt die Bestätigung selbst.
 - In Safari Teilen, gegebenenfalls Mehr, dann Zum Home-Bildschirm wählen. Als Web-App öffnen aktiviert lassen, falls die Auswahl erscheint, und Hinzufügen bestätigen.
 - Inkform über das INKFORM-Symbol starten. Falls dieser Start eine getrennte Browserablage verwendet, PIN und Einstellungen auch dort einrichten. Vorhandene Daten lassen sich mit der Gesamtsicherung übernehmen.
-- Unter iPad & Dateien auf Offline bereit warten. Danach Flugmodus einschalten, App neu starten und ein vollständiges Testformular einschließlich Unterschrift und PDF prüfen.
+- Unter iPad & Einstellungen auf Offline bereit warten. Danach Flugmodus einschalten, App neu starten und ein vollständiges Testformular einschließlich Unterschrift und PDF prüfen.
 
 ## Was lokal bleibt
 
@@ -77,21 +77,20 @@ Bei einem Fehler der Einnahmenspeicherung bleibt das Formular erhalten. Nicht ne
 
 # 4. Die Admin-Konsole bedienen
 
-Admin-Konsole wählen und die Inhaber-PIN eingeben. Bei offenem Admin hat der Inhaber Zugriff auf die folgenden Reiter. Vor der Übergabe an Kunden immer Zum Formular verwenden.
+Admin-Konsole wählen und die Inhaber-PIN eingeben. Bei offenem Admin hat der Inhaber Zugriff auf die folgenden Bereiche. Die Seitenleiste ordnet sie in Alltag, Formular, Daten und Gerät; die vier Textseiten liegen unter Texte und wechseln oben über Reiter. Vor der Übergabe an Kunden immer Zum Formular verwenden.
 
-| Reiter | Was dort bearbeitet oder geprüft wird |
+| Bereich | Was dort bearbeitet oder geprüft wird |
 | Übersicht | Einstieg, Erinnerungen, Stand der letzten Gesamtsicherung, Status des Studio-Profils und Verknüpfungen zu den wichtigsten Bereichen. |
-| Studio & Kontakt | Studio / verantwortliche Person, vollständige Anschrift, Kontakt-E-Mail, Unterschriftsort, optional der vorbelegte Artist, ein eigenes Logo (PNG oder JPEG, wird sofort gespeichert und erscheint auch in neuen PDFs) und ein App-Symbol für den Home-Bildschirm (Vorschau mit hellem oder dunklem Hintergrund; iPadOS übernimmt es nur beim Hinzufügen zum Home-Bildschirm aus Safari, ein späterer Wechsel braucht Sicherung, App entfernen, neu hinzufügen und Wiederherstellen). |
-| Formular & Texte | Begrüßung, Überschrift, Formularversion, Fotoeinwilligung sowie die Erklärung bei der Unterschrift. Eine Vorschau zeigt den Entwurf. |
-| Gesundheitsfragen | Vorhandene Fragen anpassen und bei tatsächlichem Bedarf eigene Fragen ergänzen. Nur für den Termin relevante Angaben erheben. |
-| Einwilligungen | Erklärungen zu Aufklärung, Motiv, Nachsorge und Gesundheitsdaten bearbeiten. Eine Checkbox ersetzt kein stattgefundenes Gespräch. |
 | Einnahmen | Einwilligungen nach Artist, Monat und Jahr auswerten, offene Preise ergänzen, alte Einwilligungen nachtragen, PDF- und CSV-Listen ausgeben und einzelne PDF-Kopien aus der App löschen. |
 | Export | ZIP-Datei mit Einwilligungs-PDFs und Einnahmenübersicht für einen Monat, ein Jahr oder einen freien Zeitraum. Speicheranzeige der PDF-Kopien in der App und Löschen dieser Kopien mit Prüfschritt. |
+| Studio & Kontakt | Studio / verantwortliche Person, vollständige Anschrift, Kontakt-E-Mail, Unterschriftsort, optional der vorbelegte Artist, ein eigenes Logo (PNG oder JPEG, wird sofort gespeichert und erscheint auch in neuen PDFs) und ein App-Symbol für den Home-Bildschirm (Vorschau mit hellem oder dunklem Hintergrund; iPadOS übernimmt es nur beim Hinzufügen zum Home-Bildschirm aus Safari, ein späterer Wechsel braucht Sicherung, App entfernen, neu hinzufügen und Wiederherstellen). |
+| Texte → Einstieg & Unterschrift | Begrüßung, Überschrift, Formularversion, Fotoeinwilligung sowie die Erklärung bei der Unterschrift. Eine Vorschau zeigt den Entwurf. |
+| Texte → Gesundheitsfragen | Vorhandene Fragen anpassen und bei tatsächlichem Bedarf eigene Fragen ergänzen. Nur für den Termin relevante Angaben erheben. |
+| Texte → Einwilligungstexte | Erklärungen zu Aufklärung, Motiv, Nachsorge und Gesundheitsdaten bearbeiten. Eine Checkbox ersetzt kein stattgefundenes Gespräch. |
+| Texte → Datenschutz | Aufbewahrungs- und Löschkriterien, Zugriff / Empfänger und vollständige Datenschutzhinweise bearbeiten. Angaben müssen dem realen Ablauf entsprechen. |
 | Sichern & Wiederherstellen | Gesamtsicherung erstellen und den Erinnerungsabstand wählen, aus einer Datei wiederherstellen (Gesamtsicherung oder Studio-Einstellungen; die App erkennt die Datei und zeigt vorher, was ersetzt wird), nur die Studio-Einstellungen (Studioangaben, Logo, App-Symbol, Texte, Sprachen, Farbschema, Fristen; ohne Kundendaten) weitergeben, die App als HTML exportieren und nachsehen, was in welcher Datei steckt. |
 | Aufbewahren & Löschen | Fristen festlegen (gespeichert schon beim Eintippen), Löschliste für fällige PDFs, Anonymisieren alter Namen in der Einnahmenliste und ganz unten App auf diesem iPad zurücksetzen: löscht nach Eintippen von ZURÜCKSETZEN alle Daten dieser App, auch die PIN; PDFs in der Dateien-App und Sicherungsdateien bleiben. |
-| Datenschutz | Aufbewahrungs- und Löschkriterien, Zugriff / Empfänger und vollständige Datenschutzhinweise bearbeiten. Angaben müssen dem realen Ablauf entsprechen. |
-| iPad & Dateien | Offline-Verfügbarkeit und PDF-Funktion prüfen, Home-Bildschirm-Anleitung öffnen, eine Test-PDF ohne Kundendaten erzeugen und die PIN ändern (bisherige PIN, dann zweimal die neue). |
-| Darstellung | Light- oder Darkmode wählen, die Sprache dieses Geräts einstellen und die Standardvorlage laden. |
+| iPad & Einstellungen | Offline-Verfügbarkeit und PDF-Funktion prüfen, Home-Bildschirm-Anleitung öffnen, eine Test-PDF ohne Kundendaten erzeugen, Light- oder Darkmode wählen, die Sprache dieses Geräts einstellen, die PIN ändern (bisherige PIN, dann zweimal die neue) und die Standardvorlage laden. |
 
 ## Änderungen zuverlässig übernehmen
 
@@ -103,10 +102,10 @@ Die PIN schützt die Bedienoberfläche; sie ist keine Verschlüsselung der Brows
 
 ## Sprachen
 
-- Die Verwaltung erscheint in der Sprache dieses Geräts (Darstellung → Sprache dieses Geräts). Die Einstellung gilt nur für dieses Gerät und ist nicht in der Gesamtsicherung.
+- Die Verwaltung erscheint in der Sprache dieses Geräts (iPad & Einstellungen → Sprache dieses Geräts). Die Einstellung gilt nur für dieses Gerät und ist nicht in der Gesamtsicherung.
 - Das Kundenformular startet immer in der Studiosprache. Weitere Sprachen für Kunden unter Studio & Kontakt → Sprachen und Währung ankreuzen; ab zwei Sprachen erscheinen oben im Formular Flaggen-Knöpfe zum Umschalten; Eingaben bleiben dabei erhalten. Ankreuzen lässt sich eine Sprache erst, wenn alle Formulartexte in ihr vorliegen.
 - Wechselt der Kunde die Sprache, bleiben Angaben und Gesundheitsantworten erhalten; Erklärungen, Foto-Auswahl und Unterschrift beginnen neu. Das PDF entsteht in der Sprache des Kunden und vermerkt sie mit dem optionalen Hinweis, z. B. „Maßgeblich ist die deutsche Fassung“.
-- Übersetzungen bearbeiten: auf Formular & Texte, Gesundheitsfragen, Einwilligungen und Datenschutz oben die Sprache umschalten. Unter jedem Feld steht der deutsche Text als Vorlage.
+- Übersetzungen bearbeiten: unter Texte (Einstieg & Unterschrift, Gesundheitsfragen, Einwilligungstexte, Datenschutz) oben die Sprache umschalten. Unter jedem Feld steht der deutsche Text als Vorlage.
 - Englisch ist als Entwurf enthalten, nicht juristisch geprüft, und wird Kunden erst nach dem Ankreuzen angeboten. Nach der Prüfung neben der Sprache „Juristisch geprüft“ ankreuzen.
 - Wird ein deutscher Text geändert, bleibt die Übersetzung stehen, wird aber markiert, und die Sprache wird Kunden nicht angeboten. Der Hinweis „… Texte prüfen“ führt zu den Feldern und zeigt den alten und den neuen deutschen Text. Übersetzung anpassen oder „Übersetzung passt“ tippen, dann speichern.
 - Die Währung steht ebenfalls unter Sprachen und Währung. Bereits erfasste Einnahmen behalten ihre Währung; Beträge werden nie umgerechnet.
@@ -180,7 +179,7 @@ Es gibt keinen automatischen Löschlauf, auch nicht für die PDF-Kopien in der A
 - Einnahmen konnten nicht gespeichert werden: Nicht neu laden. Der Inhaber prüft den lokalen Browser-Speicher und versucht die Bestätigung erneut. Die App hält das aktuelle Formular bis dahin vor. Existierende Sicherungen nicht löschen.
 - PIN vergessen: Es gibt keinen Online-Reset. Vorhandene App-Daten nicht vorschnell löschen. Mit einer Gesamtsicherung lässt sich alles außer der PIN in einer neuen Browserumgebung mit neuer PIN wiederherstellen. Ohne Sicherung gibt es keinen vorgesehenen Wiederherstellungsweg über die Oberfläche.
 - Einnahmenliste ist leer: Artist, Jahr und Monat kontrollieren. In einem anderen Browser oder über das Home-Bildschirm-Symbol kann ein anderer lokaler Datenbestand verwendet werden. Dort die Gesamtsicherung wiederherstellen.
-- Nach einem App-Update: Vorher eine Gesamtsicherung erstellen. Die App sucht einmal am Tag beim ersten Öffnen mit WLAN nach einer neuen Version, sofort über iPad & Dateien → Nach Update suchen. Die neue Version übernimmt, sobald kein Formular in Arbeit und keine Einwilligung offen ist. Über den Knopf lädt sie sofort neu (danach die PIN neu eingeben); kommt die Meldung, dass erst das Formular abgeschlossen werden muss, das tun und noch einmal tippen. Von selbst geladen wird sie sichtbar, sobald die App einmal ganz geschlossen und neu geöffnet wurde. Alle Geräte mit derselben App gemeinsam aktualisieren: Eine ältere Version kann neuere Sicherungen nicht lesen und lehnt sie ab, ohne etwas zu überschreiben.
+- Nach einem App-Update: Vorher eine Gesamtsicherung erstellen. Die App sucht einmal am Tag beim ersten Öffnen mit WLAN nach einer neuen Version, sofort über iPad & Einstellungen → Nach Update suchen. Die neue Version übernimmt, sobald kein Formular in Arbeit und keine Einwilligung offen ist. Über den Knopf lädt sie sofort neu (danach die PIN neu eingeben); kommt die Meldung, dass erst das Formular abgeschlossen werden muss, das tun und noch einmal tippen. Von selbst geladen wird sie sichtbar, sobald die App einmal ganz geschlossen und neu geöffnet wurde. Alle Geräte mit derselben App gemeinsam aktualisieren: Eine ältere Version kann neuere Sicherungen nicht lesen und lehnt sie ab, ohne etwas zu überschreiben.
 - App startet offline nicht: Vor dem nächsten Kundeneinsatz einmal über den eingerichteten Weblink laden, Offline bereit abwarten und im Flugmodus erneut testen. Ein belegter Offline-Cache kann durch iPadOS oder das Löschen von Browserdaten verloren gehen.
 - Die App meldet nicht darstellbare Zeichen: Die mitgelieferte PDF-Schrift deckt lateinische, griechische und kyrillische Schrift ab, aber zum Beispiel keine Emojis, Symbole wie ✓ und keine arabische Schrift. Die gemeldeten Zeichen ersetzen oder weglassen; für die Einnahmenliste notfalls CSV verwenden.
 - Speicher wird knapp: Im Reiter Export die Speicheranzeige prüfen und Zeiträume, die als ZIP gesichert und geprüft sind, aus der App löschen.

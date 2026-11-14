@@ -21,7 +21,7 @@ Eingetragen wurden zweckgebundene Kriterien: erforderliche Terminvorbereitung un
 
 ## Stand übernehmen
 
-Neue Installationen verwenden die überarbeitete Standardvorlage 1.2. Bereits gespeicherte eigene Einstellungen werden nicht überschrieben. Zunächst unter „Sichern & Wiederherstellen“ eine Gesamtsicherung erstellen, dann unter „Darstellung“ die Standardvorlage als Entwurf laden, vergleichen und speichern; individuelle Anpassungen bei Bedarf wieder übernehmen. Gleiches gilt für ältere exportierte HTML-Dateien. Ein Kunde sollte eine Kopie seines unterzeichneten Dokuments erhalten; diese Weitergabe gezielt vornehmen, nicht automatisch hochladen.
+Neue Installationen verwenden die überarbeitete Standardvorlage 1.2. Bereits gespeicherte eigene Einstellungen werden nicht überschrieben. Zunächst unter „Sichern & Wiederherstellen“ eine Gesamtsicherung erstellen, dann unter „iPad & Einstellungen“ die Standardvorlage als Entwurf laden, vergleichen und speichern; individuelle Anpassungen bei Bedarf wieder übernehmen. Gleiches gilt für ältere exportierte HTML-Dateien. Ein Kunde sollte eine Kopie seines unterzeichneten Dokuments erhalten; diese Weitergabe gezielt vornehmen, nicht automatisch hochladen.
 
 ## Quellen
 

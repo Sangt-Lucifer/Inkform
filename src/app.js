@@ -1462,13 +1462,16 @@ const ADMIN_PAGES = {
     title: "admin.page.ipad.title",
     description: "admin.page.ipad.description",
   },
-  appearance: {
-    label: "admin.page.appearance.label",
-    icon: "sliders",
-    title: "admin.page.appearance.title",
-    description: "admin.page.appearance.description",
-  },
 };
+// The sidebar in groups. "texts" stands for the four text pages, which share one entry and switch
+// with tabs above the page; the setup shows only while it is not finished.
+const ADMIN_NAV = [
+  ["", ["setup", "overview"]],
+  ["admin.group.daily", ["income", "export"]],
+  ["admin.group.form", ["studio", "texts"]],
+  ["admin.group.data", ["backup", "retention"]],
+  ["admin.group.device", ["ipad"]],
+];
 let adminDraft = null,
   adminPage = "overview",
   editLanguage = null,
@@ -1697,7 +1700,49 @@ function backupState() {
   return { age: last ? daysBetween(last) : null, today: !!last && localDate(new Date(last)) === localDate(), days };
 }
 let preparedBackup = null;
-// PIN change on "iPad & Dateien": the current PIN is asked again, wrong ones count as failures.
+// "iPad & Einstellungen": settings of this device, the PIN and the original template.
+function deviceSettings() {
+  return `${adminPanel(
+    th("appearance.title"),
+    /* HTML */ `<p class="ad-section-copy">${th("appearance.copy")}</p>
+      <div class="ad-theme-options">
+        <button class="ad-theme-card" data-set-theme="light" type="button">
+          <span class="ad-theme-swatch light"></span><strong>${th("theme.light")}</strong
+          ><small>${th("appearance.lightNote")}</small></button
+        ><button class="ad-theme-card" data-set-theme="dark" type="button">
+          <span class="ad-theme-swatch dark"></span><strong>${th("theme.dark")}</strong
+          ><small>${th("appearance.darkNote")}</small>
+        </button>
+      </div>`,
+  )}${adminPanel(
+    th("languages.operatorTitle"),
+    /* HTML */ `<div class="ad-fields">
+      <div class="ad-field">
+        <label for="operator-language">${th("languages.operator")}</label
+        >${languageSelect("operator-language", languageCodes(), operatorLanguage())}<small
+          >${th("languages.operatorHelp")}</small
+        >
+      </div>
+    </div>`,
+  )}${pinPanel()}${adminPanel(
+    th("appearance.defaults"),
+    /* HTML */ `<div class="ad-reset-row">
+      <div>
+        <strong>${th("appearance.defaultsTitle")}</strong>
+        <p>${th("appearance.defaultsCopy")}</p>
+      </div>
+      <button class="ad-button danger" type="button" data-admin-action="defaults">
+        ${adminIcon("reset")}${th("appearance.defaultsButton")}
+      </button>
+    </div>`,
+  )}<div class="ad-notice">${th("appearance.pinNotice")}</div>`;
+}
+function textTabs() {
+  return `<nav class="ad-tabs" aria-label="${th("admin.nav.texts")}">${TEXT_PAGES.map(
+    (id) => `<button type="button" data-admin-page="${id}"${id === adminPage ? ' aria-current="page"' : ""}>${th(ADMIN_PAGES[id].label)}</button>`,
+  ).join("")}</nav>`;
+}
+// PIN change: the current PIN is asked again, wrong ones count as failures.
 function pinPanel() {
   const field = (id, label) =>
     `<div class="ad-field"><label for="${id}">${th(label)}</label><input id="${id}" type="password" inputmode="numeric" autocomplete="off" maxlength="12" required></div>`;
@@ -2717,18 +2762,22 @@ function renderAdminSection() {
   $("admin-page-description").textContent = t(page.description);
   $("admin-breadcrumb").textContent = t(page.label);
   $("admin-error").hidden = true;
-  $("admin-nav").innerHTML = Object.entries(ADMIN_PAGES)
-    .map(
-      ([id, p]) =>
-        /* HTML */ `<button
-          type="button"
-          data-admin-page="${id}"
-          ${id === adminPage ? 'aria-current="page"' : ""}
-        >
-          ${adminIcon(p.icon)}${th(p.label)}
-        </button>`,
-    )
-    .join("");
+  const navButton = (target, icon, label, current) =>
+    /* HTML */ `<button type="button" data-admin-page="${target}" ${current ? 'aria-current="page"' : ""}>
+      ${adminIcon(icon)}${th(label)}
+    </button>`;
+  $("admin-nav").innerHTML = ADMIN_NAV.map(([group, ids]) => {
+    const buttons = ids
+      .map((id) =>
+        id === "texts"
+          ? navButton("content", "pen", "admin.nav.texts", TEXT_PAGES.includes(adminPage))
+          : ADMIN_PAGES[id] && (id !== "setup" || needsSetup() || adminPage === "setup")
+            ? navButton(id, ADMIN_PAGES[id].icon, ADMIN_PAGES[id].label, id === adminPage)
+            : "",
+      )
+      .join("");
+    return buttons && (group ? `<div class="ad-nav-group">${th(group)}</div>` : "") + buttons;
+  }).join("");
   let content = "";
   if (editLanguage && TEXT_PAGES.includes(adminPage)) {
     content = translationPage();
@@ -3055,7 +3104,7 @@ function renderAdminSection() {
             <li>${th("ipad.daily5")}</li>
           </ol>
           <p class="ad-preview-note">${th("ipad.dailyNote")}</p>`,
-      ) + pinPanel();
+      ) + deviceSettings();
   } else if (adminPage === "backup") {
     content = `${backupPanel()}${restorePanel()}${adminPanel(
       th("appearance.transfer"),
@@ -3079,43 +3128,8 @@ function renderAdminSection() {
           <dd>${th("contents.nowhereItems")}</dd>
         </dl>`,
     )}`;
-  } else if (adminPage === "appearance") {
-    content = `${adminPanel(
-      th("appearance.title"),
-      /* HTML */ `<p class="ad-section-copy">${th("appearance.copy")}</p>
-        <div class="ad-theme-options">
-          <button class="ad-theme-card" data-set-theme="light" type="button">
-            <span class="ad-theme-swatch light"></span><strong>${th("theme.light")}</strong
-            ><small>${th("appearance.lightNote")}</small></button
-          ><button class="ad-theme-card" data-set-theme="dark" type="button">
-            <span class="ad-theme-swatch dark"></span><strong>${th("theme.dark")}</strong
-            ><small>${th("appearance.darkNote")}</small>
-          </button>
-        </div>`,
-    )}${adminPanel(
-      th("languages.operatorTitle"),
-      /* HTML */ `<div class="ad-fields">
-        <div class="ad-field">
-          <label for="operator-language">${th("languages.operator")}</label
-          >${languageSelect("operator-language", languageCodes(), operatorLanguage())}<small
-            >${th("languages.operatorHelp")}</small
-          >
-        </div>
-      </div>`,
-    )}${adminPanel(
-      th("appearance.defaults"),
-      /* HTML */ `<div class="ad-reset-row">
-        <div>
-          <strong>${th("appearance.defaultsTitle")}</strong>
-          <p>${th("appearance.defaultsCopy")}</p>
-        </div>
-        <button class="ad-button danger" type="button" data-admin-action="defaults">
-          ${adminIcon("reset")}${th("appearance.defaultsButton")}
-        </button>
-      </div>`,
-    )}<div class="ad-notice">${th("appearance.pinNotice")}</div>`;
   }
-  if (TEXT_PAGES.includes(adminPage)) content = staleNotice() + languageSwitch() + content;
+  if (TEXT_PAGES.includes(adminPage)) content = textTabs() + staleNotice() + languageSwitch() + content;
   else if (adminPage === "overview") content = staleNotice() + content;
   $("admin-section").innerHTML = content;
   if (adminPage === "export") {
@@ -3617,9 +3631,12 @@ $("admin-app").addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
   if (button.dataset.adminPage) {
+    // The sidebar and the tabs are drawn anew: keep the focus on the same entry, else on the heading.
+    const area = button.closest("#admin-nav") ? "#admin-nav" : button.closest(".ad-tabs") ? ".ad-tabs" : null;
     adminPage = needsSetup() ? "setup" : button.dataset.adminPage;
     renderAdminSection();
     window.scrollTo(0, 0);
+    (area && document.querySelector(`${area} [data-admin-page="${button.dataset.adminPage}"]`) || $("admin-page-title")).focus({ preventScroll: true });
   }
   if (button.dataset.setTheme) setTheme(button.dataset.setTheme);
   if (button.dataset.editLanguage) {

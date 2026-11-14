@@ -108,8 +108,10 @@ check(
 );
 await ev(`(e=>{e.checked=true;e.dispatchEvent(new Event('change',{bubbles:true}))})(document.querySelector('[data-locale-customer="en"]'))`);
 check("Angekreuzt, Eingaben bleiben", await ev(`document.querySelector('[data-locale-customer="en"]').checked&&document.getElementById('admin-studio-name').value==='Atelier Probe · Kim Test'&&document.getElementById('setup-pdf-years').value==='10'`));
+check("Vor dem Abschluss: „Einrichtung“ in der Seitenleiste", await ev(`!!document.querySelector('#admin-nav [data-admin-page="setup"]')`));
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
 await until(`adminPage==='overview'`);
+check("Nach dem Abschluss: „Einrichtung“ nicht mehr in der Seitenleiste", await ev(`!document.querySelector('#admin-nav [data-admin-page="setup"]')`));
 check(
   "Einrichtung gespeichert, nur auf dem Gerät: Studio, Kontakt, Frist",
   await ev(`JSON.parse(localStorage.getItem(SETTINGS_KEY)).studio.name==='Atelier Probe · Kim Test'&&readRetention(localStorage).pdfYears===10`),

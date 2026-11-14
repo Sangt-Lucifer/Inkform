@@ -10,13 +10,13 @@ Dieses Repository enthält nur die fertige, neutrale App (ohne Studio und ohne D
 2. **Symbol wählen:** deine Studio-Einstellungen-Datei, falls du schon eine hast, oder ein Bild. Hier nur die Studio-Einstellungen, nicht die Gesamtsicherung mit Kundendaten. Im Safari-Tab wird nichts gespeichert.
 3. Teilen → **Zum Home-Bildschirm**. Den Namen unter dem Symbol kannst du dort ändern, zum Beispiel in den Studionamen. „Als Web-App öffnen“ aktiviert lassen, Hinzufügen.
 4. Inkform über das neue Symbol starten, beim ersten Mal mit Internet. Safari-Tab und Home-Bildschirm-App haben **getrennte Speicher**; ab jetzt nur noch das Symbol benutzen.
-5. Eine **PIN** festlegen: 6 bis 12 Ziffern. Sie steht in keiner Datei, es gibt keinen Online-Reset. Ändern lässt sie sich unter „iPad & Dateien“.
+5. Eine **PIN** festlegen: 6 bis 12 Ziffern. Sie steht in keiner Datei, es gibt keinen Online-Reset. Ändern lässt sie sich unter „iPad & Einstellungen“.
 6. Einen der zwei Wege wählen:
    - **Neu einrichten:** Studio, Datenschutzkontakt, Anschrift und Ort der Unterschrift eintragen, optional Fristen, Logo und App-Symbol.
    - **Aus Datei übernehmen:** eine Gesamtsicherung (alles von einem anderen Gerät, auch Einnahmen und PDFs) oder Studio-Einstellungen (dieselbe Datei wie in Schritt 2, nur die Anpassungen; die Einnahmenliste bleibt leer).
    Vor dem Übernehmen zeigt die App, was in der Datei steckt. Eine falsche Datei ändert nichts.
 7. Formulartexte, Gesundheitsfragen und Datenschutzhinweise prüfen und an das Studio anpassen. Sie sind neutral vorbereitet und vor dem Einsatz rechtlich zu prüfen.
-8. Unter „iPad & Dateien“ die PDF-Ablage testen.
+8. Unter „iPad & Einstellungen“ die PDF-Ablage testen.
 
 Zum Ausprobieren gibt es in der Übersicht „Beispieldaten laden“ (erfundene Einträge mit PDFs). „Beispieldaten entfernen“ löscht sie wieder vollständig.
 
@@ -46,7 +46,7 @@ Damit der Speicher nicht dauerhaft wächst, lassen sich die PDF-Kopien in der Ap
 
 ## Updates
 
-Eine neue Version erscheint unter derselben Adresse. Die App sucht einmal am Tag beim ersten Öffnen mit Internet danach, jederzeit über „Nach Update suchen“ unter „iPad & Dateien“, lädt sie und übernimmt sie erst, wenn nichts in Arbeit ist (kein Formular, keine offene Einwilligung); über den Knopf lädt sie sofort. Die Daten bleiben erhalten. Vor einem Update ist eine Gesamtsicherung sinnvoll. Alle Geräte möglichst gemeinsam aktualisieren.
+Eine neue Version erscheint unter derselben Adresse. Die App sucht einmal am Tag beim ersten Öffnen mit Internet danach, jederzeit über „Nach Update suchen“ unter „iPad & Einstellungen“, lädt sie und übernimmt sie erst, wenn nichts in Arbeit ist (kein Formular, keine offene Einwilligung); über den Knopf lädt sie sofort. Die Daten bleiben erhalten. Vor einem Update ist eine Gesamtsicherung sinnvoll. Alle Geräte möglichst gemeinsam aktualisieren.
 
 ## English
 
@@ -56,17 +56,17 @@ Inkform is a tattoo consent form with signature, PDF filing and an income list f
 
 1. Open the app's address once in **Safari**, with an internet connection, and wait for “Ready offline”.
 2. Share → **Add to Home Screen**, keep “Open as Web App” on, then start Inkform from the new icon (it has its own storage, separate from the Safari tab).
-3. Choose a **PIN** of 6 to 12 digits. There is no online reset; change it under “iPad & Files”.
+3. Choose a **PIN** of 6 to 12 digits. There is no online reset; change it under “iPad & Settings”.
 4. In the setup assistant, enter the studio, privacy contact, address and place of signature. Everything stays on the iPad and can be changed later under “Studio & Contact”.
 5. Check the form texts, health questions and privacy notice and adapt them to the studio. They are neutral drafts and need a legal review before use.
-6. Test PDF filing under “iPad & Files”.
+6. Test PDF filing under “iPad & Settings”.
 
 **Languages**
 
-- The admin area follows the language chosen under “Appearance” → “Language of this Device”. This applies to this iPad only and is not part of the backup.
+- The admin area follows the language chosen under “iPad & Settings” → “Language of this Device”. This applies to this iPad only and is not part of the backup.
 - The customer form starts in the studio language. Under “Studio & Contact” → “Languages and Currency”, tick further **Languages for Customers**; a language selector then appears on the form.
 - English form texts are included as a **draft, not legally reviewed**, also after updating an existing installation. They are not offered to customers until you tick English. Have them reviewed first, then tick “Legally reviewed” next to the language.
-- To edit the English texts, use the “Deutsch | English” switch on the text pages (Form & Texts, Health Questions, Consent, Privacy). The German text is shown below each field as a reference.
+- To edit the English texts, use the “Deutsch | English” switch under “Texts” (Welcome & Signature, Health Questions, Consent Texts, Privacy). The German text is shown below each field as a reference.
 - If you change a German text, its English version is kept but marked, and English is not offered until you have checked it: the admin area shows “English: check 2 texts”, jumps to each one and shows the old and the new German text. Edit the English text or tap “Translation fits”. A new health question or declaration needs its English text before English is offered again.
 - Switching the language keeps the customer's details and health answers; declarations, photo choice and signature start again. The PDF is created in the customer's language.
 

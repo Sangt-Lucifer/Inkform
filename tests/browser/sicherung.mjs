@@ -56,8 +56,8 @@ check(
   "Ein Ort: Sichern, Wiederherstellen mit einer Dateiauswahl, Studio-Einstellungen weitergeben",
   await ev(`adminPage==='backup'&&document.querySelectorAll('[data-admin-action="backup-create"]').length===1&&document.querySelectorAll('[data-admin-action="backup-restore"]').length===1&&!!document.querySelector('[data-admin-action="export-json"]')&&!!document.querySelector('[data-admin-action="export-html"]')&&!document.querySelector('[data-admin-action="import-json"]')`),
 );
-await ev(`openAdminAuthorized('appearance')`);
-check("Darstellung ohne Sicherung und Dateien", await ev(`!document.querySelector('#admin-section [data-admin-action^="backup"],#admin-section [data-admin-action^="export"]')&&document.querySelector('#admin-nav [aria-current="page"]').textContent.trim()==='Darstellung'`));
+await ev(`openAdminAuthorized('ipad')`);
+check("„iPad & Einstellungen“ mit Farbschema, ohne Sicherung und Dateien", await ev(`!document.querySelector('#admin-section [data-admin-action^="backup"],#admin-section [data-admin-action^="export"]')&&!!document.querySelector('[data-set-theme="dark"]')&&document.querySelector('#admin-nav [aria-current="page"]').textContent.trim()==='iPad & Einstellungen'`));
 await screenshot("sicherung-uebersicht");
 
 // Export March as ZIP: only February remains in the hint.
