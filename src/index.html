@@ -735,6 +735,27 @@
         </div>
       </div>
     </dialog>
+    <dialog id="app-reset-dialog" aria-labelledby="app-reset-title">
+      <div class="dialog-head">
+        <h2 id="app-reset-title" data-t="appReset.dialogTitle"></h2>
+        <button type="button" class="close-button" data-close data-t-aria-label="common.closeDialog">
+          ×
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p data-t="appReset.dialogCopy"></p>
+        <p class="reset-backup"><button class="secondary-button" type="button" id="app-reset-backup" data-t="retention.backupFirst"></button></p>
+        <div class="ad-field">
+          <label for="app-reset-word" id="app-reset-word-label"></label>
+          <input id="app-reset-word" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        </div>
+        <p class="setup-error" id="app-reset-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="secondary-button" type="button" data-close data-t="common.cancel"></button
+          ><button class="primary-button danger" type="button" id="app-reset-confirm" data-t="appReset.confirm" disabled></button>
+        </div>
+      </div>
+    </dialog>
     <script type="application/json" id="inkform-config">
       null
     </script>

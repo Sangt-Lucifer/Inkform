@@ -10,7 +10,7 @@ Dieses Repository enthält nur die fertige, neutrale App (ohne Studio und ohne D
 2. **Symbol wählen:** deine Studio-Einstellungen-Datei, falls du schon eine hast, oder ein Bild. Hier nur die Studio-Einstellungen, nicht die Gesamtsicherung mit Kundendaten. Im Safari-Tab wird nichts gespeichert.
 3. Teilen → **Zum Home-Bildschirm**. Den Namen unter dem Symbol kannst du dort ändern, zum Beispiel in den Studionamen. „Als Web-App öffnen“ aktiviert lassen, Hinzufügen.
 4. Inkform über das neue Symbol starten, beim ersten Mal mit Internet. Safari-Tab und Home-Bildschirm-App haben **getrennte Speicher**; ab jetzt nur noch das Symbol benutzen.
-5. Eine **PIN** festlegen: 6 bis 12 Ziffern. Sie steht in keiner Datei, es gibt keinen Online-Reset.
+5. Eine **PIN** festlegen: 6 bis 12 Ziffern. Sie steht in keiner Datei, es gibt keinen Online-Reset. Ändern lässt sie sich unter „iPad & Dateien“.
 6. Einen der zwei Wege wählen:
    - **Neu einrichten:** Studio, Datenschutzkontakt, Anschrift und Ort der Unterschrift eintragen, optional Fristen, Logo und App-Symbol.
    - **Aus Datei übernehmen:** eine Gesamtsicherung (alles von einem anderen Gerät, auch Einnahmen und PDFs) oder Studio-Einstellungen (dieselbe Datei wie in Schritt 2, nur die Anpassungen; die Einnahmenliste bleibt leer).
@@ -33,6 +33,7 @@ Alles liegt im Speicher dieser App auf diesem iPad: Einstellungen, PIN, Einnahme
 - **Gesamtsicherung** (Sichern & Wiederherstellen): eine Datei mit Einstellungen, Logo, App-Symbol, Einnahmen, Fristen und PDFs. Sie enthält Gesundheitsangaben und Unterschriften; nur auf dem iPad („Auf meinem iPad“) oder einem eigenen Rechner ablegen, nicht in iCloud Drive. Die PIN ist nicht enthalten.
 - **Studio-Einstellungen** (Sichern & Wiederherstellen, „Nur Studio-Einstellungen weitergeben“): eine Datei nur mit deinen Anpassungen (Studioangaben, Logo, App-Symbol, Texte, Fragen, Sprachen, Farbschema, Fristen), ohne Kundendaten. Damit richtest du ein zweites iPad ein oder gibst die Einrichtung weiter. Eingespielt wird sie über „Aus Datei wiederherstellen“; die App zeigt, was ersetzt wird, Einnahmen, PDFs und PIN bleiben unberührt.
 - **Erinnerung:** Die Übersicht zeigt den Stand und erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist.
+- **Zurücksetzen:** unter „Aufbewahren & Löschen“ löscht „App auf diesem iPad zurücksetzen“ alle Daten dieser App, auch die PIN (vorher Gesamtsicherung erstellen).
 - **Wiederherstellen:** prüft die Datei, fragt nach und ersetzt dann alle Daten außer der PIN. So zieht Inkform auch auf ein neues Gerät oder eine neue Adresse um.
 
 ## Exportieren
@@ -55,14 +56,14 @@ Inkform is a tattoo consent form with signature, PDF filing and an income list f
 
 1. Open the app's address once in **Safari**, with an internet connection, and wait for “Ready offline”.
 2. Share → **Add to Home Screen**, keep “Open as Web App” on, then start Inkform from the new icon (it has its own storage, separate from the Safari tab).
-3. Choose a **PIN** of 6 to 12 digits. There is no online reset.
+3. Choose a **PIN** of 6 to 12 digits. There is no online reset; change it under “iPad & Files”.
 4. In the setup assistant, enter the studio, privacy contact, address and place of signature. Everything stays on the iPad and can be changed later under “Studio & Contact”.
 5. Check the form texts, health questions and privacy notice and adapt them to the studio. They are neutral drafts and need a legal review before use.
 6. Test PDF filing under “iPad & Files”.
 
 **Languages**
 
-- The admin area follows the language chosen under “Appearance & Backup” → “Language of this Device”. This applies to this iPad only and is not part of the backup.
+- The admin area follows the language chosen under “Appearance” → “Language of this Device”. This applies to this iPad only and is not part of the backup.
 - The customer form starts in the studio language. Under “Studio & Contact” → “Languages and Currency”, tick further **Languages for Customers**; a language selector then appears on the form.
 - English form texts are included as a **draft, not legally reviewed**, also after updating an existing installation. They are not offered to customers until you tick English. Have them reviewed first, then tick “Legally reviewed” next to the language.
 - To edit the English texts, use the “Deutsch | English” switch on the text pages (Form & Texts, Health Questions, Consent, Privacy). The German text is shown below each field as a reference.
@@ -71,7 +72,7 @@ Inkform is a tattoo consent form with signature, PDF filing and an income list f
 
 **Data and backup**
 
-Everything is stored in this app on this iPad and belongs to the app's address. Make a **full backup** regularly (Overview) and keep it on the iPad (“On My iPad”) or your own computer, not in iCloud Drive: it contains health information and signatures. Restoring replaces all data except the PIN. Under “Export”, ZIP files with the consent PDFs and the income overview are created per month, year or period.
+Everything is stored in this app on this iPad and belongs to the app's address. Make a **full backup** regularly (Back Up & Restore) and keep it on the iPad (“On My iPad”) or your own computer, not in iCloud Drive: it contains health information and signatures. Restoring replaces all data except the PIN. Under “Export”, ZIP files with the consent PDFs and the income overview are created per month, year or period.
 
 ## Inhalt
 

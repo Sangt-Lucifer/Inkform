@@ -1623,6 +1623,21 @@ html[data-theme="light"] .ad-button.primary {
 .ad-button.danger {
   color: #d65f70;
 }
+.primary-button.danger,
+html[data-theme="dark"] .primary-button.danger {
+  border-color: #b13033;
+  background: #b13033;
+  color: #fff;
+}
+.reset-backup {
+  margin: 4px 0 20px;
+}
+.primary-button.danger:disabled {
+  opacity: 0.45;
+}
+.ad-danger-zone {
+  border-color: #d65f70;
+}
 .ad-content {
   max-width: 1260px;
   padding: 36px 40px 120px;

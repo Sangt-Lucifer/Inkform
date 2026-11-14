@@ -48,6 +48,7 @@ Die App schützt ihren Admin-Bereich mit der PIN. Die unterschriebenen PDFs in d
 - Geführter Zugriff für die Übergabe an Kunden: Einstellungen, Bedienungshilfen, Geführter Zugriff einschalten und einen eigenen Code festlegen, nicht die App-PIN. In der App dreimal die Seiten- oder Home-Taste drücken und starten. Der Kunde kann die App dann nicht verlassen.
 - iCloud-Backup für dieses iPad ausschalten. Stattdessen regelmäßig ein verschlüsseltes Backup über den Mac erstellen: iPad per Kabel verbinden, im Finder Lokales Backup verschlüsseln wählen. Time Machine sichert es mit. Welche App-Daten ein iCloud-Backup genau enthält, wurde nicht geprüft.
 - Safari-Verlauf und Websitedaten löschen oder das Home-Bildschirm-Symbol entfernen löscht Einnahmenliste, PIN, die PDF-Kopien in der App und eine offene Einwilligung. Vorher eine Gesamtsicherung erstellen.
+- PIN vergessen: Es gibt keinen Online-Reset. Dann die App vom Home-Bildschirm entfernen (oder die Websitedaten in Safari löschen), neu hinzufügen, eine neue PIN festlegen und die letzte Gesamtsicherung einspielen.
 
 Apple-Anleitung: [Website auf dem iPad in eine App verwandeln](https://support.apple.com/de-de/guide/ipad/ipad8f1f7a29/ipados).
 
@@ -87,9 +88,9 @@ Admin-Konsole wählen und die Inhaber-PIN eingeben. Bei offenem Admin hat der In
 | Einnahmen | Einwilligungen nach Artist, Monat und Jahr auswerten, offene Preise ergänzen, alte Einwilligungen nachtragen, PDF- und CSV-Listen ausgeben und einzelne PDF-Kopien aus der App löschen. |
 | Export | ZIP-Datei mit Einwilligungs-PDFs und Einnahmenübersicht für einen Monat, ein Jahr oder einen freien Zeitraum. Speicheranzeige der PDF-Kopien in der App und Löschen dieser Kopien mit Prüfschritt. |
 | Sichern & Wiederherstellen | Gesamtsicherung erstellen und den Erinnerungsabstand wählen, aus einer Datei wiederherstellen (Gesamtsicherung oder Studio-Einstellungen; die App erkennt die Datei und zeigt vorher, was ersetzt wird), nur die Studio-Einstellungen (Studioangaben, Logo, App-Symbol, Texte, Sprachen, Farbschema, Fristen; ohne Kundendaten) weitergeben, die App als HTML exportieren und nachsehen, was in welcher Datei steckt. |
-| Aufbewahrung | Fristen festlegen, Löschliste für fällige PDFs und Anonymisieren alter Namen in der Einnahmenliste. |
+| Aufbewahren & Löschen | Fristen festlegen (gespeichert schon beim Eintippen), Löschliste für fällige PDFs, Anonymisieren alter Namen in der Einnahmenliste und ganz unten App auf diesem iPad zurücksetzen: löscht nach Eintippen von ZURÜCKSETZEN alle Daten dieser App, auch die PIN; PDFs in der Dateien-App und Sicherungsdateien bleiben. |
 | Datenschutz | Aufbewahrungs- und Löschkriterien, Zugriff / Empfänger und vollständige Datenschutzhinweise bearbeiten. Angaben müssen dem realen Ablauf entsprechen. |
-| iPad & Dateien | Offline-Verfügbarkeit und PDF-Funktion prüfen, Home-Bildschirm-Anleitung öffnen und eine Test-PDF ohne Kundendaten erzeugen. |
+| iPad & Dateien | Offline-Verfügbarkeit und PDF-Funktion prüfen, Home-Bildschirm-Anleitung öffnen, eine Test-PDF ohne Kundendaten erzeugen und die PIN ändern (bisherige PIN, dann zweimal die neue). |
 | Darstellung | Light- oder Darkmode wählen, die Sprache dieses Geräts einstellen und die Standardvorlage laden. |
 
 ## Änderungen zuverlässig übernehmen

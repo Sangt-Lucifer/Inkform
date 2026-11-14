@@ -762,6 +762,7 @@ function resetCustomerForm() {
 }
 $("reset-confirm").addEventListener("click", resetCustomerForm);
 window.addEventListener("beforeunload", (event) => {
+  if (resetting) return;
   // A submitted consent whose PDF is stored on this device survives the reload: no warning.
   const safe = pendingConsent && !pendingConsent.keepError && (pendingConsent.restored || pendingConsent.keptOk);
   if ((dirty && !safe) || adminChanged() || incomeFeature?.hasUnsavedChanges()) {
@@ -1671,6 +1672,96 @@ function backupState() {
   return { age: last ? daysBetween(last) : null, today: !!last && localDate(new Date(last)) === localDate(), days };
 }
 let preparedBackup = null;
+// PIN change on "iPad & Dateien": the current PIN is asked again, wrong ones count as failures.
+function pinPanel() {
+  const field = (id, label) =>
+    `<div class="ad-field"><label for="${id}">${th(label)}</label><input id="${id}" type="password" inputmode="numeric" autocomplete="off" maxlength="12" required></div>`;
+  return adminPanel(
+    th("pin.changeTitle"),
+    `<form id="pin-change-form" novalidate><p class="ad-section-copy">${th("pin.changeCopy")}</p>
+    <div class="ad-fields">${field("pin-current", "pin.current")}${field("pin-new", "pin.new")}${field("pin-new-repeat", "pin.newRepeat")}</div>
+    <p class="setup-error" id="pin-change-error" role="alert" hidden></p><p class="ad-preview-note" id="pin-change-status" role="status"></p>
+    <div class="ad-actions-row"><button class="ad-button primary" type="submit">${th("pin.change")}</button></div></form>`,
+  );
+}
+$("admin-app").addEventListener("submit", async (event) => {
+  if (event.target.id !== "pin-change-form") return;
+  event.preventDefault();
+  const form = event.target,
+    error = $("pin-change-error"),
+    button = form.querySelector("button");
+  if (button.disabled) return;
+  button.disabled = true;
+  error.hidden = true;
+  $("pin-change-status").textContent = "";
+  try {
+    await adminAccess.changePin($("pin-current").value, $("pin-new").value, $("pin-new-repeat").value);
+    form.reset();
+    $("pin-change-status").textContent = t("pin.changed");
+  } catch (failure) {
+    error.textContent = failure.message;
+    error.hidden = false;
+  } finally {
+    button.disabled = false;
+  }
+});
+// Reset on "Aufbewahren & Löschen": everything of this app on this device, except the cached app.
+function resetPanel() {
+  return `<section class="ad-panel ad-danger-zone"><div class="ad-panel-header"><h2>${th("appReset.title")}</h2></div><div class="ad-panel-body">
+    <p class="ad-section-copy">${th("appReset.copy")}</p>
+    <div class="ad-actions-row"><button class="ad-button danger" type="button" data-admin-action="reset-open">${adminIcon("trash")}${th("appReset.button")}</button></div>
+  </div></section>`;
+}
+let resetting = false;
+const resetWord = () => t("appReset.word");
+function openReset() {
+  $("app-reset-word").value = "";
+  $("app-reset-confirm").disabled = true;
+  $("app-reset-error").hidden = true;
+  $("app-reset-word-label").textContent = t("appReset.wordLabel", { wort: resetWord() });
+  showDialog("app-reset-dialog");
+}
+$("app-reset-word").addEventListener("input", (event) => {
+  $("app-reset-confirm").disabled = event.target.value.trim().toLocaleUpperCase() !== resetWord().toLocaleUpperCase();
+});
+$("app-reset-backup").addEventListener("click", () => {
+  $("app-reset-dialog").close();
+  openAdminAuthorized("backup");
+});
+const deleteDatabase = (name) =>
+  new Promise((resolve, reject) => {
+    if (!globalThis.indexedDB) return resolve();
+    const request = indexedDB.deleteDatabase(name);
+    let wait = null;
+    request.onsuccess = () => {
+      clearTimeout(wait);
+      resolve();
+    };
+    request.onerror = () => {
+      clearTimeout(wait);
+      reject(request.error);
+    };
+    // Another window still holds the database: say so instead of waiting without end.
+    request.onblocked = () => (wait = setTimeout(() => reject(Error(t("appReset.blocked"))), 3000));
+  });
+// Files first: if one cannot be deleted, settings, entries and PIN are still there.
+async function resetApp() {
+  if (!adminAccess.isUnlocked() || $("app-reset-confirm").disabled) return;
+  $("app-reset-confirm").disabled = true;
+  try {
+    for (const name of [ARCHIVE_DB, LOGO_DB, "inkform-pending"]) await deleteDatabase(name);
+    for (const storage of [localStorage, sessionStorage])
+      for (const key of Object.keys(storage)) if (key.startsWith("inkform.")) storage.removeItem(key);
+  } catch (error) {
+    $("app-reset-error").textContent = t("appReset.failed", { fehler: error.message });
+    $("app-reset-error").hidden = false;
+    $("app-reset-confirm").disabled = false;
+    return;
+  }
+  resetting = true;
+  location.reload();
+}
+$("app-reset-confirm").addEventListener("click", resetApp);
 function backupStatus() {
   const { age, today, days } = backupState();
   const text =
@@ -2636,7 +2727,7 @@ function renderAdminSection() {
   } else if (adminPage === "export") {
     content = `<div id="export-content">${exportFeature.view()}</div>`;
   } else if (adminPage === "retention") {
-    content = `<div id="retention-content">${incomeFeature.retentionView()}</div>`;
+    content = `<div id="retention-content">${incomeFeature.retentionView()}</div>${resetPanel()}`;
   } else if (adminPage === "overview") {
     const filled = Object.values(adminDraft.studio).filter((v) => v.trim()).length;
     content = /* HTML */ `<div class="ad-stats">
@@ -2931,7 +3022,7 @@ function renderAdminSection() {
             <li>${th("ipad.daily5")}</li>
           </ol>
           <p class="ad-preview-note">${th("ipad.dailyNote")}</p>`,
-      );
+      ) + pinPanel();
   } else if (adminPage === "backup") {
     content = `${backupPanel()}${restorePanel()}${adminPanel(
       th("appearance.transfer"),
@@ -3378,6 +3469,11 @@ $("admin-save").addEventListener("click", saveAdmin);
 $("admin-discard").addEventListener("click", () => showDialog("admin-discard-dialog"));
 $("admin-discard-confirm").addEventListener("click", () => {
   $("admin-discard-dialog").close();
+  if (adminPage === "setup") {
+    setupWay = null;
+    setupYears = null;
+    setupError = "";
+  }
   adminDraft = clone(settings);
   renderAdminSection();
   toast(t("savebar.discarded"));
@@ -3547,8 +3643,13 @@ $("admin-app").addEventListener("click", (event) => {
     case "setup-finish":
       finishSetup();
       break;
-    case "setup-new":
     case "setup-back":
+      if (adminChanged() || setupYears) {
+        showDialog("admin-discard-dialog");
+        break;
+      }
+    // falls through
+    case "setup-new":
       setupWay = button.dataset.adminAction === "setup-new" ? "new" : null;
       setupError = "";
       if (!setupWay) {
@@ -3638,6 +3739,9 @@ $("admin-app").addEventListener("click", (event) => {
       break;
     case "defaults":
       showDialog("admin-defaults-dialog");
+      break;
+    case "reset-open":
+      openReset();
       break;
   }
 });

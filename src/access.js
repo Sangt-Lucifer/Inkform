@@ -116,24 +116,42 @@ export function createAdminPinStore(storage) {
       throw Error(t("pin.damaged"));
     return value;
   }
+  function checkNew(pin, repeat) {
+    if (/\D/.test(pin)) throw Error(t("pin.digitsOnly"));
+    if (pin.length < 6) throw Error(t("pin.tooShort"));
+    if (pin.length > 12) throw Error(t("pin.tooLong"));
+    if (!/^\d{6,12}$/.test(pin)) throw Error(t("pin.length"));
+    if (pin !== repeat) throw Error(t("pin.mismatch"));
+  }
+  async function record(pin) {
+    const salt = [...crypto.getRandomValues(new Uint8Array(16))];
+    return JSON.stringify({ version: 1, salt, hash: await deriveAdminPinHash(pin, salt) });
+  }
+  async function verify(pin) {
+    const c = config();
+    return !!c && /^\d{6,12}$/.test(pin) && (await deriveAdminPinHash(pin, c.salt)) === c.hash;
+  }
   return {
     configured: () => !!config(),
     async setup(pin, repeat) {
       if (config()) throw Error(t("pin.exists"));
-      if (/\D/.test(pin)) throw Error(t("pin.digitsOnly"));
-      if (pin.length < 6) throw Error(t("pin.tooShort"));
-      if (pin.length > 12) throw Error(t("pin.tooLong"));
-      if (!/^\d{6,12}$/.test(pin)) throw Error(t("pin.length"));
-      if (pin !== repeat) throw Error(t("pin.mismatch"));
-      const salt = [...crypto.getRandomValues(new Uint8Array(16))],
-        hash = await deriveAdminPinHash(pin, salt);
+      checkNew(pin, repeat);
+      const value = await record(pin);
       if (config())
         throw Error(t("pin.otherWindow"));
-      storage.setItem(ADMIN_PIN_KEY, JSON.stringify({ version: 1, salt, hash }));
+      storage.setItem(ADMIN_PIN_KEY, value);
     },
-    async verify(pin) {
-      const c = config();
-      return !!c && /^\d{6,12}$/.test(pin) && (await deriveAdminPinHash(pin, c.salt)) === c.hash;
+    verify,
+    // Replaces the PIN only if the current one is right; the caller counts wrong attempts. Nothing
+    // is written if the PIN changed meanwhile (another window) or `allowed` no longer holds.
+    async change(current, pin, repeat, allowed = () => true) {
+      const before = storage.getItem(ADMIN_PIN_KEY);
+      if (!(await verify(current))) return false;
+      checkNew(pin, repeat);
+      const value = await record(pin);
+      if (storage.getItem(ADMIN_PIN_KEY) !== before || !allowed()) throw Error(t("pin.otherWindow"));
+      storage.setItem(ADMIN_PIN_KEY, value);
+      return true;
     },
   };
 }
@@ -248,5 +266,17 @@ export function createAdminAccess({ storage, onExternalLock, now = () => Date.no
       onExternalLock?.();
     }
   });
-  return { request, lock, isUnlocked: () => unlocked, configured: pins.configured };
+  // Wrong current PINs count towards the same lockout as the unlock dialog.
+  async function changePin(current, pin, repeat) {
+    if (!unlocked) throw Error(t("income.unlock"));
+    const wait = lockout.remainingMs();
+    if (wait) throw Error(t("pin.wait", { anzahl: Math.ceil(wait / 1000) }));
+    if (await pins.change(current, pin, repeat, () => unlocked)) {
+      lockout.reset();
+      return;
+    }
+    lockout.fail();
+    throw Error(t(lockout.remainingMs() ? "pin.wrongLocked" : "pin.wrongCurrent"));
+  }
+  return { request, lock, changePin, isUnlocked: () => unlocked, configured: pins.configured };
 }

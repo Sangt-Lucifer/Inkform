@@ -74,6 +74,8 @@ check("Navigation führt weiter zum Assistenten, Eingabe bleibt, nichts gespeich
 await ev(`document.getElementById('admin-error').hidden=true;window.dispatchEvent(new KeyboardEvent('keydown',{key:'s',metaKey:true,cancelable:true}))`);
 check("⌘S im Assistenten: kein Speichern in Teilen, Hinweis auf Pflichtangaben", await ev(`!document.getElementById('admin-error').hidden&&adminPage==='setup'&&!localStorage.getItem(SETTINGS_KEY)`));
 await ev(`document.querySelector('[data-admin-action="setup-back"]').click()`);
+check("Zurück zur Auswahl mit Eingaben: Rückfrage, Eingaben bleiben", await ev(`document.getElementById('admin-discard-dialog').open&&adminPage==='setup'&&document.getElementById('admin-studio-name').value==='Atelier Probe · Kim Test'`));
+await ev(`document.getElementById('admin-discard-confirm').click()`);
 check("Zurück zur Auswahl verwirft die Eingaben: Datei einspielen nicht blockiert", await ev(`!adminChanged()&&!replaceBlocker()&&!!document.querySelector('[data-admin-action="setup-file"]')`));
 check("Einrichtung: zwei Wege, ein Knopf „Aus Datei übernehmen“ für beide Dateiarten", await ev(`document.querySelectorAll('.setup-way').length===2&&document.querySelectorAll('[data-admin-action="setup-file"]').length===1&&document.querySelector('[data-admin-action="setup-file"] strong').textContent===t('setup.restore')`));
 await ev(`document.querySelector('[data-admin-action="setup-new"]').click()`);
