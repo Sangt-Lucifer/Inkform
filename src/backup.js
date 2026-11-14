@@ -81,6 +81,7 @@ export function readStudioSettings(value, validateSettings) {
   if (value && !value.kind && value.studio && value.app)
     return {
       createdAt: null,
+      version: null,
       settings: validateSettings(value),
       theme: ["dark", "light"].includes(value.theme) ? value.theme : undefined,
       logo: undefined,
@@ -89,7 +90,7 @@ export function readStudioSettings(value, validateSettings) {
       backupDays: undefined,
     };
   readHeader(value, STUDIO_KIND);
-  return { createdAt: value.createdAt, ...readStudioPart(value, validateSettings) };
+  return { createdAt: value.createdAt, version: value.schemaVersion, ...readStudioPart(value, validateSettings) };
 }
 
 // pdfs: [{ id, bytes: Uint8Array }]
@@ -130,6 +131,7 @@ export function readFullBackup(value, validateSettings) {
   });
   return {
     createdAt: value.createdAt,
+    version: value.schemaVersion,
     ...studio,
     exports: validateExportLog(value.exports),
     records,

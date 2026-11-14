@@ -1,0 +1,197 @@
+// Fresh installation of the neutral edition: after the PIN the assistant offers three ways (set up
+// here, full backup, studio settings), with the same checks as on the admin pages. Then the page
+// a Safari tab on the iPad shows first, which only chooses the home screen icon. Synthetic data.
+import { HELPERS, ORIGIN, connect } from "./lib.mjs";
+
+const { cmd, ev, until, check, navigate, reload, screenshot, errors } = await connect();
+await cmd("Emulation.setDeviceMetricsOverride", { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
+const WIPE = `try{localStorage.clear();sessionStorage.clear();for(const n of ['inkform-pending','inkform-archive','inkform-logo'])indexedDB.deleteDatabase(n)}catch(_){}`;
+// A new device: storage wiped before the app starts, then the PIN dialog of the first start.
+const freshDevice = async (extra = "") => {
+  const reset = await cmd("Page.addScriptToEvaluateOnNewDocument", { source: WIPE + extra });
+  await reload();
+  await cmd("Page.removeScriptToEvaluateOnNewDocument", { identifier: reset.identifier });
+  await ev(HELPERS);
+};
+const setPin = async (pin = "839274") => {
+  await until(`document.getElementById('admin-pin-dialog')?.open`);
+  await ev(`(()=>{for(const id of ['admin-pin','admin-pin-repeat'])document.getElementById(id).value='${pin}';document.getElementById('admin-pin-form').requestSubmit()})()`);
+  await until(`adminAccess.isUnlocked() && adminPage==='setup' && !!document.querySelector('[data-admin-action="setup-new"]')`);
+};
+const unlockAfterReload = async (pin = "839274") => {
+  await until(`typeof adminAccess!=='undefined' && document.readyState==='complete' && document.getElementById('admin-pin-dialog')?.open`);
+  await ev(HELPERS);
+  await ev(`unlockAdmin('${pin}')`);
+  await until(`adminAccess.isUnlocked() && !document.getElementById('admin-app').hidden`);
+};
+const type = (id, value) => ev(`(el=>{el.value=${JSON.stringify(value)};el.dispatchEvent(new Event('input',{bubbles:true}))})(document.getElementById('${id}'))`);
+const pickSetup = (source) =>
+  ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([${source}],'datei.json',{type:'application/json'}));const i=document.getElementById('setup-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
+const pickImage = (id, draw) =>
+  ev(`(async()=>{const c=document.createElement('canvas');c.width=300;c.height=200;const g=c.getContext('2d');${draw};const b=await new Promise(r=>c.toBlob(r,'image/png'));const dt=new DataTransfer();dt.items.add(new File([b],'bild.png',{type:'image/png'}));const i=document.getElementById('${id}');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
+// Everything a restore must bring back, as one string.
+const state = () =>
+  ev(`Promise.all([logoStore.get(LOGO_KEY),logoStore.get(ICON_KEY)].map(p=>p.then(b=>b&&b.arrayBuffer().then(a=>toBase64(new Uint8Array(a)))))).then(async([logo,icon])=>JSON.stringify({settings:JSON.parse(localStorage.getItem(SETTINGS_KEY)),theme:document.documentElement.dataset.theme,retention:readRetention(localStorage),income:incomeRecords(),pdfs:(await createIndexedDbFiles(indexedDB,ARCHIVE_DB).keys()).sort(),logo,icon}))`);
+
+// The original device -------------------------------------------------------------------------
+await navigate(ORIGIN + "/index.html");
+await until(`navigator.serviceWorker.ready.then(() => true)`);
+await freshDevice();
+await setPin();
+await ev(`document.querySelector('[data-admin-action="setup-new"]').click()`);
+await until(`!!document.getElementById('admin-studio-name')`);
+for (const [id, value] of [
+  ["admin-studio-name", "Atelier Ursprung · Lio Test"],
+  ["admin-studio-contact", "kontakt@atelier-ursprung.example"],
+  ["admin-studio-address", "Quellweg 1, 54321 Teststadt"],
+  ["admin-studio-location", "Teststadt"],
+  ["setup-pdf-years", "10"],
+])
+  await type(id, value);
+await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
+await until(`adminPage==='overview'`);
+await ev(`openAdminAuthorized('studio')`);
+await pickImage("logo-file", "g.fillStyle='#284';g.fillRect(20,20,260,160)");
+await until(`!!ownLogo`);
+await pickImage("icon-file", "g.fillStyle='#63c';g.fillRect(50,0,200,200)");
+await until(`!!document.querySelector('[data-admin-action="icon-accept"]')`);
+await ev(`document.querySelector('[data-admin-action="icon-accept"]').click()`);
+await until(`!!ownIcon`);
+await ev(`openAdminAuthorized('overview');document.querySelector('[data-admin-action="sample-load"]').click()`);
+await until(`incomeRecords().length===6 && !!document.querySelector('[data-admin-action="sample-remove"]')`);
+await until(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length===6)`);
+await ev(`openAdminAuthorized('overview')`);
+await ev(`navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]};window.__shared=null;document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`);
+await until(`!document.querySelector('[data-backup-ready]').hidden`);
+await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
+await until(`!!window.__shared`);
+const backupText = await ev(`window.__shared.text()`);
+await ev(`window.__shared=null;openAdminAuthorized('appearance');document.querySelector('[data-admin-action="export-json"]').click()`);
+await until(`!!window.__shared`);
+const studioText = await ev(`window.__shared.text()`);
+const original = await state();
+check("Ausgangsgerät: Einrichtung, Logo, Symbol, 6 Einträge mit PDFs", JSON.parse(original).income.length === 6 && !!JSON.parse(original).icon && !!JSON.parse(original).logo);
+
+// Wrong, damaged and cancelled files: nothing written, the choice stays ---------------------
+// This device gets a PIN of its own, which the restore below must keep.
+await freshDevice();
+await setPin("517306");
+const ownPin = await ev(`localStorage.getItem('inkform.admin.pin.v1')`);
+const nothingWritten = () => ev(`!localStorage.getItem(SETTINGS_KEY)&&incomeRecords().length===0&&adminPage==='setup'&&!!document.querySelector('[data-admin-action="setup-new"]')`);
+const setupError = () => ev(`(e=>e.hidden?'':e.textContent)(document.getElementById('setup-file-error'))`);
+await pickSetup(`'{"kind":"etwas"}'`);
+await until(`!document.getElementById('setup-file-error').hidden`);
+check("Fremde Datei: verständliche Meldung, nichts geschrieben, Auswahl bleibt", (await setupError()).includes("keine INKFORM-Studio-Einstellungen") && (await setupError()).includes("nichts geändert") && (await nothingWritten()));
+await pickSetup(`${JSON.stringify(JSON.stringify({ ...JSON.parse(backupText), pdfs: [{ id: "fremd", pdf: "JVBERi0=" }] }))}`);
+await until(`(document.getElementById('setup-file-error')?.textContent||'').includes('Einnahmeneintrag')`);
+check("Beschädigte Gesamtsicherung: Meldung, nichts geschrieben", await nothingWritten());
+await pickSetup(`'kein json'`);
+await until(`(document.getElementById('setup-file-error')?.textContent||'').includes('kein gültiges JSON')`);
+check("Kein JSON: Meldung, nichts geschrieben", await nothingWritten());
+await ev(`window.confirm=(m)=>{window.__question=m;return false}`);
+await ev(`window.__question=null;window.__text=${JSON.stringify(backupText)}`);
+await pickSetup(`window.__text`);
+await until(`!!window.__question`);
+const question = await ev(`window.__question`);
+check(
+  "Vorschau der Gesamtsicherung: Datum, Einträge und PDFs, Studio, Sprachen, Logo, Symbol, Version",
+  /Sicherung vom .* wiederherstellen\?/.test(question) &&
+    question.includes("6 Einträge, 6 PDFs") &&
+    question.includes("Studioangaben (Atelier Ursprung · Lio Test)") &&
+    question.includes("Sprachen (Deutsch") &&
+    question.includes("Logo: das Logo aus der Datei") &&
+    question.includes("App-Symbol: das Symbol aus der Datei") &&
+    question.includes("Dateiversion 3"),
+);
+check("Abbrechen in der Vorschau: nichts geschrieben", (await nothingWritten()) && (await ev(`!sessionStorage.getItem('inkform.fromSetup')`)));
+
+// Full backup on a new device: identical, then straight on to the overview ------------------
+await ev(`window.confirm=()=>true;window.__text=${JSON.stringify(backupText)}`);
+await pickSetup(`window.__text`);
+await unlockAfterReload("517306");
+await until(`adminPage==='overview'`);
+check("Nach der Gesamtsicherung: direkt die Übersicht, Meldung", (await ev(`document.getElementById('toast').textContent`)).includes("Sicherung wiederhergestellt"));
+const restoredState = await state();
+check("Alles wie auf dem Ausgangsgerät: Einstellungen, Farbschema, Logo, Symbol, Einnahmen, PDFs", restoredState === original);
+check(
+  "PIN dieses Geräts bleibt, nicht die des Ausgangsgeräts",
+  (await ev(`localStorage.getItem('inkform.admin.pin.v1')`)) === ownPin && !/839274|salt|hash/.test(backupText) && (await ev(`adminAccess.isUnlocked()`)),
+);
+
+// Studio settings on a new device: customisations only, then what is still missing ----------
+await freshDevice();
+await setPin();
+await ev(`window.confirm=(m)=>{window.__question=m;return true};window.__text=${JSON.stringify(studioText)}`);
+await pickSetup(`window.__text`);
+await unlockAfterReload();
+await until(`adminPage==='overview'`);
+const afterStudio = JSON.parse(await state()),
+  before = JSON.parse(original);
+check(
+  "Studio-Einstellungen: Anpassungen mit Logo und Symbol da, keine Kundendaten, Einnahmenliste leer",
+  JSON.stringify(afterStudio.settings.studio) === JSON.stringify(before.settings.studio) &&
+    afterStudio.logo === before.logo &&
+    afterStudio.icon === before.icon &&
+    afterStudio.income.length === 0 &&
+    afterStudio.pdfs.length === 0,
+);
+check("Danach „Was fehlt noch?“ in der Übersicht", await ev(`document.getElementById('admin-app').textContent.includes('Was fehlt noch?')&&document.getElementById('admin-app').textContent.includes('Test-PDF')`));
+await screenshot("einrichtung-was-fehlt");
+await ev(`finishAdminLeave()`);
+
+// An older backup without icon (version 2) is migrated ----------------------------------------
+await freshDevice();
+await setPin();
+const old = JSON.parse(backupText);
+old.schemaVersion = 2;
+delete old.icon;
+await ev(`window.confirm=()=>true;window.__text=${JSON.stringify(JSON.stringify(old))}`);
+await pickSetup(`window.__text`);
+await unlockAfterReload();
+await until(`adminPage==='overview'`);
+const migrated = JSON.parse(await state());
+check("Ältere Gesamtsicherung ohne Symbol: übernommen, eingebautes Symbol, Logo und Einträge da", migrated.icon === null && migrated.logo === before.logo && migrated.income.length === 6);
+await ev(`finishAdminLeave()`);
+
+// The page a Safari tab on the iPad shows first ----------------------------------------------
+const SAFARI = `Object.defineProperty(Navigator.prototype,'standalone',{configurable:true,get:()=>false});`;
+const safari = await cmd("Page.addScriptToEvaluateOnNewDocument", { source: SAFARI });
+await freshDevice();
+await until(`!document.getElementById('install-screen').hidden`);
+check("Safari-Tab, frisch: Seite „Auf den Home-Bildschirm“ statt PIN", await ev(`!document.getElementById('admin-pin-dialog').open&&document.getElementById('install-screen').textContent.includes('getrennte Speicher')`));
+check("Darunter nichts bedienbar", await ev(`document.getElementById('customer-app').inert`));
+await screenshot("installieren");
+const pickInstall = (id, source, name, mime) =>
+  ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([${source}],'${name}',{type:'${mime}'}));const i=document.getElementById('${id}');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
+const touch = () => ev(`document.querySelector('link[rel="apple-touch-icon"]').getAttribute('href')`);
+await ev(`window.__text=${JSON.stringify(backupText)}`);
+await pickInstall("install-studio", "window.__text", "sicherung.json", "application/json");
+await until(`!document.querySelector('.install-error').hidden`);
+check("Gesamtsicherung im Safari-Tab abgelehnt, Hinweis auf die App", (await ev(`document.querySelector('.install-error').textContent`)).includes("Gesamtsicherung mit Kundendaten") && (await touch()) === "./icons/icon-192.png");
+await ev(`window.__text=${JSON.stringify(studioText)}`);
+await pickInstall("install-studio", "window.__text", "studio.json", "application/json");
+await until(`document.querySelector('link[rel="apple-touch-icon"]').getAttribute('href').startsWith('data:image/png')`);
+check("Symbol aus den Studio-Einstellungen gesetzt, nichts gespeichert", await ev(`!localStorage.getItem(SETTINGS_KEY)&&!adminAccess.configured()&&logoStore.get(ICON_KEY).then(b=>b===null)`));
+await pickImage("install-picture", "g.fillStyle='#c33';g.fillRect(100,50,100,100)");
+await until(`!!document.querySelector('[data-install="background"]')`);
+const firstPicture = await touch();
+await ev(`document.querySelector('[data-install="background"][data-background="dark"]').click()`);
+await until(`document.querySelector('[data-install="background"][data-background="dark"]')?.getAttribute('aria-pressed')==='true'`);
+check("Symbol aus einem Bild, Hintergrund umschaltbar", firstPicture.startsWith("data:image/png") && (await touch()) !== firstPicture);
+await ev(`window.__square=squareIcon;squareIcon=async(f,b)=>{if(b==='dark')await new Promise(r=>setTimeout(r,500));return window.__square(f,b)}`);
+await ev(`document.querySelector('[data-install="background"][data-background="dark"]').click();document.querySelector('[data-install="background"][data-background="light"]').click()`);
+await until(`document.querySelector('[data-install="background"][data-background="light"]')?.getAttribute('aria-pressed')==='true'`);
+await ev(`new Promise(r=>setTimeout(r,800))`);
+check(
+  "Späte ältere Umwandlung überschreibt die neuere Wahl nicht",
+  (await touch()) === firstPicture && (await ev(`document.querySelector('[data-install="background"][data-background="light"]').getAttribute('aria-pressed')==='true'`)),
+);
+await ev(`squareIcon=window.__square`);
+await ev(`document.querySelector('[data-install="skip"]').click()`);
+await until(`document.getElementById('admin-pin-dialog')?.open`);
+check("Im Safari-Tab weiter: Seite weg, PIN wie gewohnt", await ev(`document.getElementById('install-screen').hidden&&!document.getElementById('customer-app').inert`));
+await cmd("Page.removeScriptToEvaluateOnNewDocument", { identifier: safari.identifier });
+await freshDevice();
+check("Ohne Safari auf dem iPad (z. B. Mac, Home-Bildschirm-App): keine Installationsseite", await ev(`document.getElementById('install-screen').hidden`));
+check("Keine JavaScript- oder CSP-Fehler", errors.length === 0, JSON.stringify(errors));
+process.exit(0);

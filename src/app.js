@@ -1751,44 +1751,77 @@ backupPicker.accept = ".json,application/json";
 backupPicker.hidden = true;
 backupPicker.id = "backup-file";
 document.body.append(backupPicker);
-// Everything is checked first; the PDFs are written before the entries, so a failure leaves the
-// current data in place (PDFs without an entry are removed by the next sync).
+// A chosen full backup or studio settings file, read and checked as a whole, shown with what it
+// replaces and written after a yes; the same steps from the assistant and from the admin pages.
+// kind limits the file to one of the two; without it the file says what it is. Returns false if
+// the owner cancels, else reloads the app.
+const STUDIO_MAX_BYTES = 2 * 1024 * 1024;
+async function applyChosenFile(file, kind = null) {
+  const blocker = replaceBlocker();
+  if (blocker) throw Error(blocker);
+  if (kind === STUDIO_KIND && file.size > STUDIO_MAX_BYTES) throw Error(t("import.tooLarge"));
+  let value;
+  try {
+    value = JSON.parse(await file.text());
+  } catch (_) {
+    throw Error(t("import.badJson"));
+  }
+  const backup = kind ? kind === BACKUP_KIND : file.size > STUDIO_MAX_BYTES || value?.kind === BACKUP_KIND;
+  if (!(await (backup ? restoreBackup(value) : importStudio(value)))) return false;
+  location.reload();
+  return true;
+}
+// The PDFs are written before the entries, so a failure leaves the current data in place (PDFs
+// without an entry are removed by the next sync).
+async function restoreBackup(value) {
+  const data = readFullBackup(value, validateSettings),
+    { removed, records, pdfs, skipped } = applyRemovals(data, readRemovedIds(localStorage), incomeFeature.list(), localDate());
+  await checkReadable(data.logo, "backup.invalidLogo");
+  await checkReadable(data.icon, "backup.invalidIcon");
+  if (
+    !window.confirm(
+      [
+        t("restore.question", { datum: timeFormat(new Date(data.createdAt)) }),
+        t("restore.contents", { eintraege: data.records.length, pdfs: data.pdfs.length }) +
+          (skipped ? " " + t("restore.skipped", { anzahl: skipped }) : ""),
+        customisationLines(data).join("\n"),
+        t("restore.replaces", { eintraege: incomeFeature.list().length }),
+        t("file.version", { version: data.version }),
+      ].join("\n\n"),
+    )
+  )
+    return false;
+  await writeCustomisations(data, {
+    before: async () => {
+      await exportFeature.restore(pdfs);
+      localStorage.setItem(PDF_REMOVED_KEY, JSON.stringify([...removed]));
+    },
+    after: () => {
+      localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(data.exports));
+      localStorage.setItem(INCOME_KEY, JSON.stringify({ schemaVersion: 1, records }));
+      localStorage.setItem(LAST_BACKUP_KEY, data.createdAt);
+    },
+  });
+  await exportFeature.sync();
+  sessionStorage.setItem("inkform.restored", data.createdAt);
+  return true;
+}
+// Income, PDFs, export log and PIN stay as they are.
+async function importStudio(value) {
+  const data = readStudioSettings(value, validateSettings);
+  await checkReadable(data.logo, "backup.invalidLogo");
+  await checkReadable(data.icon, "backup.invalidIcon");
+  if (!window.confirm(studioPreview(data))) return false;
+  await writeCustomisations(data);
+  sessionStorage.setItem("inkform.studioImported", "1");
+  return true;
+}
 backupPicker.addEventListener("change", async () => {
   const file = backupPicker.files[0];
   backupPicker.value = "";
   if (!file || !adminAccess.isUnlocked()) return;
   try {
-    const blocker = replaceBlocker();
-    if (blocker) throw Error(blocker);
-    const data = readFullBackup(JSON.parse(await file.text()), validateSettings),
-      { removed, records, pdfs, skipped } = applyRemovals(data, readRemovedIds(localStorage), incomeFeature.list(), localDate());
-    await checkReadable(data.logo, "backup.invalidLogo");
-    await checkReadable(data.icon, "backup.invalidIcon");
-    if (
-      !window.confirm(
-        [
-          t("restore.question", { datum: timeFormat(new Date(data.createdAt)) }),
-          t("restore.contents", { eintraege: data.records.length, pdfs: data.pdfs.length }) +
-            (skipped ? " " + t("restore.skipped", { anzahl: skipped }) : ""),
-          t("restore.replaces", { eintraege: incomeFeature.list().length }),
-        ].join("\n\n"),
-      )
-    )
-      return;
-    await writeCustomisations(data, {
-      before: async () => {
-        await exportFeature.restore(pdfs);
-        localStorage.setItem(PDF_REMOVED_KEY, JSON.stringify([...removed]));
-      },
-      after: () => {
-        localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify(data.exports));
-        localStorage.setItem(INCOME_KEY, JSON.stringify({ schemaVersion: 1, records }));
-        localStorage.setItem(LAST_BACKUP_KEY, data.createdAt);
-      },
-    });
-    await exportFeature.sync();
-    sessionStorage.setItem("inkform.restored", data.createdAt);
-    location.reload();
+    await applyChosenFile(file, BACKUP_KIND);
   } catch (error) {
     toast(t("restore.failed", { fehler: error.message }));
   }
@@ -1967,7 +2000,7 @@ function showIcon(bytes) {
   if (iconUrl) URL.revokeObjectURL(iconUrl);
   iconUrl = bytes ? pngUrl(new Blob([bytes], { type: "image/png" })) : null;
   ownIcon = bytes;
-  const link = document.querySelector('link[rel="apple-touch-icon"]');
+  const link = !installIcon && document.querySelector('link[rel="apple-touch-icon"]');
   if (link) {
     link.href = BUILT_IN_ICON;
     if (bytes)
@@ -2087,6 +2120,122 @@ async function iconAction(action, background) {
     toast(t("icon.removed"));
   }
 }
+// In a Safari tab on the iPad, a fresh installation first only chooses the home screen icon: the
+// app added from there has its own, separate storage, so the setup belongs in it. The tab stores
+// nothing; the icon only goes into the page for iPadOS to take. navigator.standalone exists only
+// in Safari on iPad and iPhone.
+const INSTALL_FIRST = BLANK_EDITION && navigator.standalone === false && !!document.querySelector('link[rel="apple-touch-icon"]');
+let installIcon = null,
+  installError = "",
+  installTurn = 0;
+function renderInstallScreen() {
+  const choice = (background) =>
+    `<button type="button" data-install="background" data-background="${background}" aria-pressed="${installIcon?.background === background}">${th(background === "dark" ? "installPage.dark" : "installPage.light")}</button>`;
+  $("install-screen").innerHTML = /* HTML */ `<div class="install-card">
+    <h1 id="install-screen-title" tabindex="-1">${th("installPage.title")}</h1>
+    <p>${th("installPage.copy")}</p>
+    <ol class="install-steps">
+      <li>
+        <strong>${th("installPage.step1")}</strong>
+        <p>${th("installPage.step1Copy")}</p>
+        <div class="install-actions">
+          <button type="button" class="install-primary" data-install="studio">${th("installPage.studio")}</button
+          ><button type="button" data-install="picture">${th("installPage.picture")}</button>
+        </div>
+        ${installIcon
+          ? `<div class="install-preview"><span class="icon-preview"><img src="${installIcon.url}" alt="" width="96" height="96" /></span><div><p>${th("installPage.ready")}</p>${installIcon.file ? `<div class="install-actions">${choice("light")}${choice("dark")}</div>` : ""}</div></div>`
+          : ""}
+        <p class="install-error" role="alert"${installError ? "" : " hidden"}>${escapeHtml(installError)}</p>
+      </li>
+      <li><strong>${th("installPage.step2")}</strong><p>${th("installPage.step2Copy")}</p></li>
+      <li><strong>${th("installPage.step3")}</strong><p>${th("installPage.step3Copy")}</p></li>
+    </ol>
+    <p class="install-note">${th("installPage.note")}</p>
+    <button type="button" class="install-skip" data-install="skip">${th("installPage.skip")}</button>
+  </div>`;
+}
+async function useInstallIcon(turn, bytes, file = null, background = "light") {
+  const src = await touchIcon(bytes);
+  if (turn !== installTurn) return;
+  if (installIcon) URL.revokeObjectURL(installIcon.url);
+  installIcon = { url: pngUrl(new Blob([bytes], { type: "image/png" })), file, background };
+  installError = "";
+  document.querySelector('link[rel="apple-touch-icon"]').href = src;
+  renderInstallScreen();
+}
+async function installFromPicture(turn, file, background) {
+  await useInstallIcon(turn, new Uint8Array(await (await squareIcon(file, background)).arrayBuffer()), file, background);
+}
+async function installFromStudio(turn, file) {
+  if (file.size > STUDIO_MAX_BYTES) throw Error(t("import.tooLarge"));
+  let value;
+  try {
+    value = JSON.parse(await file.text());
+  } catch (_) {
+    throw Error(t("import.badJson"));
+  }
+  if (value?.kind === BACKUP_KIND) throw Error(t("installPage.isBackup"));
+  const { icon } = readStudioSettings(value, validateSettings);
+  if (!icon) throw Error(t("installPage.noIcon"));
+  await checkReadable(icon, "backup.invalidIcon");
+  await useInstallIcon(turn, icon);
+}
+function installPicker(id, read) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = id === "install-picture" ? "image/png,image/jpeg" : ".json,application/json";
+  input.hidden = true;
+  input.id = id;
+  document.body.append(input);
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    input.value = "";
+    if (file) installStep((turn) => read(turn, file));
+  });
+  return input;
+}
+// Only the latest choice counts: an earlier conversion finishing later is dropped, also its error.
+async function installStep(run) {
+  const turn = ++installTurn;
+  try {
+    await run(turn);
+  } catch (error) {
+    if (turn !== installTurn) return;
+    installError = error.message;
+    renderInstallScreen();
+  }
+}
+const installPictures = installPicker("install-picture", (turn, file) => installFromPicture(turn, file, installIcon?.background || "light")),
+  installStudios = installPicker("install-studio", installFromStudio);
+$("install-screen").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-install]");
+  if (!button) return;
+  const action = button.dataset.install;
+  if (action === "studio") installStudios.click();
+  else if (action === "picture") installPictures.click();
+  else if (action === "background" && installIcon?.file) {
+    const file = installIcon.file;
+    installStep((turn) => installFromPicture(turn, file, button.dataset.background));
+  } else if (action === "skip") {
+    sessionStorage.setItem("inkform.installSkipped", "1");
+    $("install-screen").hidden = true;
+    $("customer-app").inert = false;
+    firstStart();
+  }
+});
+// Whether the install page is shown; the PIN is asked for only once it is left.
+function offerInstall() {
+  if (!INSTALL_FIRST || adminAccess.configured() || sessionStorage.getItem("inkform.installSkipped")) return false;
+  renderInstallScreen();
+  $("install-screen").hidden = false;
+  $("customer-app").inert = true;
+  $("install-screen-title").focus({ preventScroll: true });
+  return true;
+}
+function firstStart() {
+  showCompletion(true);
+  openAdmin("overview");
+}
 const SETUP_FIELDS = ["name", "contact", "address", "location"];
 // The neutral edition is set up once all four studio details are saved.
 // Deletes copies in the app only (entries: { id, updatedAt } as confirmed). The ids are recorded for
@@ -2121,6 +2270,31 @@ function rememberRemoved() {
 function needsSetup() {
   return BLANK_EDITION && SETUP_FIELDS.some((key) => !settings.studio[key].trim());
 }
+// The assistant first offers three ways: set up here ("new"), or bring in a full backup or studio
+// settings (one file picker; the file says which it is). A failed file keeps the choice open.
+let setupWay = null,
+  setupError = "",
+  missingShown = false;
+const setupPicker = document.createElement("input");
+setupPicker.type = "file";
+setupPicker.accept = ".json,application/json";
+setupPicker.hidden = true;
+setupPicker.id = "setup-file";
+document.body.append(setupPicker);
+setupPicker.addEventListener("change", async () => {
+  const file = setupPicker.files[0];
+  setupPicker.value = "";
+  if (!file || !adminAccess.isUnlocked()) return;
+  setupError = "";
+  try {
+    sessionStorage.setItem("inkform.fromSetup", "1");
+    if (await applyChosenFile(file)) return;
+  } catch (error) {
+    setupError = t("setup.fileFailed", { fehler: error.message });
+  }
+  sessionStorage.removeItem("inkform.fromSetup");
+  renderAdminSection();
+});
 // Deadlines typed in the assistant; kept across re-renders until the setup is finished.
 let setupYears = null;
 function setupYearsShown() {
@@ -2150,6 +2324,12 @@ function finishSetup() {
   adminPage = "overview";
   renderAdminSection();
   toast(t("setup.done"));
+}
+function missingPanel() {
+  return adminPanel(
+    th("setup.missingTitle"),
+    `<ul class="setup-missing">${["setup.missing1", "setup.missing2", "setup.missing3"].map((key) => `<li>${th(key)}</li>`).join("")}</ul>`,
+  );
 }
 function samplePanel() {
   const loaded = incomeFeature.list().some(isSample);
@@ -2351,6 +2531,19 @@ function renderAdminSection() {
     content = translationPage();
   } else if (adminPage === "income") {
     content = `<div id="income-content">${incomeFeature.view()}</div>`;
+  } else if (adminPage === "setup" && setupWay !== "new") {
+    const way = (action, title, copy) =>
+      `<button class="setup-way" type="button" data-admin-action="${action}"><strong>${th(title)}</strong><span>${th(copy)}</span></button>`;
+    content = adminPanel(
+      th("setup.welcome"),
+      /* HTML */ `<p class="ad-section-copy">${th("setup.ways")}</p>
+        <div class="setup-ways">
+          ${way("setup-new", "setup.new", "setup.newCopy")}${way("setup-file", "setup.restore", "setup.restoreCopy")}${way("setup-file", "setup.studio", "setup.studioCopy")}
+        </div>
+        <div class="ad-notice">${th("setup.health")}</div>
+        <p class="ad-preview-note">${th("setup.fileNote")}</p>
+        <p class="setup-error" id="setup-file-error" role="alert"${setupError ? "" : " hidden"}>${escapeHtml(setupError)}</p>`,
+    );
   } else if (adminPage === "setup") {
     content = `${adminPanel(
       th("setup.welcome"),
@@ -2359,18 +2552,9 @@ function renderAdminSection() {
       <div class="ad-field"><label for="setup-pdf-years">${th("setup.pdfYears")}</label><input id="setup-pdf-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().pdfYears))}"></div>
       <div class="ad-field"><label for="setup-income-years">${th("setup.incomeYears")}</label><input id="setup-income-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().incomeYears))}"></div></div>
       <p class="ad-preview-note">${th("setup.note")}</p>
-      <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="setup-finish">${adminIcon("check")}${th("setup.finish")}</button></div>`,
-    )}${logoPanel()}${iconPanel()}${adminPanel(
-      th("setup.transferTitle"),
-      /* HTML */ `<p class="ad-section-copy">${th("setup.transferCopy")}</p>
-        <div class="ad-actions-row">
-          <button class="ad-button" type="button" data-admin-action="import-json">
-            ${adminIcon("upload")}${th("appearance.importJson")}</button
-          ><button class="ad-button" type="button" data-admin-action="backup-restore">
-            ${adminIcon("upload")}${th("backup.restore")}
-          </button>
-        </div>`,
-    )}${samplePanel()}`;
+      <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="setup-finish">${adminIcon("check")}${th("setup.finish")}</button
+      ><button class="ad-button" type="button" data-admin-action="setup-back">${th("setup.back")}</button></div>`,
+    )}${logoPanel()}${iconPanel()}${samplePanel()}`;
   } else if (adminPage === "export") {
     content = `<div id="export-content">${exportFeature.view()}</div>`;
   } else if (adminPage === "retention") {
@@ -2394,7 +2578,7 @@ function renderAdminSection() {
           <strong>${adminDraft.legal.length}</strong><small>${th("overview.legalNote")}</small>
         </div>
       </div>
-      ${privacyReminders()}${backupPanel()}${BLANK_EDITION ? samplePanel() : ""}
+      ${missingShown ? missingPanel() : ""}${privacyReminders()}${backupPanel()}${BLANK_EDITION ? samplePanel() : ""}
       <div class="ad-columns">
         <div>
           ${securityChecklist()}
@@ -2949,6 +3133,7 @@ function finishAdminLeave() {
   $("completion-screen").hidden = true;
   adminAccess?.lock();
   dropIconDraft();
+  missingShown = false;
   incomeFeature?.lock();
   adminOpen = false;
   $("admin-app").hidden = true;
@@ -2968,6 +3153,7 @@ function showCompletion(setup = false) {
   adminDraft = null;
   adminAccess?.lock();
   dropIconDraft();
+  missingShown = false;
   incomeFeature?.lock();
   $("customer-app").hidden = true;
   $("admin-app").hidden = true;
@@ -3273,6 +3459,15 @@ $("admin-app").addEventListener("click", (event) => {
     case "setup-finish":
       finishSetup();
       break;
+    case "setup-new":
+    case "setup-back":
+      setupWay = button.dataset.adminAction === "setup-new" ? "new" : null;
+      setupError = "";
+      renderAdminSection();
+      break;
+    case "setup-file":
+      setupPicker.click();
+      break;
     case "sample-load":
       loadSamples();
       break;
@@ -3357,33 +3552,22 @@ $("admin-app").addEventListener("click", (event) => {
       break;
   }
 });
-// Studio settings: checked as a whole, shown with what they replace, written after a yes; income,
-// PDFs, export log and PIN stay as they are.
 $("admin-import-file").addEventListener("change", async (event) => {
   const file = event.target.files[0];
   event.target.value = "";
   if (!file || !adminAccess.isUnlocked()) return;
   try {
-    if (file.size > 2 * 1024 * 1024) throw new Error(t("import.tooLarge"));
-    const blocker = replaceBlocker();
-    if (blocker) throw new Error(blocker);
-    const data = readStudioSettings(JSON.parse(await file.text()), validateSettings);
-    await checkReadable(data.logo, "backup.invalidLogo");
-    await checkReadable(data.icon, "backup.invalidIcon");
-    if (!window.confirm(studioPreview(data))) return;
-    await writeCustomisations(data);
-    sessionStorage.setItem("inkform.studioImported", "1");
-    location.reload();
+    await applyChosenFile(file, STUDIO_KIND);
   } catch (error) {
-    configError(t("import.failed", { fehler: error instanceof SyntaxError ? t("import.badJson") : error.message }));
+    configError(t("import.failed", { fehler: error.message }));
   }
 });
-function studioPreview(data) {
+// What the customisations of a file replace: studio, texts, languages, then one line per part.
+function customisationLines(data) {
   const s = data.settings,
     unchanged = t("studioFile.unchanged"),
     years = (n) => (n ? t("studioFile.years", { anzahl: n }) : t("studioFile.noYears"));
   return [
-    data.createdAt ? t("studioFile.question", { datum: timeFormat(new Date(data.createdAt)) }) : t("studioFile.questionOld"),
     t("studioFile.replaces", {
       studio: s.studio.name || "–",
       fragen: s.medical.length,
@@ -3399,7 +3583,14 @@ function studioPreview(data) {
       }),
       t("studioFile.interval", { wert: data.backupDays ? t("backup.days", { anzahl: data.backupDays }) : unchanged }),
     ].join("\n"),
+  ];
+}
+function studioPreview(data) {
+  return [
+    data.createdAt ? t("studioFile.question", { datum: timeFormat(new Date(data.createdAt)) }) : t("studioFile.questionOld"),
+    ...customisationLines(data),
     t("studioFile.untouched"),
+    ...(data.version ? [t("file.version", { version: data.version })] : []),
   ].join("\n\n");
 }
 window.addEventListener("keydown", (event) => {
@@ -3504,14 +3695,17 @@ loadIcon();
 if (configLoadError) toast(configLoadError);
 if (BLANK_EDITION) document.querySelectorAll("[data-studio-only]").forEach((node) => (node.hidden = true));
 if (!OWNER_GUIDE_BASE64) document.querySelectorAll('[data-admin-action="guide"]').forEach((node) => (node.hidden = true));
-if (sessionStorage.getItem("inkform.studioImported")) {
-  sessionStorage.removeItem("inkform.studioImported");
-  toast(t("studioFile.done"));
-}
-if (sessionStorage.getItem("inkform.restored")) {
-  sessionStorage.removeItem("inkform.restored");
-  toast(t("restore.done"));
-}
+const installing = offerInstall();
+const imported = sessionStorage.getItem("inkform.studioImported"),
+  restored = sessionStorage.getItem("inkform.restored"),
+  fromSetup = sessionStorage.getItem("inkform.fromSetup");
+for (const key of ["inkform.studioImported", "inkform.restored", "inkform.fromSetup"]) sessionStorage.removeItem(key);
+if (imported) toast(t("studioFile.done"));
+if (restored) toast(t("restore.done"));
+// Brought in from the assistant: straight on to the overview (after the PIN); after studio
+// settings it says what is still to do on this device.
+const afterSetup = !!(fromSetup && (imported || restored));
+missingShown = afterSetup && !!imported;
 pendingStore = createPendingStore({
   storage: {
     getItem: (key) => localStorage.getItem(key),
@@ -3529,9 +3723,9 @@ try {
 }
 try {
   if (!adminAccess.configured()) {
-    showCompletion(true);
-    openAdmin("overview");
+    if (!installing) firstStart();
   } else if (hasPending || sessionStorage.getItem("inkform.completion")) showCompletion();
+  else if (afterSetup) openAdmin("overview");
   else if (location.hash === "#admin" || needsSetup()) openAdmin();
 } catch (error) {
   showCompletion(true);

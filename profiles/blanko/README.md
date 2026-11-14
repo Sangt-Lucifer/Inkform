@@ -6,12 +6,16 @@ Dieses Repository enthält nur die fertige, neutrale App (ohne Studio und ohne D
 
 ## Einrichten
 
-1. Die Adresse der App einmal in **Safari** öffnen, mit Internetverbindung.
-2. Warten, bis unten „Offline bereit“ steht.
-3. Teilen → **Zum Home-Bildschirm**, „Als Web-App öffnen“ aktiviert lassen, Hinzufügen.
-4. Inkform über das neue Symbol starten (nicht mehr über den Safari-Tab: das Symbol hat einen eigenen Speicher).
-5. Eine **PIN** festlegen: 6 bis 12 Ziffern. Es gibt keinen Online-Reset.
-6. Im **Einrichtungsassistenten** Studio, Datenschutzkontakt, Anschrift und Ort der Unterschrift eintragen, optional die Aufbewahrungsfristen. Alles bleibt auf dem iPad und ist später unter „Studio & Kontakt“ änderbar.
+1. Die Adresse der App einmal in **Safari** öffnen, mit Internetverbindung. Es erscheint „INKFORM auf den Home-Bildschirm“.
+2. **Symbol wählen:** deine Studio-Einstellungen-Datei, falls du schon eine hast, oder ein Bild. Hier nur die Studio-Einstellungen, nicht die Gesamtsicherung mit Kundendaten. Im Safari-Tab wird nichts gespeichert.
+3. Teilen → **Zum Home-Bildschirm**. Den Namen unter dem Symbol kannst du dort ändern, zum Beispiel in den Studionamen. „Als Web-App öffnen“ aktiviert lassen, Hinzufügen.
+4. Inkform über das neue Symbol starten, beim ersten Mal mit Internet. Safari-Tab und Home-Bildschirm-App haben **getrennte Speicher**; ab jetzt nur noch das Symbol benutzen.
+5. Eine **PIN** festlegen: 6 bis 12 Ziffern. Sie steht in keiner Datei, es gibt keinen Online-Reset.
+6. Einen der drei Wege wählen:
+   - **Neu einrichten:** Studio, Datenschutzkontakt, Anschrift und Ort der Unterschrift eintragen, optional Fristen, Logo und App-Symbol.
+   - **Aus Gesamtsicherung wiederherstellen:** alles von einem anderen Gerät, auch Einnahmen und PDFs.
+   - **Studio-Einstellungen einspielen:** dieselbe Datei wie in Schritt 2, nur die Anpassungen; die Einnahmenliste bleibt leer.
+   Vor dem Übernehmen zeigt die App, was in der Datei steckt. Eine falsche Datei ändert nichts.
 7. Formulartexte, Gesundheitsfragen und Datenschutzhinweise prüfen und an das Studio anpassen. Sie sind neutral vorbereitet und vor dem Einsatz rechtlich zu prüfen.
 8. Unter „iPad & Dateien“ die PDF-Ablage testen.
 
@@ -26,7 +30,7 @@ Nach dem ersten Start mit Internet läuft Inkform auch im Flugmodus. Zum Prüfen
 Alles liegt im Speicher dieser App auf diesem iPad: Einstellungen, PIN, Einnahmenliste und die unterschriebenen PDFs für den ZIP-Export. Die Daten gehören zur Adresse der App. Wechselt die Adresse oder wird die App vom Home-Bildschirm entfernt oder werden die Safari-Websitedaten gelöscht, sind sie weg.
 
 - **Logo:** im Einrichtungsassistenten oder unter „Studio & Kontakt“ als PNG oder JPEG hochladen; die App verkleinert es selbst.
-- **App-Symbol:** ebenda ein quadratisches Symbol für den Home-Bildschirm hochladen (Vorschau, heller oder dunkler Hintergrund). Es muss vor „Zum Home-Bildschirm“ im Safari-Tab gesetzt sein; iPadOS übernimmt es nur beim Hinzufügen. Den Namen unter dem Symbol kannst du im Dialog ändern.
+- **App-Symbol:** ebenda ein quadratisches Symbol für den Home-Bildschirm hochladen (Vorschau, heller oder dunkler Hintergrund). iPadOS übernimmt es nur beim Hinzufügen aus dem Safari-Tab (Schritt 2 oben). Ein späterer Wechsel braucht: Gesamtsicherung, App vom Home-Bildschirm entfernen, mit dem neuen Symbol neu hinzufügen, wiederherstellen.
 - **Gesamtsicherung** (Übersicht): eine Datei mit Einstellungen, Logo, App-Symbol, Einnahmen, Fristen und PDFs. Sie enthält Gesundheitsangaben und Unterschriften; nur auf dem iPad („Auf meinem iPad“) oder einem eigenen Rechner ablegen, nicht in iCloud Drive. Die PIN ist nicht enthalten.
 - **Studio-Einstellungen** (Design & Sicherung): eine Datei nur mit deinen Anpassungen (Studioangaben, Logo, App-Symbol, Texte, Fragen, Sprachen, Farbschema, Fristen), ohne Kundendaten. Damit richtest du ein zweites iPad ein oder gibst die Einrichtung weiter. Der Import zeigt, was ersetzt wird; Einnahmen, PDFs und PIN bleiben unberührt.
 - **Erinnerung:** Die Übersicht erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist.

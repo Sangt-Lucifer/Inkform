@@ -2856,6 +2856,87 @@ html[data-theme="dark"] dialog::backdrop {
 .completion-screen button:focus-visible {
   outline: 2px solid #fff;
 }
+.install-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  overflow-y: auto;
+  padding: max(24px, env(safe-area-inset-top)) 20px 32px;
+  background: #000;
+  color: #fff;
+}
+.install-card {
+  max-width: 620px;
+  margin: 0 auto;
+}
+.install-card h1 {
+  font-size: clamp(28px, 5vw, 44px);
+  font-weight: 500;
+  letter-spacing: -1px;
+  margin: 16px 0;
+  outline: none;
+}
+.install-card p {
+  color: #c4c4c4;
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 6px 0 0;
+}
+.install-steps {
+  margin: 28px 0;
+  padding-left: 26px;
+  list-style: decimal;
+}
+.install-steps li {
+  margin-bottom: 24px;
+  font-size: 18px;
+}
+.install-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.install-card button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid #555;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font-size: 16px;
+}
+.install-card .install-primary {
+  background: #fff;
+  border-color: #fff;
+  color: #000;
+}
+.install-card button[aria-pressed="true"] {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px #fff;
+}
+.install-card button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.install-preview {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-top: 16px;
+}
+.install-error {
+  color: #ff8a80 !important;
+}
+.install-note {
+  font-size: 14px !important;
+}
+.install-card .install-skip {
+  margin-top: 20px;
+  border-color: #333;
+  color: #aaa;
+  font-size: 15px;
+}
 
 /* ---------- Lesbarkeit im Kundenbereich ----------
    Everything the customer reads or fills in: inputs, labels and running text at least 16 px,
@@ -3078,6 +3159,51 @@ html[data-theme="dark"] dialog::backdrop {
 .logo-setting .ad-button[aria-pressed="true"] {
   border-color: var(--ad-blue);
   box-shadow: 0 0 0 1px var(--ad-blue);
+}
+.setup-ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.setup-way {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-height: 44px;
+  padding: 16px;
+  border: 1px solid var(--ad-line);
+  border-radius: 10px;
+  background: var(--ad-input);
+  color: var(--ad-text);
+  text-align: left;
+  cursor: pointer;
+}
+.setup-way:hover,
+.setup-way:focus-visible {
+  border-color: var(--ad-blue);
+}
+.setup-way strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.setup-way span {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ad-muted);
+}
+.setup-error {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #d33;
+}
+.setup-missing {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+  font-size: 13px;
+  line-height: 1.8;
 }
 .contents-list {
   margin: 0 0 16px;

@@ -37,15 +37,22 @@ check("Zu kurze PIN: eigene Meldung", (await pinError()).includes("mindestens 6 
 await type("admin-pin", "839274");
 await type("admin-pin-repeat", "839274");
 await ev(`document.getElementById('admin-pin-form').requestSubmit()`);
-await until(`adminAccess.isUnlocked() && adminPage==='setup' && !!document.getElementById('admin-studio-name')`);
+await until(`adminAccess.isUnlocked() && adminPage==='setup' && !!document.querySelector('[data-admin-action="setup-new"]')`);
 
 // Setup assistant ---------------------------------------------------------------------------
-check("Nach der PIN öffnet der Einrichtungsassistent, Felder leer", await ev(`document.getElementById('admin-page-title').textContent==='Einrichtung'&&['name','contact','address','location'].every(k=>document.getElementById('admin-studio-'+k).value==='')`));
+check(
+  "Nach der PIN: drei Wege (neu, Gesamtsicherung, Studio-Einstellungen) mit Hinweis auf Gesundheitsdaten",
+  await ev(`document.querySelectorAll('.setup-way').length===3&&document.getElementById('admin-app').textContent.includes('Aus Gesamtsicherung wiederherstellen')&&document.getElementById('admin-app').textContent.includes('Studio-Einstellungen einspielen')&&document.getElementById('admin-app').textContent.includes('Gesundheitsangaben und Unterschriften')`),
+);
+await screenshot("blanko-drei-wege");
+await ev(`document.querySelector('[data-admin-action="setup-new"]').click()`);
+await until(`!!document.getElementById('admin-studio-name')`);
+check("Neu einrichten öffnet den Einrichtungsassistenten, Felder leer", await ev(`document.getElementById('admin-page-title').textContent==='Einrichtung'&&['name','contact','address','location'].every(k=>document.getElementById('admin-studio-'+k).value==='')`));
 await ev(`(async()=>{const c=document.createElement('canvas');c.width=c.height=64;c.getContext('2d').fillRect(8,8,48,48);const b=await new Promise(r=>c.toBlob(r,'image/png'));const dt=new DataTransfer();dt.items.add(new File([b],'logo.png',{type:'image/png'}));const i=document.getElementById('logo-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
 await until(`document.querySelector('.studio-logo').src.startsWith('blob:')`);
 check("Logo schon im Assistenten hochladbar, gilt sofort", await ev(`adminPage==='setup'&&!!document.querySelector('[data-admin-action="logo-remove"]')&&document.querySelector('.ad-brand .studio-logo').src.startsWith('blob:')`));
 await screenshot("blanko-einrichtung");
-check("Assistent bietet Studio-Einstellungen importieren und Wiederherstellen an", await ev(`adminPage==='setup'&&!!document.querySelector('#admin-app [data-admin-action="import-json"]')&&!!document.querySelector('#admin-app [data-admin-action="backup-restore"]')`));
+check("Assistent bietet App-Symbol und den Weg zurück zur Auswahl", await ev(`adminPage==='setup'&&!!document.querySelector('#admin-app [data-admin-action="icon-choose"]')&&!!document.querySelector('#admin-app [data-admin-action="setup-back"]')`));
 await ev(`openAdminAuthorized('export')`);
 check("Vor der Einrichtung führt jede Admin-Seite zum Assistenten", await ev(`adminPage==='setup'`));
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
