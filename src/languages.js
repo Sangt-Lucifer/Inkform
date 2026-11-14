@@ -11,6 +11,15 @@ export const TRANSLATED = {
   legal: ["title", "text"],
 };
 const NOTE_MAX = 500;
+// Flags of the customer language buttons; a language without one shows its code (the language
+// part only, at most three letters, e.g. "SR" for sr-Latn-RS).
+const FLAGS = {
+  de: `<svg viewBox="0 0 5 3" aria-hidden="true"><path fill="#000" d="M0 0h5v1H0z"/><path fill="#d00" d="M0 1h5v1H0z"/><path fill="#ffce00" d="M0 2h5v1H0z"/></svg>`,
+  en: `<svg viewBox="0 0 60 30" aria-hidden="true"><path fill="#012169" d="M0 0h60v30H0z"/><path stroke="#fff" stroke-width="6" d="M0 0l60 30M60 0L0 30"/><path stroke="#c8102e" stroke-width="2" d="M0 0l60 30M60 0L0 30"/><path stroke="#fff" stroke-width="10" d="M30 0v30M0 15h60"/><path stroke="#c8102e" stroke-width="6" d="M30 0v30M0 15h60"/></svg>`,
+};
+export function languageMark(code) {
+  return FLAGS[code] ?? `<span class="language-code">${String(code).split("-")[0].replace(/[^a-z]/gi, "").slice(0, 3).toUpperCase()}</span>`;
+}
 
 export function validCurrency(code) {
   if (typeof code !== "string" || !/^[A-Z]{3}$/.test(code)) return false;

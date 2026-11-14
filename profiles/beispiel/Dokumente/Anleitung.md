@@ -102,7 +102,7 @@ Die PIN schützt die Bedienoberfläche; sie ist keine Verschlüsselung der Brows
 ## Sprachen
 
 - Die Verwaltung erscheint in der Sprache dieses Geräts (Design & Sicherung → Sprache dieses Geräts). Die Einstellung gilt nur für dieses Gerät und ist nicht in der Gesamtsicherung.
-- Das Kundenformular startet immer in der Studiosprache. Weitere Sprachen für Kunden unter Studio & Kontakt → Sprachen und Währung ankreuzen; ab zwei Sprachen erscheint auf dem Formular eine Sprachauswahl. Ankreuzen lässt sich eine Sprache erst, wenn alle Formulartexte in ihr vorliegen.
+- Das Kundenformular startet immer in der Studiosprache. Weitere Sprachen für Kunden unter Studio & Kontakt → Sprachen und Währung ankreuzen; ab zwei Sprachen erscheinen oben im Formular Flaggen-Knöpfe zum Umschalten; Eingaben bleiben dabei erhalten. Ankreuzen lässt sich eine Sprache erst, wenn alle Formulartexte in ihr vorliegen.
 - Wechselt der Kunde die Sprache, bleiben Angaben und Gesundheitsantworten erhalten; Erklärungen, Foto-Auswahl und Unterschrift beginnen neu. Das PDF entsteht in der Sprache des Kunden und vermerkt sie mit dem optionalen Hinweis, z. B. „Maßgeblich ist die deutsche Fassung“.
 - Übersetzungen bearbeiten: auf Formular & Texte, Gesundheitsfragen, Einwilligungen und Datenschutz oben die Sprache umschalten. Unter jedem Feld steht der deutsche Text als Vorlage.
 - Englisch ist als Entwurf enthalten, nicht juristisch geprüft, und wird Kunden erst nach dem Ankreuzen angeboten. Nach der Prüfung neben der Sprache „Juristisch geprüft“ ankreuzen.

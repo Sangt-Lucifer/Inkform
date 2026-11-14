@@ -18,6 +18,7 @@ import {
   fieldLimit,
   fieldOf,
   hasAllTexts,
+  languageMark,
   markField,
   markStale,
   offeredLanguages,
@@ -3034,13 +3035,13 @@ function renderShown() {
 }
 function renderLanguageChoice() {
   const offered = offeredLanguages(settings),
-    select = $("customer-language");
-  select.hidden = offered.length < 2;
-  select.innerHTML = offered
-    .map(
-      (code) =>
-        `<option value="${code}" lang="${code}"${code === customerLanguage ? " selected" : ""}>${escapeHtml(translator(code).name)}</option>`,
-    )
+    group = $("customer-language");
+  group.hidden = offered.length < 2;
+  group.innerHTML = offered
+    .map((code) => {
+      const name = escapeHtml(translator(code).name);
+      return `<button type="button" class="language-button" data-customer-language="${escapeHtml(code)}" lang="${escapeHtml(code)}" aria-pressed="${code === customerLanguage}" aria-label="${name}" title="${name}">${languageMark(code)}</button>`;
+    })
     .join("");
 }
 // A new language mid-form keeps the entries and health answers; declarations, the photo choice
@@ -3065,7 +3066,13 @@ function switchCustomerLanguage(code) {
   updatePriceBalance();
   updateProgress();
 }
-$("customer-language").addEventListener("change", (event) => switchCustomerLanguage(event.target.value));
+$("customer-language").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-customer-language]");
+  if (!button) return;
+  const code = button.dataset.customerLanguage;
+  switchCustomerLanguage(code);
+  $("customer-language").querySelector(`[data-customer-language="${code}"]`)?.focus();
+});
 function saveAdmin() {
   let next;
   try {

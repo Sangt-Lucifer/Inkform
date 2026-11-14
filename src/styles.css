@@ -2648,6 +2648,9 @@ html[data-theme="dark"] dialog::backdrop {
     width: 42px;
     min-height: 44px;
   }
+  .topbar-inner:has(.language-choice:not([hidden])) .brand-copy {
+    display: none;
+  }
 }
 
 .offline-status {
@@ -3086,16 +3089,57 @@ html[data-theme="dark"] dialog::backdrop {
   font-size: 13px;
 }
 
-.language-select {
-  min-height: 42px;
-  max-width: 12em;
+.language-choice {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 3px;
+  margin: -3px;
+}
+.top-actions .theme-button {
+  flex: none;
+}
+.language-choice::-webkit-scrollbar {
+  display: none;
+}
+.language-choice[hidden] {
+  display: none;
+}
+.language-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: transparent;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: transparent;
   color: var(--ink);
-  padding: 9px 12px;
-  font: inherit;
-  font-size: 12px;
+  cursor: pointer;
+}
+.language-button svg {
+  display: block;
+  width: 26px;
+  height: 17px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px #00000026;
+}
+.language-button .language-code {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+.language-button[aria-pressed="true"] {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+html[data-theme="dark"] .language-button svg {
+  box-shadow: 0 0 0 1px #ffffff40;
 }
 .backup-ready {
   display: grid;

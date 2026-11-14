@@ -127,7 +127,7 @@ check(
   await ev(`(() => {
     const tr = settings.translations.en;
     return !!tr.legal.privacy.text && tr.stale.length === 2 && !offeredLanguages(settings).includes('en')
-      && !![...document.getElementById('customer-language').options].every((o) => o.value !== 'en');
+      && [...document.querySelectorAll('#customer-language [data-customer-language]')].every((b) => b.dataset.customerLanguage !== 'en');
   })()`),
 );
 check(
@@ -185,7 +185,7 @@ check(
   await ev(`(() => {
     saveAdmin();
     return offeredLanguages(settings).includes('en') && settings.translations.en.app.headline.endsWith(' New')
-      && [...document.getElementById('customer-language').options].some((o) => o.value === 'en');
+      && [...document.querySelectorAll('#customer-language [data-customer-language]')].some((b) => b.dataset.customerLanguage === 'en');
   })()`),
 );
 check(
@@ -232,10 +232,10 @@ check("Studio-Seite: Kundensprache wählbar", await ev(`!document.querySelector(
 await ev(`finishAdminLeave()`);
 await until(`!document.getElementById('customer-app').hidden`);
 check("Nach der Verwaltung wieder Studiosprache", await ev(`document.documentElement.lang === 'de'`));
-check("Sprachauswahl mit zwei Sprachen sichtbar", await ev(`!document.getElementById('customer-language').hidden && document.getElementById('customer-language').options.length === 2`));
+check("Sprachauswahl mit zwei Sprachen sichtbar", await ev(`!document.getElementById('customer-language').hidden && document.querySelectorAll('#customer-language [data-customer-language]').length === 2`));
 
 await ev(`fillConsent()`);
-await ev(`(() => { const s = document.getElementById('customer-language'); s.value = '${PSEUDO}'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+await ev(`document.querySelector('[data-customer-language="${PSEUDO}"]').click()`);
 check("Kundensprache gewechselt: lang und dir", await ev(`document.documentElement.lang === '${PSEUDO}' && document.documentElement.dir === 'rtl'`));
 await translated("Kundenformular: alle markierten Texte übersetzt", "#customer-app");
 check("Formulartexte in der Kundensprache", await ev(`document.getElementById('customer-headline').textContent.startsWith('[') && document.querySelector('.question-title').textContent.trim().startsWith('[')`));
@@ -252,7 +252,7 @@ await cmd("Emulation.clearDeviceMetricsOverride");
 await ev(`fillConsent()`);
 check("PDF-Daten vermerken die Kundensprache", await ev(`gatherData().language === '${PSEUDO}' && !!createPdf(gatherData())`));
 await ev(`resetCustomerForm()`);
-check("Nächstes Formular wieder in der Studiosprache", await ev(`document.documentElement.lang === 'de' && document.getElementById('customer-language').value === 'de' && document.getElementById('customer-headline').textContent === settings.app.headline`));
+check("Nächstes Formular wieder in der Studiosprache", await ev(`document.documentElement.lang === 'de' && document.querySelector('[data-customer-language="de"]').getAttribute('aria-pressed') === 'true' && document.getElementById('customer-headline').textContent === settings.app.headline`));
 if (errors.length) console.log("Fehler:", JSON.stringify(errors).slice(0, 1500));
 check("Keine JavaScript-Fehler", errors.length === 0);
 process.exit(0);
