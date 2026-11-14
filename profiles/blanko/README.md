@@ -11,10 +11,9 @@ Dieses Repository enthält nur die fertige, neutrale App (ohne Studio und ohne D
 3. Teilen → **Zum Home-Bildschirm**. Den Namen unter dem Symbol kannst du dort ändern, zum Beispiel in den Studionamen. „Als Web-App öffnen“ aktiviert lassen, Hinzufügen.
 4. Inkform über das neue Symbol starten, beim ersten Mal mit Internet. Safari-Tab und Home-Bildschirm-App haben **getrennte Speicher**; ab jetzt nur noch das Symbol benutzen.
 5. Eine **PIN** festlegen: 6 bis 12 Ziffern. Sie steht in keiner Datei, es gibt keinen Online-Reset.
-6. Einen der drei Wege wählen:
+6. Einen der zwei Wege wählen:
    - **Neu einrichten:** Studio, Datenschutzkontakt, Anschrift und Ort der Unterschrift eintragen, optional Fristen, Logo und App-Symbol.
-   - **Aus Gesamtsicherung wiederherstellen:** alles von einem anderen Gerät, auch Einnahmen und PDFs.
-   - **Studio-Einstellungen einspielen:** dieselbe Datei wie in Schritt 2, nur die Anpassungen; die Einnahmenliste bleibt leer.
+   - **Aus Datei übernehmen:** eine Gesamtsicherung (alles von einem anderen Gerät, auch Einnahmen und PDFs) oder Studio-Einstellungen (dieselbe Datei wie in Schritt 2, nur die Anpassungen; die Einnahmenliste bleibt leer).
    Vor dem Übernehmen zeigt die App, was in der Datei steckt. Eine falsche Datei ändert nichts.
 7. Formulartexte, Gesundheitsfragen und Datenschutzhinweise prüfen und an das Studio anpassen. Sie sind neutral vorbereitet und vor dem Einsatz rechtlich zu prüfen.
 8. Unter „iPad & Dateien“ die PDF-Ablage testen.
@@ -31,9 +30,9 @@ Alles liegt im Speicher dieser App auf diesem iPad: Einstellungen, PIN, Einnahme
 
 - **Logo:** im Einrichtungsassistenten oder unter „Studio & Kontakt“ als PNG oder JPEG hochladen; die App verkleinert es selbst.
 - **App-Symbol:** ebenda ein quadratisches Symbol für den Home-Bildschirm hochladen (Vorschau, heller oder dunkler Hintergrund). iPadOS übernimmt es nur beim Hinzufügen aus dem Safari-Tab (Schritt 2 oben). Ein späterer Wechsel braucht: Gesamtsicherung, App vom Home-Bildschirm entfernen, mit dem neuen Symbol neu hinzufügen, wiederherstellen.
-- **Gesamtsicherung** (Übersicht): eine Datei mit Einstellungen, Logo, App-Symbol, Einnahmen, Fristen und PDFs. Sie enthält Gesundheitsangaben und Unterschriften; nur auf dem iPad („Auf meinem iPad“) oder einem eigenen Rechner ablegen, nicht in iCloud Drive. Die PIN ist nicht enthalten.
-- **Studio-Einstellungen** (Design & Sicherung): eine Datei nur mit deinen Anpassungen (Studioangaben, Logo, App-Symbol, Texte, Fragen, Sprachen, Farbschema, Fristen), ohne Kundendaten. Damit richtest du ein zweites iPad ein oder gibst die Einrichtung weiter. Der Import zeigt, was ersetzt wird; Einnahmen, PDFs und PIN bleiben unberührt.
-- **Erinnerung:** Die Übersicht erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist.
+- **Gesamtsicherung** (Sichern & Wiederherstellen): eine Datei mit Einstellungen, Logo, App-Symbol, Einnahmen, Fristen und PDFs. Sie enthält Gesundheitsangaben und Unterschriften; nur auf dem iPad („Auf meinem iPad“) oder einem eigenen Rechner ablegen, nicht in iCloud Drive. Die PIN ist nicht enthalten.
+- **Studio-Einstellungen** (Sichern & Wiederherstellen, „Nur Studio-Einstellungen weitergeben“): eine Datei nur mit deinen Anpassungen (Studioangaben, Logo, App-Symbol, Texte, Fragen, Sprachen, Farbschema, Fristen), ohne Kundendaten. Damit richtest du ein zweites iPad ein oder gibst die Einrichtung weiter. Eingespielt wird sie über „Aus Datei wiederherstellen“; die App zeigt, was ersetzt wird, Einnahmen, PDFs und PIN bleiben unberührt.
+- **Erinnerung:** Die Übersicht zeigt den Stand und erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist.
 - **Wiederherstellen:** prüft die Datei, fragt nach und ersetzt dann alle Daten außer der PIN. So zieht Inkform auch auf ein neues Gerät oder eine neue Adresse um.
 
 ## Exportieren

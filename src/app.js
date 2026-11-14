@@ -1412,6 +1412,12 @@ const ADMIN_PAGES = {
     title: "admin.page.export.title",
     description: "admin.page.export.description",
   },
+  backup: {
+    label: "admin.page.backup.label",
+    icon: "share",
+    title: "admin.page.backup.title",
+    description: "admin.page.backup.description",
+  },
   retention: {
     label: "admin.page.retention.label",
     icon: "lock",
@@ -1665,17 +1671,28 @@ function backupState() {
   return { age: last ? daysBetween(last) : null, today: !!last && localDate(new Date(last)) === localDate(), days };
 }
 let preparedBackup = null;
-function backupPanel() {
+function backupStatus() {
   const { age, today, days } = backupState();
-  const status =
+  const text =
     age === null
       ? t("backup.none")
       : today && age < days
         ? t("backup.ageToday")
         : t(age >= days ? "backup.ageDue" : "backup.age", { anzahl: age });
+  return `<p class="ad-section-copy${age === null || age >= days ? " ad-warn" : ""}">${escapeHtml(text)}</p>`;
+}
+// Overview: only the state, the work is done on "Sichern & Wiederherstellen".
+function backupStatusPanel() {
   return adminPanel(
     th("backup.title"),
-    `<p class="ad-section-copy${age === null || age >= days ? " ad-warn" : ""}">${escapeHtml(status)}</p>
+    `${backupStatus()}<div class="ad-actions-row"><button class="ad-button" type="button" data-admin-page="backup">${adminIcon("share")}${th("backup.open")}</button></div>`,
+  );
+}
+function backupPanel() {
+  const { days } = backupState();
+  return adminPanel(
+    th("backup.title"),
+    `${backupStatus()}
     <p class="ad-section-copy">${th("backup.copy")}</p>
     <div class="income-filters"><label>${th("backup.interval")}<select id="backup-interval">${BACKUP_INTERVALS.map((d) => `<option value="${d}"${d === days ? " selected" : ""}>${th("backup.days", { anzahl: d })}</option>`).join("")}</select></label></div>
     <div class="backup-flow" id="backup-flow">
@@ -1686,12 +1703,16 @@ function backupPanel() {
         <p>${th("backup.saveHint")}</p>
       </div>
       <p class="ad-preview-note" id="backup-note" role="status"></p>
-    </div>
-    <div class="backup-restore">
-      <strong>${th("backup.restoreTitle")}</strong>
-      <p>${th("backup.restoreCopy")}</p>
-      <button class="ad-button" type="button" data-admin-action="backup-restore">${adminIcon("upload")}${th("backup.restore")}</button>
     </div>`,
+  );
+}
+// One file picker for every kind of file; the app tells which one it is before anything changes.
+function restorePanel() {
+  return adminPanel(
+    th("backup.restoreTitle"),
+    `<p class="ad-section-copy">${th("backup.restoreCopy")}</p>
+    <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="backup-restore">${adminIcon("upload")}${th("backup.restore")}</button></div>
+    <p class="setup-error" id="restore-error" role="alert" hidden></p>`,
   );
 }
 async function createBackup() {
@@ -1750,22 +1771,17 @@ function saveBackup() {
     (way) => {
       localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
       preparedBackup = null;
-      if (adminPage === "overview") renderAdminSection();
-      else {
-        document.querySelector("[data-backup-ready]").hidden = true;
-        document.querySelector("[data-backup-start]").hidden = false;
-      }
-      $("backup-note").textContent =
-        way === "download"
-          ? t("backup.downloaded", { datei: file.name })
-          : t("backup.shared", { datei: file.name });
+      // The owner may have switched pages while the share sheet was open.
+      if (adminOpen && (adminPage === "backup" || adminPage === "overview")) renderAdminSection();
+      backupMessage(t(way === "download" ? "backup.downloaded" : "backup.shared", { datei: file.name }));
     },
-    (error) =>
-      ($("backup-note").textContent =
-        error.name === "AbortError"
-          ? t("save.aborted")
-          : t("save.failed")),
+    (error) => backupMessage(t(error.name === "AbortError" ? "save.aborted" : "save.failed")),
   );
+}
+function backupMessage(text) {
+  const note = $("backup-note");
+  if (note) note.textContent = text;
+  else toast(text);
 }
 const backupPicker = document.createElement("input");
 backupPicker.type = "file";
@@ -1842,10 +1858,17 @@ backupPicker.addEventListener("change", async () => {
   const file = backupPicker.files[0];
   backupPicker.value = "";
   if (!file || !adminAccess.isUnlocked()) return;
+  const line = $("restore-error");
+  if (line) line.hidden = true;
   try {
     await applyChosenFile(file);
   } catch (error) {
-    toast(t("restore.failed", { fehler: error.message }));
+    const message = t("restore.failed", { fehler: error.message });
+    toast(message);
+    if (line) {
+      line.textContent = message;
+      line.hidden = false;
+    }
   }
 });
 // The studio logo chosen on this device (see logo.js); shown wherever the built-in one is.
@@ -2594,7 +2617,7 @@ function renderAdminSection() {
       th("setup.welcome"),
       /* HTML */ `<p class="ad-section-copy">${th("setup.ways")}</p>
         <div class="setup-ways">
-          ${way("setup-new", "setup.new", "setup.newCopy")}${way("setup-file", "setup.restore", "setup.restoreCopy")}${way("setup-file", "setup.studio", "setup.studioCopy")}
+          ${way("setup-new", "setup.new", "setup.newCopy")}${way("setup-file", "setup.restore", "setup.restoreCopy")}
         </div>
         <div class="ad-notice">${th("setup.health")}</div>
         <p class="ad-preview-note">${th("setup.fileNote")}</p>
@@ -2633,7 +2656,7 @@ function renderAdminSection() {
           <strong>${adminDraft.legal.length}</strong><small>${th("overview.legalNote")}</small>
         </div>
       </div>
-      ${missingShown ? missingPanel() : ""}${privacyReminders()}${backupPanel()}${BLANK_EDITION ? samplePanel() : ""}
+      ${missingShown ? missingPanel() : ""}${privacyReminders()}${backupStatusPanel()}${BLANK_EDITION ? samplePanel() : ""}
       <div class="ad-columns">
         <div>
           ${securityChecklist()}
@@ -2648,8 +2671,8 @@ function renderAdminSection() {
             th("overview.transfer"),
             /* HTML */ `<p class="ad-section-copy">${th("overview.transferCopy")}</p>
               <div class="ad-actions-row">
-                <button class="ad-button" type="button" data-admin-page="appearance">
-                  ${adminIcon("download")}${th("overview.backupExport")}</button
+                <button class="ad-button" type="button" data-admin-page="backup">
+                  ${adminIcon("share")}${th("admin.page.backup.label")}</button
                 ><button class="ad-button" type="button" data-admin-action="preview">
                   ${adminIcon("external")}${th("overview.viewForm")}
                 </button>
@@ -2909,6 +2932,29 @@ function renderAdminSection() {
           </ol>
           <p class="ad-preview-note">${th("ipad.dailyNote")}</p>`,
       );
+  } else if (adminPage === "backup") {
+    content = `${backupPanel()}${restorePanel()}${adminPanel(
+      th("appearance.transfer"),
+      /* HTML */ `<p class="ad-section-copy">${th("appearance.transferCopy")}</p>
+        <div class="ad-actions-row">
+          <button class="ad-button" type="button" data-admin-action="export-json">
+            ${adminIcon("download")}${th("appearance.exportJson")}</button
+          ><button class="ad-button" type="button" data-admin-action="export-html">
+            ${adminIcon("doc")}${th("appearance.exportHtml")}
+          </button>
+        </div>
+        <p class="ad-preview-note">${th("appearance.transferNote")}</p>`,
+    )}${adminPanel(
+      th("contents.title"),
+      /* HTML */ `<dl class="contents-list">
+          <dt>${th("contents.backup")}</dt>
+          <dd>${th("contents.backupItems")}</dd>
+          <dt>${th("contents.studio")}</dt>
+          <dd>${th("contents.studioItems")}</dd>
+          <dt>${th("contents.nowhere")}</dt>
+          <dd>${th("contents.nowhereItems")}</dd>
+        </dl>`,
+    )}`;
   } else if (adminPage === "appearance") {
     content = `${adminPanel(
       th("appearance.title"),
@@ -2932,34 +2978,6 @@ function renderAdminSection() {
           >
         </div>
       </div>`,
-    )}${adminPanel(
-      th("appearance.transfer"),
-      /* HTML */ `<p class="ad-section-copy">${th("appearance.transferCopy")}</p>
-        <div class="ad-actions-row">
-          <button class="ad-button" type="button" data-admin-action="export-json">
-            ${adminIcon("download")}${th("appearance.exportJson")}</button
-          ><button class="ad-button" type="button" data-admin-action="import-json">
-            ${adminIcon("upload")}${th("appearance.importJson")}</button
-          ><button class="ad-button primary" type="button" data-admin-action="export-html">
-            ${adminIcon("doc")}${th("appearance.exportHtml")}
-          </button>
-        </div>
-        <p class="ad-preview-note">${th("appearance.transferNote")}</p>`,
-    )}${adminPanel(
-      th("contents.title"),
-      /* HTML */ `<dl class="contents-list">
-          <dt>${th("contents.backup")}</dt>
-          <dd>${th("contents.backupItems")}</dd>
-          <dt>${th("contents.studio")}</dt>
-          <dd>${th("contents.studioItems")}</dd>
-          <dt>${th("contents.nowhere")}</dt>
-          <dd>${th("contents.nowhereItems")}</dd>
-        </dl>
-        <div class="ad-actions-row">
-          <button class="ad-button" type="button" data-admin-page="overview">
-            ${adminIcon("download")}${th("appearance.toBackup")}
-          </button>
-        </div>`,
     )}${adminPanel(
       th("appearance.defaults"),
       /* HTML */ `<div class="ad-reset-row">
@@ -3549,7 +3567,7 @@ $("admin-app").addEventListener("click", (event) => {
       removeSamples();
       break;
     case "backup-create":
-      if (adminPage !== "overview") openAdminAuthorized("overview");
+      if (adminPage !== "backup") openAdminAuthorized("backup");
       createBackup();
       break;
     case "backup-save":
@@ -3618,22 +3636,9 @@ $("admin-app").addEventListener("click", (event) => {
     case "export-html":
       exportHtml();
       break;
-    case "import-json":
-      $("admin-import-file").click();
-      break;
     case "defaults":
       showDialog("admin-defaults-dialog");
       break;
-  }
-});
-$("admin-import-file").addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  event.target.value = "";
-  if (!file || !adminAccess.isUnlocked()) return;
-  try {
-    await applyChosenFile(file);
-  } catch (error) {
-    configError(t("import.failed", { fehler: error.message }));
   }
 });
 // What the customisations of a file replace: studio, texts, languages, then one line per part.

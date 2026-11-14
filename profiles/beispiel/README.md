@@ -24,7 +24,7 @@ Drei Datenbestände getrennt sichern:
 
 - Unterschriebene PDFs in der Dateien-App; bei ausschließlich lokaler Ablage **Auf meinem iPad** verwenden.
 - Alle Einnahmen über die separate JSON-Sicherung im Einnahmen-Reiter. Ein Import ergänzt identische Daten ohne Duplikate; abweichende bestehende Einträge werden nicht überschrieben.
-- Studioeinstellungen über JSON oder vollständigen HTML-Export unter **Design & Sicherung**. Diese enthalten keine Einnahmendaten und keine PIN.
+- Studioeinstellungen als Datei oder vollständiger HTML-Export unter **Sichern & Wiederherstellen**. Diese enthalten keine Einnahmendaten und keine PIN.
 
 Browserdaten löschen, Datei-/Browserwechsel oder ein anderes Gerät können einen anderen Datenbestand bedeuten. Regelmäßig auf einen zusätzlichen lokalen Datenträger sichern und die Wiederherstellung testen. Ein Export allein bestätigt keine erfolgreiche Dateiablage.
 
@@ -40,7 +40,7 @@ Safari und Home-Bildschirm-App können getrennte lokale Daten verwenden. Studio-
 
 Studioangaben, Datenschutzkontakt, Aufbewahrung und Empfänger sind mit dem **erfundenen Musterstudio** (Max Mustermann, Musterstadt, `datenschutz@musterstudio.example`) vorbelegt. Alle Angaben sind fiktiv und müssen vor dem Einsatz vollständig durch die echten Studioangaben ersetzt werden. Vorlage 1.2 ersetzt einen Haftungsverzicht durch eine Nachsorge-Erklärung mit unveränderten gesetzlichen Ansprüchen. Die dokumentierte Vorprüfung und verbleibende Punkte stehen unter `Dokumente/Rechtstexte-Pruefung.md`; es gibt keine anwaltliche Freigabe.
 
-Eigene ältere Studioeinstellungen werden erhalten. Vor einem Wechsel auf die aktuelle Standardvorlage zuerst als JSON sichern, dann unter **Design & Sicherung** die Vorlage als Entwurf laden, vergleichen und speichern. PDF-Dateien und Einnahmenliste werden dadurch nicht überschrieben. Die App führt keinen automatischen Löschlauf für gespeicherte PDFs aus.
+Eigene ältere Studioeinstellungen werden erhalten. Vor einem Wechsel auf die aktuelle Standardvorlage zuerst unter **Sichern & Wiederherstellen** eine Gesamtsicherung erstellen, dann unter **Darstellung** die Vorlage als Entwurf laden, vergleichen und speichern. PDF-Dateien und Einnahmenliste werden dadurch nicht überschrieben. Die App führt keinen automatischen Löschlauf für gespeicherte PDFs aus.
 
 ## Entwickeln und prüfen
 

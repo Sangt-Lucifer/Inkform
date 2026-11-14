@@ -44,7 +44,7 @@ await consent("Dora", "April", "2026-04-04");
 await consent("Emil", "Mai", "2026-05-05");
 
 // A full backup while all five copies exist (restored at the end).
-await ev(`openAdmin('overview')`);
+await ev(`openAdmin('backup')`);
 await until(`document.getElementById('admin-pin-dialog').open`);
 await ev(`unlockAdmin()`);
 await until(`adminAccess.isUnlocked() && !document.getElementById('admin-pin-dialog').open`);

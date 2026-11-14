@@ -67,11 +67,11 @@ await ev(`(el=>{el.focus();el.select()})(document.getElementById('retention-inco
 await cmd("Input.insertText", { text: "11" });
 check("Beim Eintippen schon gespeichert, ohne das Feld zu verlassen", await ev(`readRetention(localStorage).incomeYears===11&&document.activeElement.id==='retention-income-years'`));
 // A press on a button of the same panel while the field is left: the click still arrives.
-const link = await ev(`(()=>{const b=document.querySelector('#retention-content [data-admin-page="overview"]');b.scrollIntoView({block:'center',behavior:'instant'});const r=b.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`);
+const link = await ev(`(()=>{const b=document.querySelector('#retention-content [data-admin-page="backup"]');b.scrollIntoView({block:'center',behavior:'instant'});const r=b.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`);
 await cmd("Input.dispatchMouseEvent", { type: "mousePressed", x: link.x, y: link.y, button: "left", clickCount: 1 });
 await ev(`new Promise(r=>setTimeout(r,100))`);
 await cmd("Input.dispatchMouseEvent", { type: "mouseReleased", x: link.x, y: link.y, button: "left", clickCount: 1 });
-await until(`adminPage==='overview'`);
+await until(`adminPage==='backup'`);
 check("Frist geändert, dann „Vorher Gesamtsicherung erstellen“ gedrückt: Knopf wirkt, Frist gespeichert", await ev(`readRetention(localStorage).incomeYears===11`));
 await ev(`openAdminAuthorized('retention')`);
 await deadlines({ income: '10' });
@@ -80,7 +80,7 @@ await ev(`document.querySelector('[data-retention-deleted="r1"]').click()`);
 check("Als gelöscht markiert: Datum gespeichert, Eintrag verschwindet aus der Liste", await ev(`incomeRecords().find(r=>r.id==='r1').pdfDeletedAt===localDate()&&!document.querySelector('[data-retention-deleted="r1"]')`));
 
 // Anonymization after 10 years: r1 and r4.
-check("Vor dem Anonymisieren: Verweis auf die Gesamtsicherung statt auf eine Einnahmen-Datei", await ev(`(b=>!!b&&b.textContent.trim()===t('retention.backupFirst')&&!document.querySelector('#retention-content [data-income-action="backup"]'))(document.querySelector('#retention-content [data-admin-page="overview"]'))`));
+check("Vor dem Anonymisieren: Verweis auf die Gesamtsicherung statt auf eine Einnahmen-Datei", await ev(`(b=>!!b&&b.textContent.trim()===t('retention.backupFirst')&&!document.querySelector('#retention-content [data-income-action="backup"]'))(document.querySelector('#retention-content [data-admin-page="backup"]'))`));
 check("Vorschau: 2 Einträge zur Anonymisierung", await ev(`document.querySelector('[data-retention-action="anonymize"]').textContent.includes('2 Einträge')`));
 await ev(`document.querySelector('[data-retention-action="anonymize"]').click()`);
 check("Anonymisiert: Name und PDF-Dateiname entfernt, Beträge erhalten", await ev(`(()=>{const r=incomeRecords();const a=r.filter(x=>x.anonymizedAt);return a.length===2&&a.every(x=>x.customer==='anonymisiert'&&x.source===''&&x.totalCents===20000)&&r.find(x=>x.id==='r2').customer==='Alt r2'})()`));
@@ -110,7 +110,7 @@ await ev(`openAdmin('income')`);
 await until(`document.getElementById('admin-pin-dialog').open`);
 await ev(`unlockAdmin()`);
 await until(`!!document.querySelector('[data-income-action="backup"]')`);
-await ev(`openAdminAuthorized('overview');navigator.canShare=()=>true;navigator.share=async()=>{};document.querySelector('[data-admin-action="backup-create"]').click()`);
+await ev(`openAdminAuthorized('backup');navigator.canShare=()=>true;navigator.share=async()=>{};document.querySelector('[data-admin-action="backup-create"]').click()`);
 await until(`!document.querySelector('[data-backup-ready]').hidden`);
 await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
 await until(`document.getElementById('admin-app').textContent.includes('Letzte Gesamtsicherung heute')`);

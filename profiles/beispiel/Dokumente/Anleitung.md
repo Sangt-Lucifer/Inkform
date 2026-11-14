@@ -15,7 +15,7 @@ Mit Inkform füllt der Kunde seine Tattoo-Einwilligung aus und unterschreibt auf
 
 - Einen lokalen Ordner INKFORM / Einwilligungen anlegen und unter iPad & Dateien eine Test-PDF speichern. Die tatsächlich gespeicherte Datei anschließend öffnen.
 - Alle Erklärungen, Pflegehinweise und tatsächlichen Studioabläufe vor dem Kundeneinsatz abstimmen. Ein Formular ersetzt kein persönliches Aufklärungsgespräch.
-- Bei einer bereits früher verwendeten Version zuerst eine Gesamtsicherung erstellen (Übersicht). Alte gespeicherte Texte werden nicht automatisch überschrieben; unter Design & Sicherung die aktuelle Standardvorlage vergleichen und bei Bedarf übernehmen.
+- Bei einer bereits früher verwendeten Version zuerst eine Gesamtsicherung erstellen (Sichern & Wiederherstellen). Alte gespeicherte Texte werden nicht automatisch überschrieben; unter Darstellung die aktuelle Standardvorlage vergleichen und bei Bedarf übernehmen.
 
 Wichtig: Die unterschriebene Einwilligung ist das PDF in der Dateien-App. Zusätzlich behält die App eine Kopie jedes bestätigten PDFs für den ZIP-Export, bis diese Kopie gelöscht wird. Einnahmenliste und Studioeinstellungen liegen ebenfalls nur in der App; gesichert wird alles zusammen mit der Gesamtsicherung.
 
@@ -79,17 +79,18 @@ Bei einem Fehler der Einnahmenspeicherung bleibt das Formular erhalten. Nicht ne
 Admin-Konsole wählen und die Inhaber-PIN eingeben. Bei offenem Admin hat der Inhaber Zugriff auf die folgenden Reiter. Vor der Übergabe an Kunden immer Zum Formular verwenden.
 
 | Reiter | Was dort bearbeitet oder geprüft wird |
-| Übersicht | Einstieg, Erinnerungen, Gesamtsicherung und Wiederherstellen, Status des Studio-Profils und Verknüpfungen zu den wichtigsten Bereichen. |
+| Übersicht | Einstieg, Erinnerungen, Stand der letzten Gesamtsicherung, Status des Studio-Profils und Verknüpfungen zu den wichtigsten Bereichen. |
 | Studio & Kontakt | Studio / verantwortliche Person, vollständige Anschrift, Kontakt-E-Mail, Unterschriftsort, optional der vorbelegte Artist, ein eigenes Logo (PNG oder JPEG, wird sofort gespeichert und erscheint auch in neuen PDFs) und ein App-Symbol für den Home-Bildschirm (Vorschau mit hellem oder dunklem Hintergrund; iPadOS übernimmt es nur beim Hinzufügen zum Home-Bildschirm aus Safari, ein späterer Wechsel braucht Sicherung, App entfernen, neu hinzufügen und Wiederherstellen). |
 | Formular & Texte | Begrüßung, Überschrift, Formularversion, Fotoeinwilligung sowie die Erklärung bei der Unterschrift. Eine Vorschau zeigt den Entwurf. |
 | Gesundheitsfragen | Vorhandene Fragen anpassen und bei tatsächlichem Bedarf eigene Fragen ergänzen. Nur für den Termin relevante Angaben erheben. |
 | Einwilligungen | Erklärungen zu Aufklärung, Motiv, Nachsorge und Gesundheitsdaten bearbeiten. Eine Checkbox ersetzt kein stattgefundenes Gespräch. |
 | Einnahmen | Einwilligungen nach Artist, Monat und Jahr auswerten, offene Preise ergänzen, alte Einwilligungen nachtragen, PDF- und CSV-Listen ausgeben und einzelne PDF-Kopien aus der App löschen. |
 | Export | ZIP-Datei mit Einwilligungs-PDFs und Einnahmenübersicht für einen Monat, ein Jahr oder einen freien Zeitraum. Speicheranzeige der PDF-Kopien in der App und Löschen dieser Kopien mit Prüfschritt. |
+| Sichern & Wiederherstellen | Gesamtsicherung erstellen und den Erinnerungsabstand wählen, aus einer Datei wiederherstellen (Gesamtsicherung oder Studio-Einstellungen; die App erkennt die Datei und zeigt vorher, was ersetzt wird), nur die Studio-Einstellungen (Studioangaben, Logo, App-Symbol, Texte, Sprachen, Farbschema, Fristen; ohne Kundendaten) weitergeben, die App als HTML exportieren und nachsehen, was in welcher Datei steckt. |
 | Aufbewahrung | Fristen festlegen, Löschliste für fällige PDFs und Anonymisieren alter Namen in der Einnahmenliste. |
 | Datenschutz | Aufbewahrungs- und Löschkriterien, Zugriff / Empfänger und vollständige Datenschutzhinweise bearbeiten. Angaben müssen dem realen Ablauf entsprechen. |
 | iPad & Dateien | Offline-Verfügbarkeit und PDF-Funktion prüfen, Home-Bildschirm-Anleitung öffnen und eine Test-PDF ohne Kundendaten erzeugen. |
-| Design & Sicherung | Light- oder Darkmode wählen, Studio-Einstellungen (Studioangaben, Logo, App-Symbol, Texte, Sprachen, Farbschema, Fristen; ohne Kundendaten) exportieren und importieren, die App als HTML exportieren, nachsehen, was in welcher Datei steckt, und die Standardvorlage laden. Der Import zeigt vorher, was ersetzt wird; Einnahmen, PDFs und PIN bleiben unberührt. Wählt man hier eine Gesamtsicherung, erkennt die App sie und spielt sie wie unter Wiederherstellen ein. |
+| Darstellung | Light- oder Darkmode wählen, die Sprache dieses Geräts einstellen und die Standardvorlage laden. |
 
 ## Änderungen zuverlässig übernehmen
 
@@ -101,7 +102,7 @@ Die PIN schützt die Bedienoberfläche; sie ist keine Verschlüsselung der Brows
 
 ## Sprachen
 
-- Die Verwaltung erscheint in der Sprache dieses Geräts (Design & Sicherung → Sprache dieses Geräts). Die Einstellung gilt nur für dieses Gerät und ist nicht in der Gesamtsicherung.
+- Die Verwaltung erscheint in der Sprache dieses Geräts (Darstellung → Sprache dieses Geräts). Die Einstellung gilt nur für dieses Gerät und ist nicht in der Gesamtsicherung.
 - Das Kundenformular startet immer in der Studiosprache. Weitere Sprachen für Kunden unter Studio & Kontakt → Sprachen und Währung ankreuzen; ab zwei Sprachen erscheinen oben im Formular Flaggen-Knöpfe zum Umschalten; Eingaben bleiben dabei erhalten. Ankreuzen lässt sich eine Sprache erst, wenn alle Formulartexte in ihr vorliegen.
 - Wechselt der Kunde die Sprache, bleiben Angaben und Gesundheitsantworten erhalten; Erklärungen, Foto-Auswahl und Unterschrift beginnen neu. Das PDF entsteht in der Sprache des Kunden und vermerkt sie mit dem optionalen Hinweis, z. B. „Maßgeblich ist die deutsche Fassung“.
 - Übersetzungen bearbeiten: auf Formular & Texte, Gesundheitsfragen, Einwilligungen und Datenschutz oben die Sprache umschalten. Unter jedem Feld steht der deutsche Text als Vorlage.
@@ -132,18 +133,18 @@ Ein Eintrag wird beim Erstellen des unterschriebenen Kunden-PDFs automatisch ang
 
 ## Gesamtsicherung
 
-In der Übersicht unter Gesamtsicherung erstellt Sicherung erstellen eine Datei mit allem, was zum Wiederherstellen nötig ist: Studioeinstellungen, Farbschema, eigenes Logo und App-Symbol, Einnahmenliste, Fristen, Export-Protokoll, Erinnerungsabstand und die PDF-Kopien in der App. Logo und App-Symbol des Studios sind auch dann dabei, wenn sie mit der App ausgeliefert wurden, damit eine andere Fassung der App nach dem Wiederherstellen gleich aussieht. Nicht enthalten sind die PIN und eine noch offene Einwilligung. Danach erscheint ein grüner Kasten mit Anzahl und Größe: Jetzt in Dateien sichern tippen, im Teilen-Fenster In Dateien sichern wählen und die Datei Auf meinem iPad sowie zusätzlich auf dem Mac in einem verschlüsselten Ordner ablegen. Die Datei enthält Gesundheitsangaben und Unterschriften; nicht in iCloud Drive ablegen.
+Unter Sichern & Wiederherstellen erstellt Sicherung erstellen eine Datei mit allem, was zum Wiederherstellen nötig ist: Studioeinstellungen, Farbschema, eigenes Logo und App-Symbol, Einnahmenliste, Fristen, Export-Protokoll, Erinnerungsabstand und die PDF-Kopien in der App. Logo und App-Symbol des Studios sind auch dann dabei, wenn sie mit der App ausgeliefert wurden, damit eine andere Fassung der App nach dem Wiederherstellen gleich aussieht. Nicht enthalten sind die PIN und eine noch offene Einwilligung. Danach erscheint ein grüner Kasten mit Anzahl und Größe: Jetzt in Dateien sichern tippen, im Teilen-Fenster In Dateien sichern wählen und die Datei Auf meinem iPad sowie zusätzlich auf dem Mac in einem verschlüsselten Ordner ablegen. Die Datei enthält Gesundheitsangaben und Unterschriften; nicht in iCloud Drive ablegen.
 
-Die Übersicht erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist (1, 3, 7, 14 oder 30 Tage, Standard 7). Mindestens wöchentlich sichern, besser nach jedem Arbeitstag, zusätzlich vor Updates, Gerätewechseln oder dem Löschen von Browserdaten.
+Die Übersicht zeigt den Stand und erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist (1, 3, 7, 14 oder 30 Tage, Standard 7). Mindestens wöchentlich sichern, besser nach jedem Arbeitstag, zusätzlich vor Updates, Gerätewechseln oder dem Löschen von Browserdaten.
 
 ## Wiederherstellen
 
 - Auf dem neuen Gerät oder in der neuen Browserumgebung die App öffnen und eine Inhaber-PIN festlegen.
-- In der Übersicht Aus Sicherung wiederherstellen wählen und die Sicherungsdatei auswählen.
+- Unter Sichern & Wiederherstellen bei Aus Datei wiederherstellen Datei wählen tippen und die Sicherungsdatei auswählen. In der Einrichtung des Blanko-Profils heißt der Weg Aus Datei übernehmen.
 - Die App prüft zuerst die ganze Datei und fragt dann mit Datum und Inhalt nach. Bestätigen ersetzt alle Daten dieser App außer der PIN; das lässt sich nicht rückgängig machen. Danach lädt die App neu.
 - Anzahl der Einträge, eine bekannte Monats- oder Jahressumme und einige Original-PDFs kontrollieren.
 
-PDF-Kopien, die auf diesem Gerät bereits aus der App gelöscht wurden, holt eine Wiederherstellung nicht zurück, auch nicht aus einer älteren Sicherung. Solange eine Einwilligung offen ist oder Änderungen ungespeichert sind, ist das Wiederherstellen gesperrt. Die getrennten JSON-Sicherungen für Einnahmen und Studioeinstellungen gibt es weiterhin; sie enthalten keine PDFs.
+PDF-Kopien, die auf diesem Gerät bereits aus der App gelöscht wurden, holt eine Wiederherstellung nicht zurück, auch nicht aus einer älteren Sicherung. Solange eine Einwilligung offen ist oder Änderungen ungespeichert sind, ist das Wiederherstellen gesperrt. Dieselbe Dateiauswahl spielt auch Studio-Einstellungen ein; dann bleiben Einnahmen, PDFs und PIN unberührt. Die getrennte Einnahmen-Datei (Einnahmen) gibt es weiterhin; sie enthält keine PDFs.
 
 ## ZIP-Export nach Zeitraum
 

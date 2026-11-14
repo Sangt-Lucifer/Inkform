@@ -43,10 +43,10 @@ await until(`adminAccess.isUnlocked() && adminPage==='setup' && !!document.query
 
 // Setup assistant ---------------------------------------------------------------------------
 check(
-  "Nach der PIN: drei Wege (neu, Gesamtsicherung, Studio-Einstellungen) mit Hinweis auf Gesundheitsdaten",
-  await ev(`document.querySelectorAll('.setup-way').length===3&&document.getElementById('admin-app').textContent.includes('Aus Gesamtsicherung wiederherstellen')&&document.getElementById('admin-app').textContent.includes('Studio-Einstellungen einspielen')&&document.getElementById('admin-app').textContent.includes('Gesundheitsangaben und Unterschriften')`),
+  "Nach der PIN: zwei Wege (neu, aus Datei für Gesamtsicherung oder Studio-Einstellungen) mit Hinweis auf Gesundheitsdaten",
+  await ev(`document.querySelectorAll('.setup-way').length===2&&document.getElementById('admin-app').textContent.includes('Aus Datei übernehmen')&&document.getElementById('admin-app').textContent.includes('Eine Gesamtsicherung (alles, auch Einnahmen und PDFs) oder Studio-Einstellungen')&&document.getElementById('admin-app').textContent.includes('Gesundheitsangaben und Unterschriften')`),
 );
-await screenshot("blanko-drei-wege");
+await screenshot("blanko-zwei-wege");
 check("Bei der Auswahl keine Speicherleiste", await ev(`document.getElementById('admin-savebar').hidden`));
 await ev(`document.querySelector('[data-admin-action="setup-new"]').click()`);
 await until(`!!document.getElementById('admin-studio-name')`);
@@ -75,6 +75,7 @@ await ev(`document.getElementById('admin-error').hidden=true;window.dispatchEven
 check("⌘S im Assistenten: kein Speichern in Teilen, Hinweis auf Pflichtangaben", await ev(`!document.getElementById('admin-error').hidden&&adminPage==='setup'&&!localStorage.getItem(SETTINGS_KEY)`));
 await ev(`document.querySelector('[data-admin-action="setup-back"]').click()`);
 check("Zurück zur Auswahl verwirft die Eingaben: Datei einspielen nicht blockiert", await ev(`!adminChanged()&&!replaceBlocker()&&!!document.querySelector('[data-admin-action="setup-file"]')`));
+check("Einrichtung: zwei Wege, ein Knopf „Aus Datei übernehmen“ für beide Dateiarten", await ev(`document.querySelectorAll('.setup-way').length===2&&document.querySelectorAll('[data-admin-action="setup-file"]').length===1&&document.querySelector('[data-admin-action="setup-file"] strong').textContent===t('setup.restore')`));
 await ev(`document.querySelector('[data-admin-action="setup-new"]').click()`);
 await type("admin-studio-name", "Atelier Probe · Kim Test");
 await type("setup-pdf-years", "abc");

@@ -1,8 +1,8 @@
 // Studio settings file in the hosted build, offline after the first load:
-//   - "Design & Sicherung" says what goes into the full backup, the studio settings and nowhere
+//   - "Sichern & Wiederherstellen" says what goes into the full backup, the studio settings and nowhere
 //   - the export holds settings, theme, logo, deadlines and interval, and no customer data
 //   - the import is checked, shows what it replaces, asks, and leaves income, PDFs and log alone
-//   - an older settings-only file still imports; a full backup is pointed to "Wiederherstellen"
+//   - an older settings-only file still imports through the same file picker as the full backup
 // Synthetic test data and an invented logo only.
 import { writeFile } from "node:fs/promises";
 import { HELPERS, OUT, ORIGIN, connect } from "./lib.mjs";
@@ -62,10 +62,10 @@ await setLocation("Exportort");
 await ev(`writeRetention(localStorage,{pdfYears:10,incomeYears:3});localStorage.setItem(BACKUP_INTERVAL_KEY,'14');setTheme('light')`);
 
 // What goes where ---------------------------------------------------------------------------
-await ev(`openAdminAuthorized('appearance')`);
+await ev(`openAdminAuthorized('backup')`);
 const page = await ev(`document.getElementById('admin-app').textContent.replace(/\\s+/g,' ')`);
 check(
-  "Design & Sicherung nennt, was in Gesamtsicherung und Studio-Einstellungen steckt und was nirgends",
+  "Sichern & Wiederherstellen nennt, was in Gesamtsicherung und Studio-Einstellungen steckt und was nirgends",
   page.includes("Was wohin gehört") &&
     page.includes("In der Gesamtsicherung") &&
     page.includes("In den Studio-Einstellungen") &&
@@ -74,7 +74,7 @@ check(
 );
 await ev(`document.querySelector('.contents-list').scrollIntoView({block:'center'});new Promise(r=>setTimeout(r,200))`);
 await screenshot("einstellungen-uebersicht");
-check("Studio-Import sagt, was eine Gesamtsicherung ersetzt", page.includes("Eine Gesamtsicherung ersetzt Einstellungen, Einnahmen und PDFs"));
+check("Wiederherstellen sagt, was eine Gesamtsicherung ersetzt", page.includes("Eine Gesamtsicherung ersetzt Einstellungen, Einnahmen und PDFs"));
 
 // Discard asks first, the dialog stands in the middle ---------------------------------------
 await ev(`(l=>{l.value='Entwurfsort';l.dispatchEvent(new Event('input',{bubbles:true}))})((openAdminAuthorized('studio'),document.getElementById('admin-studio-location')))`);
@@ -87,7 +87,7 @@ await ev(`document.querySelector('#admin-discard-dialog [data-close]').click()`)
 check("Weiter bearbeiten: Entwurf bleibt", await ev(`!document.getElementById('admin-discard-dialog').open&&adminChanged()&&document.getElementById('admin-studio-location').value==='Entwurfsort'`));
 await ev(`document.getElementById('admin-discard').click();document.getElementById('admin-discard-confirm').click()`);
 check("Alle verwerfen: gespeicherter Stand zurück", await ev(`!document.getElementById('admin-discard-dialog').open&&!adminChanged()&&document.getElementById('admin-studio-location').value==='Exportort'`));
-await ev(`openAdminAuthorized('appearance')`);
+await ev(`openAdminAuthorized('backup')`);
 
 // Export ------------------------------------------------------------------------------------
 await ev(`navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]};document.querySelector('[data-admin-action="export-json"]').click()`);
@@ -124,30 +124,30 @@ check(
 await ev(`window.__c=window.confirm;window.confirm=()=>true;openAdminAuthorized('studio');document.querySelector('[data-admin-action="logo-remove"]').click();document.querySelector('[data-admin-action="icon-remove"]').click();window.confirm=window.__c`);
 await until(`!document.querySelector('.studio-logo').src.startsWith('blob:')&&!ownIcon`);
 await setLocation("Anders");
-await ev(`writeRetention(localStorage,{pdfYears:null,incomeYears:null});localStorage.setItem(BACKUP_INTERVAL_KEY,'3');setTheme('dark');openAdminAuthorized('appearance')`);
+await ev(`writeRetention(localStorage,{pdfYears:null,incomeYears:null});localStorage.setItem(BACKUP_INTERVAL_KEY,'3');setTheme('dark');openAdminAuthorized('backup')`);
 const customerData = () =>
   ev(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>JSON.stringify([localStorage.getItem(INCOME_KEY),localStorage.getItem(EXPORT_LOG_KEY),localStorage.getItem(PDF_REMOVED_KEY),k.sort()]))`);
 const before = await customerData();
 const pick = (source) =>
-  ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([${source}],'einstellungen.json',{type:'application/json'}));const i=document.getElementById('admin-import-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
-const adminError = () => ev(`document.getElementById('admin-error').hidden?'':document.getElementById('admin-error').textContent`);
+  ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([${source}],'einstellungen.json',{type:'application/json'}));const i=document.getElementById('backup-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
+const adminError = () => ev(`document.getElementById('restore-error').hidden?'':document.getElementById('restore-error').textContent`);
 const unchanged = () => ev(`settings.studio.location==='Anders'&&localStorage.getItem(THEME_KEY)==='dark'&&localStorage.getItem(BACKUP_INTERVAL_KEY)==='3'&&!document.querySelector('.studio-logo').src.startsWith('blob:')&&!ownIcon`);
 
 await pick(`JSON.stringify({kind:'inkform-gesamtsicherung',schemaVersion:2,createdAt:new Date().toISOString()})`);
-await until(`!document.getElementById('admin-error').hidden`);
+await until(`!document.getElementById('restore-error').hidden`);
 check("Gesamtsicherung im Studio-Import: als Gesamtsicherung geprüft, unvollständige abgelehnt, nichts geändert", (await adminError()).includes("Die Sicherung enthält kein gültiges") && (await unchanged()));
-await ev(`document.getElementById('admin-error').hidden=true`);
+await ev(`document.getElementById('restore-error').hidden=true`);
 await pick(`JSON.stringify({...${JSON.stringify(file)},logo:'AAAA'})`);
-await until(`!document.getElementById('admin-error').hidden`);
+await until(`!document.getElementById('restore-error').hidden`);
 check("Beschädigtes Logo: ganze Datei abgelehnt, nichts geändert", (await adminError()).includes("ungültiges Logo") && (await unchanged()));
-await ev(`document.getElementById('admin-error').hidden=true`);
+await ev(`document.getElementById('restore-error').hidden=true`);
 // Well-formed chunks with correct checksums, but image data that cannot be decoded.
 const unreadable = `(()=>{const chunk=(type,data)=>{const body=new Uint8Array(4+data.length);body.set([...type].map(c=>c.charCodeAt(0)));body.set(data,4);const out=new Uint8Array(body.length+8),v=new DataView(out.buffer);v.setUint32(0,data.length);out.set(body,4);v.setUint32(body.length+4,crc32(body));return out};const h=new Uint8Array(13),hv=new DataView(h.buffer);hv.setUint32(0,180);hv.setUint32(4,180);h.set([8,6,0,0,0],8);const parts=[new Uint8Array([137,80,78,71,13,10,26,10]),chunk('IHDR',h),chunk('IDAT',new TextEncoder().encode('kein zlib')),chunk('IEND',new Uint8Array(0))],all=new Uint8Array(parts.reduce((n,p)=>n+p.length,0));let o=0;for(const p of parts){all.set(p,o);o+=p.length}return toBase64(all)})()`;
 check("Prüfbild: als PNG wohlgeformt", await ev(`!!checkIcon(fromBase64(${unreadable}))`));
 await pick(`JSON.stringify({...${JSON.stringify(file)},icon:${unreadable}})`);
-await until(`!document.getElementById('admin-error').hidden`);
+await until(`!document.getElementById('restore-error').hidden`);
 check("Unlesbares App-Symbol: ganze Datei abgelehnt, nichts geändert", (await adminError()).includes("ungültiges App-Symbol") && (await unchanged()));
-await ev(`document.getElementById('admin-error').hidden=true`);
+await ev(`document.getElementById('restore-error').hidden=true`);
 
 await ev(`window.confirm=(m)=>{window.__question=m;return false}`);
 await ev(`window.__studioText=${JSON.stringify(json)}`);
@@ -181,7 +181,7 @@ check("Einnahmen, PDFs, Export-Protokoll und gelöschte Kopien unverändert", (a
 check("PIN unverändert", await ev(`adminAccess.configured()`));
 
 // An older settings-only file: settings and theme, the logo stays.
-await unlock("appearance");
+await unlock("backup");
 await ev(`window.__oldFile=${JSON.stringify(JSON.stringify({ ...file.settings, studio: { ...file.settings.studio, location: "Altdatei" }, theme: "dark" }))}`);
 await pick(`window.__oldFile`);
 await until(`typeof adminAccess!=='undefined' && !window.__oldFile && document.readyState==='complete' && document.getElementById('toast').textContent.includes('Studio-Einstellungen übernommen')`);
@@ -191,16 +191,16 @@ check("Ältere Einstellungsdatei: übernommen, Logo und Fristen bleiben", await 
 check("Auch danach Einnahmen und PDFs unverändert", (await customerData()) === before);
 
 // The HTML app file keeps the built-in logo; the own one travels in the studio settings file.
-await unlock("appearance");
+await unlock("backup");
 await ev(`window.__exported=null;window.__createObjectURL=URL.createObjectURL;URL.createObjectURL=(blob)=>{window.__exported=blob;return window.__createObjectURL(blob)};exportHtml()`);
 await until(`!!window.__exported`);
 check("HTML-Datei behält das eingebaute Logo", await ev(`Promise.all([window.__exported.text(),storedLogo().then(b=>blobBase64(new Blob([b])))]).then(([html,logo])=>html.includes('src="'+BUILT_IN_LOGO+'"')&&!html.includes(logo))`));
 
 // Customer form in progress or a consent open: no import.
-await ev(`(f=>{f.value='Halb';f.dispatchEvent(new Event('input',{bubbles:true}))})(document.getElementById('firstName'));document.getElementById('admin-error').hidden=true`);
+await ev(`(f=>{f.value='Halb';f.dispatchEvent(new Event('input',{bubbles:true}))})(document.getElementById('firstName'));document.getElementById('restore-error').hidden=true`);
 await ev(`window.__c3=window.confirm;window.confirm=()=>{window.__asked=true;return true};window.__studioText2=${JSON.stringify(json)}`);
 await pick(`window.__studioText2`);
-await until(`!document.getElementById('admin-error').hidden`);
+await until(`!document.getElementById('restore-error').hidden`);
 check("Angefangenes Kundenformular: Import gesperrt, keine Rückfrage", (await adminError()).includes("Kundenformular abschließen oder leeren") && !(await ev(`!!window.__asked`)) && (await ev(`settings.studio.location==='Altdatei'`)));
 await ev(`resetCustomerForm();window.confirm=window.__c3`);
 

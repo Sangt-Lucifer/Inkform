@@ -588,7 +588,7 @@ export function createIncomeFeature({
           : ""
       }
       ${anonRows ? `<div class="income-table-wrap"><table class="income-table"><caption>${th(anonDue.length > 50 ? "retention.previewFirst" : "retention.preview")}</caption><thead><tr><th>${th("pdf.appointment")}</th><th>${th("csv.artist")}</th><th>${th("csv.name")}</th><th>${th("income.colTotal")}</th></tr></thead><tbody>${anonRows}</tbody></table></div>` : ""}
-      <div class="ad-actions-row"><button class="ad-button" type="button" data-admin-page="overview">${th("retention.backupFirst")}</button><button class="ad-button danger" data-retention-action="anonymize"${anonDue.length ? "" : " disabled"}>${th("retention.anonymize", { anzahl: anonDue.length })}</button></div>`
+      <div class="ad-actions-row"><button class="ad-button" type="button" data-admin-page="backup">${th("retention.backupFirst")}</button><button class="ad-button danger" data-retention-action="anonymize"${anonDue.length ? "" : " disabled"}>${th("retention.anonymize", { anzahl: anonDue.length })}</button></div>`
       }
       </div></section>`;
     } catch (error) {

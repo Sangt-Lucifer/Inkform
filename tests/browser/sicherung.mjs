@@ -50,7 +50,14 @@ await ev(`unlockAdmin()`);
 await until(`adminAccess.isUnlocked() && !document.getElementById('admin-app').hidden && !document.getElementById('admin-pin-dialog').open`);
 let text = await reminder();
 check("Erinnerung: noch keine Gesamtsicherung, Februar und März nicht als ZIP exportiert", text.includes("Es gibt noch keine Gesamtsicherung") && text.includes("Noch nicht als ZIP exportiert: Februar 2026, März 2026"));
-check("Gesamtsicherung gut sichtbar in der Übersicht", await ev(`document.getElementById('admin-app').textContent.includes('Noch keine Gesamtsicherung auf diesem Gerät erstellt')&&!!document.querySelector('.ad-panel [data-admin-action="backup-restore"]')`));
+check("Übersicht zeigt den Stand der Gesamtsicherung und führt zu „Sichern & Wiederherstellen“", await ev(`document.getElementById('admin-app').textContent.includes('Noch keine Gesamtsicherung auf diesem Gerät erstellt')&&!!document.querySelector('.ad-panel [data-admin-page="backup"]')&&!document.querySelector('[data-admin-action="backup-restore"]')`));
+await ev(`document.querySelector('.ad-panel [data-admin-page="backup"]').click()`);
+check(
+  "Ein Ort: Sichern, Wiederherstellen mit einer Dateiauswahl, Studio-Einstellungen weitergeben",
+  await ev(`adminPage==='backup'&&document.querySelectorAll('[data-admin-action="backup-create"]').length===1&&document.querySelectorAll('[data-admin-action="backup-restore"]').length===1&&!!document.querySelector('[data-admin-action="export-json"]')&&!!document.querySelector('[data-admin-action="export-html"]')&&!document.querySelector('[data-admin-action="import-json"]')`),
+);
+await ev(`openAdminAuthorized('appearance')`);
+check("Darstellung ohne Sicherung und Dateien", await ev(`!document.querySelector('#admin-section [data-admin-action^="backup"],#admin-section [data-admin-action^="export"]')&&document.querySelector('#admin-nav [aria-current="page"]').textContent.trim()==='Darstellung'`));
 await screenshot("sicherung-uebersicht");
 
 // Export March as ZIP: only February remains in the hint.
@@ -65,7 +72,7 @@ check("Nach dem März-Export erinnert die Übersicht nur noch an Februar", text.
 
 // Settings, deadlines, theme and interval that the backup must carry.
 await ev(`openAdminAuthorized('studio');(l=>{l.value='Sicherungsort';l.dispatchEvent(new Event('input',{bubbles:true}))})(document.getElementById('admin-studio-location'));saveAdmin()`);
-await ev(`writeRetention(localStorage,{pdfYears:10,incomeYears:null});setTheme('light');openAdminAuthorized('overview')`);
+await ev(`writeRetention(localStorage,{pdfYears:10,incomeYears:null});setTheme('light');openAdminAuthorized('backup')`);
 await ev(`(()=>{const el=document.getElementById('backup-interval');el.value='1';el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
 check("Erinnerungsabstand gespeichert", await ev(`localStorage.getItem(BACKUP_INTERVAL_KEY)==='1'&&document.getElementById('backup-interval').value==='1'`));
 
@@ -107,7 +114,7 @@ const beforeLoad = await removeShown();
 await ev(`loadLogo()`);
 await until(`!!document.querySelector('[data-admin-action="logo-remove"]')`);
 check("Logo-Bereich zeigt „Logo entfernen“, sobald das gespeicherte Logo geladen ist", !beforeLoad && (await ownLogo()) === "512x171 sichtbar");
-await ev(`openAdminAuthorized('overview');navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]}`);
+await ev(`openAdminAuthorized('backup');navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]}`);
 
 // Create and save the backup -----------------------------------------------------------------
 await ev(`adminDraft.studio.location='Ungespeichert';updateAdminChrome();window.__shared=null;document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`);
@@ -122,7 +129,7 @@ check("Vor dem Speichern: Anzahl und Größe", /✓ Sicherung bereit: 2 Einträg
 await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
 await until(`!!window.__shared && document.getElementById('admin-app').textContent.includes('Letzte Gesamtsicherung heute')`);
 // One tap: a backup ready while the tap still counts opens the share sheet at once.
-await ev(`window.__firstShared=window.__shared;window.__shared=null;openAdminAuthorized('overview')`);
+await ev(`window.__firstShared=window.__shared;window.__shared=null;openAdminAuthorized('backup')`);
 const panelTop = () => ev(`Math.round(document.getElementById('backup-flow').getBoundingClientRect().top)`);
 await ev(`document.getElementById('backup-flow').scrollIntoView({block:'center'})`);
 const topBefore = await panelTop();
@@ -148,14 +155,22 @@ check(
 );
 check("Sicherung enthält das Logo (PNG, 512 × 171)", backup.schemaVersion === 3 && Buffer.from(backup.logo, "base64").readUInt32BE(16) === 512 && Buffer.from(backup.logo, "base64").readUInt32BE(20) === 171);
 check("Keine PIN in der Sicherung", !/839274|"salt"|"hash"/.test(json));
-check("Nach der Sicherung keine Sicherungs-Erinnerung", !(await reminder()).includes("Gesamtsicherung"));
 await ev(`openAdminAuthorized('overview')`);
+check("Nach der Sicherung keine Sicherungs-Erinnerung", (await ev(`!!document.querySelector('.ad-stats')`)) && !(await reminder()).includes("Gesamtsicherung"));
 check("Status nach der Sicherung: „heute“ statt „vor 0 Tagen“", await ev(`document.getElementById('admin-app').textContent.includes(t('backup.ageToday'))&&!document.getElementById('admin-app').textContent.includes('vor 0 Tagen')`));
+// Page switched while the share sheet is open: no error, the message comes as a toast.
+await ev(`openAdminAuthorized('backup');navigator.share=()=>new Promise(r=>{window.__finishShare=r});document.querySelector('[data-admin-action="backup-create"]').click()`);
+await until(`!document.querySelector('[data-backup-ready]').hidden`);
+await ev(`document.querySelector('[data-admin-action="backup-save"]').click();openAdminAuthorized('overview');window.__finishShare()`);
+await until(`document.getElementById('toast').textContent.includes('Gesichert')`);
+check("Seite während des Teilens gewechselt: Meldung als Hinweis, Übersicht zeigt „heute“", await ev(`adminPage==='overview'&&document.getElementById('admin-app').textContent.includes(t('backup.ageToday'))`));
+await ev(`navigator.share=async(d)=>{window.__shared=d.files[0]}`);
 
 // Interval: two days old is overdue with 1 day, not with 3 days.
 await ev(`localStorage.setItem(LAST_BACKUP_KEY,new Date(Date.now()-2*864e5-60000).toISOString());openAdminAuthorized('overview')`);
 check("Abstand 1 Tag: zwei Tage alte Sicherung wird angemahnt", (await reminder()).includes("Die letzte Gesamtsicherung ist 2 Tage alt"));
-await ev(`(()=>{const el=document.getElementById('backup-interval');el.value='3';el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+await ev(`openAdminAuthorized('backup');(()=>{const el=document.getElementById('backup-interval');el.value='3';el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+await ev(`openAdminAuthorized('overview')`);
 check("Abstand 3 Tage: keine Erinnerung", !(await reminder()).includes("Gesamtsicherung"));
 await ev(`(()=>{const d=new Date();d.setHours(0,0,0,0);localStorage.setItem(LAST_BACKUP_KEY,new Date(d-60000).toISOString());openAdminAuthorized('overview')})()`);
 check("Sicherung kurz vor Mitternacht: nicht „heute“", await ev(`!document.getElementById('admin-app').textContent.includes(t('backup.ageToday'))`));

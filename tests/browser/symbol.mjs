@@ -34,7 +34,7 @@ const choose = (name, type, body) =>
 const picture = `await (async()=>{const c=document.createElement('canvas');c.width=400;c.height=300;const g=c.getContext('2d');g.fillStyle='#223355';g.fillRect(100,50,200,200);g.fillStyle='#ffdd44';g.fillRect(150,130,100,40);return new Promise(r=>c.toBlob(r,'image/png'))})()`;
 
 await until(`!!builtInLogo&&!!builtInIconBytes`);
-await ev(`navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]};window.__shared=null;openAdminAuthorized('appearance');document.querySelector('[data-admin-action="export-json"]').click()`);
+await ev(`navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]};window.__shared=null;openAdminAuthorized('backup');document.querySelector('[data-admin-action="export-json"]').click()`);
 await until(`!!window.__shared`);
 check(
   "Studio-Build ohne eigenes Logo und Symbol: Studio-Einstellungen enthalten die eingebauten",
@@ -78,7 +78,7 @@ check("Nach dem Neustart: eigenes Symbol wieder gesetzt", (await look(`document.
 
 // In the full backup.
 await unlock();
-await ev(`openAdminAuthorized('overview');navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]};window.__shared=null;document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`);
+await ev(`openAdminAuthorized('backup');navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]};window.__shared=null;document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`);
 await until(`!document.querySelector('[data-backup-ready]').hidden`);
 await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
 await until(`!!window.__shared`);
