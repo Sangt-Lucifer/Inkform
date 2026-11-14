@@ -328,6 +328,9 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
     "</body>",
     () => `  <script data-hosted-only>\n${escapeScript(registration.replace(local, ""))}\n</script>\n</body>`,
   );
+  // The page's own version, so it can tell that the worker already holds a newer copy of it.
+  const pageVersion = createHash("sha256").update(hosted).digest("hex").slice(0, 12);
+  hosted = hosted.replace("</head>", `  <meta name="inkform-page" content="${pageVersion}" data-hosted-only>\n</head>`);
   // Every file the service worker caches goes into its version: a changed manifest or icon alone
   // also makes a new worker, so installed iPads pick it up.
   const assets = [

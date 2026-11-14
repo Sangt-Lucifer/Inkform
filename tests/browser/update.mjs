@@ -71,6 +71,16 @@ try {
   check("Knopf „Nach Update suchen“ lädt die neue Version", (await ev(`window.inkformLookForUpdate()`)) === "loading");
   await until(`!window.__alteSeite&&document.readyState==='complete'&&!!navigator.serviceWorker.controller`, 200);
   check("Nach dem Neuladen: neue Version aktiv, alte gelöscht, App bedienbar", await ev(`caches.keys().then(k=>k.includes('inkform-app-testupdate3')&&!k.includes('inkform-app-testupdate2')&&!!document.getElementById('customer-app'))`));
+  // The worker took over while this page was in the background: the page itself is older than
+  // its cached copy, so the button reloads instead of reporting "up to date".
+  check("Seite und Offline-Kopie gleich: „aktuell“", (await ev(`window.inkformLookForUpdate()`)) === "none");
+  await ev(`(async()=>{const r=await navigator.serviceWorker.getRegistration(),u=new URL('index.html',r.scope).href,c=await caches.open((await caches.keys()).find(k=>k.startsWith('inkform-app-'))),t=await (await c.match(u)).text();await c.put(u,new Response(t.replace(/(<meta name="inkform-page" content=")[0-9a-f]+/,'$1ffffffffffff'),{headers:{'Content-Type':'text/html; charset=utf-8'}}));window.__alteSeite=true})()`);
+  await ev(`document.getElementById('firstName').value='Halb';document.getElementById('firstName').dispatchEvent(new Event('input',{bubbles:true}))`);
+  check("Neuere Offline-Kopie bei Formular in Arbeit: meldet sie, lädt nicht", (await ev(`window.inkformLookForUpdate()`)) === "busy" && (await ev(`window.__alteSeite===true`)));
+  await ev(`resetCustomerForm()`);
+  check("Neuere Offline-Kopie als die laufende Seite: Knopf lädt neu", (await ev(`window.inkformLookForUpdate()`)) === "loading");
+  await until(`!window.__alteSeite&&document.readyState==='complete'&&!!navigator.serviceWorker.controller`, 200);
+  check("Danach läuft die Seite aus der Kopie", await ev(`document.querySelector('meta[name="inkform-page"]').content==='ffffffffffff'`));
   check("Keine JavaScript-Fehler", errors.length === 0);
 } finally {
   await writeFile(swFile, original);

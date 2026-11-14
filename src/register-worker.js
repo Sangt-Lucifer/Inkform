@@ -28,6 +28,16 @@ window.inkformUpdateChecks = () => {
   }
 };
 
+// Whether the cached app is newer than this page: the worker took over after this page started
+// (e.g. while the app lay in the background), so only reloading shows the new version.
+async function pageOutdated(scope) {
+  const own = document.querySelector('meta[name="inkform-page"]')?.content;
+  const cached = await caches.match(new URL("index.html", scope).href);
+  if (!own || !cached) return false;
+  const copy = /<meta name="inkform-page" content="([0-9a-f]+)"/.exec(await cached.text());
+  return !!copy && copy[1] !== own;
+}
+
 if ("serviceWorker" in navigator && window.isSecureContext && location.protocol !== "file:") {
   const updateStatus = (ready, text) => {
     document.documentElement.dataset.offlineReady = String(ready);
@@ -79,7 +89,7 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
         noteUpdateCheck("button", true);
         await registered.update();
         const next = registered.installing || registered.waiting;
-        if (!next && !tookOver) return "none";
+        if (!next && !tookOver && !(await pageOutdated(registered.scope))) return "none";
         if (!window.inkformIdle?.()) return "busy";
         if (!next) {
           location.reload();
