@@ -1,23 +1,24 @@
 // Two files share one format and one version number:
 // - Studio settings: the owner's customisations only (settings with texts, questions, languages
-//   and translations; theme, logo, retention deadlines, reminder interval). No customer data.
+//   and translations; theme, logo, home screen icon, retention deadlines, reminder interval). No
+//   customer data.
 // - Full backup: the same customisations plus income list, export log, the list of deleted PDF
 //   copies and the consent PDFs kept for the ZIP export.
 // Neither holds the PIN, the language of this device or an open, unconfirmed consent. Copies
 // deleted from the app on purpose stay deleted: the list of their ids travels with the backup and
 // is merged with the device's own list when restoring.
-// Version 1 (full backup only) has no logo; version 2 adds it.
+// Version 1 (full backup only) has no logo; version 2 adds it, version 3 the home screen icon.
 import { t } from "./i18n.js";
 import { validateIncomeBackup } from "./income.js";
 import { validateRetention } from "./retention.js";
 import { exportable, validateExportLog, validateRemovedIds } from "./export.js";
-import { checkLogo } from "./logo.js";
+import { checkIcon, checkLogo } from "./logo.js";
 
 export const BACKUP_INTERVAL_KEY = "inkform.backup.interval.v1";
 export const BACKUP_INTERVALS = [1, 3, 7, 14, 30];
 export const BACKUP_KIND = "inkform-gesamtsicherung";
 export const STUDIO_KIND = "inkform-studio-einstellungen";
-const FORMAT_VERSION = 2;
+const FORMAT_VERSION = 3;
 
 export function readBackupDays(storage) {
   const days = Number(storage.getItem(BACKUP_INTERVAL_KEY));
@@ -36,24 +37,26 @@ export function fromBase64(text) {
   return bytes;
 }
 
-// The customisations, in both files. logo: PNG bytes, or null for the logo built into the app.
+// The customisations, in both files. logo, icon: PNG bytes, or null for the one built into the app.
 // Only the known parts of the settings are taken, so nothing else can travel with them.
 const SETTINGS_PARTS = ["schemaVersion", "savedAt", "studio", "app", "medical", "legal", "locale", "translations"];
 const ITEM_PARTS = ["id", "title", "hint", "text", "review"];
 const pick = (value, keys) => Object.fromEntries(keys.filter((key) => key in value).map((key) => [key, value[key]]));
-function studioPart({ settings, theme, logo = null, retention, backupDays }) {
+function studioPart({ settings, theme, logo = null, icon = null, retention, backupDays }) {
   const picked = pick(settings, SETTINGS_PARTS);
   for (const key of ["medical", "legal"]) if (Array.isArray(picked[key])) picked[key] = picked[key].map((item) => pick(item, ITEM_PARTS));
-  return { settings: picked, theme, logo: logo && toBase64(logo), retention, backupDays };
+  return { settings: picked, theme, logo: logo && toBase64(logo), icon: icon && toBase64(icon), retention, backupDays };
 }
 function readStudioPart(value, validateSettings) {
   if (!["dark", "light"].includes(value.theme)) throw Error(t("backup.invalidTheme"));
-  const logo = value.schemaVersion === 1 ? undefined : readLogo(value.logo);
+  const logo = value.schemaVersion === 1 ? undefined : readImage(value.logo, checkLogo, "backup.invalidLogo"),
+    icon = value.schemaVersion < 3 ? undefined : readImage(value.icon, checkIcon, "backup.invalidIcon");
   if (!BACKUP_INTERVALS.includes(value.backupDays)) throw Error(t("backup.invalidInterval"));
   return {
     settings: validateSettings(value.settings),
     theme: value.theme,
     logo,
+    icon,
     retention: validateRetention(value.retention),
     backupDays: value.backupDays,
   };
@@ -81,6 +84,7 @@ export function readStudioSettings(value, validateSettings) {
       settings: validateSettings(value),
       theme: ["dark", "light"].includes(value.theme) ? value.theme : undefined,
       logo: undefined,
+      icon: undefined,
       retention: undefined,
       backupDays: undefined,
     };
@@ -103,7 +107,7 @@ export function createFullBackup({ exports, records, pdfs, removed, now = new Da
 }
 
 // Checks the whole file before anything is written. validateSettings comes from the app.
-// Version 1 has no logo: logo is then undefined and the device keeps its own.
+// What an older version lacks (logo before 2, icon before 3) is undefined: the device keeps its own.
 export function readFullBackup(value, validateSettings) {
   readHeader(value, BACKUP_KIND);
   const studio = readStudioPart(value, validateSettings);
@@ -134,13 +138,13 @@ export function readFullBackup(value, validateSettings) {
   };
 }
 
-function readLogo(value) {
+function readImage(value, check, invalid) {
   if (value === null) return null;
   try {
     if (typeof value !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw Error(t("logo.notPng"));
-    return checkLogo(fromBase64(value));
+    return check(fromBase64(value));
   } catch (error) {
-    throw Error(t("backup.invalidLogo", { fehler: error.message }));
+    throw Error(t(invalid, { fehler: error.message }));
   }
 }
 

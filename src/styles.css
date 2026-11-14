@@ -3055,6 +3055,30 @@ html[data-theme="dark"] dialog::backdrop {
 .logo-setting .ad-section-copy {
   margin-top: 0;
 }
+.icon-preview {
+  position: relative;
+  flex: none;
+  display: block;
+  overflow: hidden;
+  border-radius: 22%;
+  line-height: 0;
+  box-shadow: 0 0 0 1px var(--ad-line);
+}
+.icon-preview img {
+  display: block;
+}
+.icon-preview.draft::after {
+  content: "";
+  position: absolute;
+  inset: 10%;
+  border: 1px dashed rgb(128 128 128 / 0.8);
+  border-radius: 18%;
+  pointer-events: none;
+}
+.logo-setting .ad-button[aria-pressed="true"] {
+  border-color: var(--ad-blue);
+  box-shadow: 0 0 0 1px var(--ad-blue);
+}
 .contents-list {
   margin: 0 0 16px;
   font-size: 12px;

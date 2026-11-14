@@ -28,7 +28,7 @@ test("round trip: settings, theme, logo, deadlines and interval", () => {
 
 test("no customer data: only the customisations, whatever is passed in", () => {
   const file = asJson(createStudioSettings({ ...studio, ...customer }));
-  assert.deepEqual(Object.keys(file).sort(), ["backupDays", "createdAt", "kind", "logo", "retention", "schemaVersion", "settings", "theme"]);
+  assert.deepEqual(Object.keys(file).sort(), ["backupDays", "createdAt", "icon", "kind", "logo", "retention", "schemaVersion", "settings", "theme"]);
   const keys = [];
   (function walk(value) {
     if (value && typeof value === "object") for (const [key, inner] of Object.entries(value)) keys.push(key.toLowerCase()), walk(inner);
@@ -72,7 +72,7 @@ test("the older settings-only file still imports; what it lacks stays on the dev
 test("wrong files are refused with a hint where they belong", () => {
   assert.throws(() => read(createFullBackup({ ...studio, ...customer })), /Gesamtsicherung.*Wiederherstellen/);
   assert.throws(() => readFullBackup(asJson(createStudioSettings(studio)), (s) => s), /Studio-Einstellungen, keine Gesamtsicherung/);
-  assert.throws(() => read({ ...asJson(createStudioSettings(studio)), schemaVersion: 3 }), /neueren App-Version/);
+  assert.throws(() => read({ ...asJson(createStudioSettings(studio)), schemaVersion: 4 }), /neueren App-Version/);
   assert.throws(() => read({ ...asJson(createStudioSettings(studio)), schemaVersion: 1 }), /neueren App-Version/);
   assert.throws(() => read({ kind: "etwas" }), /keine INKFORM-Studio-Einstellungen/);
   assert.throws(() => read({ ...asJson(createStudioSettings(studio)), logo: "AAAA" }), /ungültiges Logo/);

@@ -4,8 +4,8 @@ import test from "node:test";
 import { randomBytes } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { crc32 } from "../src/zip.js";
-import { LOGO_EDGE, LOGO_MAX_BYTES, checkLogo, pngSize } from "../src/logo.js";
-import { createFullBackup, readFullBackup, toBase64 } from "../src/backup.js";
+import { ICON_EDGE, ICON_MAX_BYTES, LOGO_EDGE, LOGO_MAX_BYTES, checkIcon, checkLogo, pngSize } from "../src/logo.js";
+import { createFullBackup, createStudioSettings, readFullBackup, readStudioSettings, toBase64 } from "../src/backup.js";
 
 // A real PNG (RGBA, deflated rows); noise makes it large.
 function png(width, height, { noise = false } = {}) {
@@ -28,10 +28,10 @@ function png(width, height, { noise = false } = {}) {
   );
 }
 const settings = { schemaVersion: 1, studio: { name: "Musterstudio" }, app: {} };
-const backup = (logo) =>
+const backup = (logo, icon = null) =>
   JSON.parse(
     JSON.stringify(
-      createFullBackup({ settings, theme: "dark", logo, retention: {}, backupDays: 7, exports: [], records: [], pdfs: [], removed: new Set() }),
+      createFullBackup({ settings, theme: "dark", logo, icon, retention: {}, backupDays: 7, exports: [], records: [], pdfs: [], removed: new Set() }),
     ),
   );
 const read = (value) => readFullBackup(value, (s) => s);
@@ -90,4 +90,51 @@ test("a wrong or too large logo refuses the whole backup", () => {
   const missing = backup(null);
   delete missing.logo;
   assert.throws(() => read(missing), /ungültiges Logo/);
+});
+
+test("icon limits: square, between 180 and 512 pixels, byte size", () => {
+  assert.ok(checkIcon(png(ICON_EDGE, ICON_EDGE)));
+  assert.ok(checkIcon(png(180, 180)));
+  assert.throws(() => checkIcon(png(300, 200)), /quadratisch/);
+  assert.throws(() => checkIcon(png(179, 179)), /quadratisch/);
+  assert.throws(() => checkIcon(png(ICON_EDGE + 1, ICON_EDGE + 1)), /quadratisch/);
+  const noisy = png(400, 400, { noise: true });
+  assert.ok(noisy.length > ICON_MAX_BYTES);
+  assert.throws(() => checkIcon(noisy), /höchstens/);
+  assert.throws(() => checkIcon(new TextEncoder().encode("%PDF-1.7")), /kein vollständiges PNG/);
+});
+
+test("icon in the full backup and the studio settings: restored byte for byte", () => {
+  const icon = png(256, 256);
+  assert.deepEqual(read(backup(null, icon)).icon, icon);
+  assert.equal(read(backup(null)).icon, null);
+  const studio = JSON.parse(JSON.stringify(createStudioSettings({ settings, theme: "dark", icon, retention: {}, backupDays: 7 })));
+  assert.deepEqual(readStudioSettings(studio, (s) => s).icon, icon);
+});
+
+test("older files without icon stay valid and leave the device's icon alone", () => {
+  const value = backup(png(200, 80));
+  value.schemaVersion = 2;
+  delete value.icon;
+  const data = read(value);
+  assert.equal(data.icon, undefined);
+  assert.ok(data.logo);
+  const studio = JSON.parse(JSON.stringify(createStudioSettings({ settings, theme: "dark", retention: {}, backupDays: 7 })));
+  studio.schemaVersion = 2;
+  delete studio.icon;
+  assert.equal(readStudioSettings(studio, (s) => s).icon, undefined);
+});
+
+test("a wrong icon refuses the whole file", () => {
+  const refuse = (icon) => {
+    const value = backup(null);
+    value.icon = icon;
+    assert.throws(() => read(value), /ungültiges App-Symbol/);
+  };
+  refuse(toBase64(png(300, 200)));
+  refuse(toBase64(png(256, 256).subarray(0, 40)));
+  refuse("kein base64!");
+  const missing = backup(null);
+  delete missing.icon;
+  assert.throws(() => read(missing), /ungültiges App-Symbol/);
 });

@@ -25,9 +25,10 @@ Nach dem ersten Start mit Internet läuft Inkform auch im Flugmodus. Zum Prüfen
 
 Alles liegt im Speicher dieser App auf diesem iPad: Einstellungen, PIN, Einnahmenliste und die unterschriebenen PDFs für den ZIP-Export. Die Daten gehören zur Adresse der App. Wechselt die Adresse oder wird die App vom Home-Bildschirm entfernt oder werden die Safari-Websitedaten gelöscht, sind sie weg.
 
-- **Logo:** im Einrichtungsassistenten oder unter „Studio & Kontakt“ als PNG oder JPEG hochladen; die App verkleinert es selbst. Symbol und Name auf dem Home-Bildschirm bleiben die der App.
-- **Gesamtsicherung** (Übersicht): eine Datei mit Einstellungen, Logo, Einnahmen, Fristen und PDFs. Sie enthält Gesundheitsangaben und Unterschriften; nur auf dem iPad („Auf meinem iPad“) oder einem eigenen Rechner ablegen, nicht in iCloud Drive. Die PIN ist nicht enthalten.
-- **Studio-Einstellungen** (Design & Sicherung): eine Datei nur mit deinen Anpassungen (Studioangaben, Logo, Texte, Fragen, Sprachen, Farbschema, Fristen), ohne Kundendaten. Damit richtest du ein zweites iPad ein oder gibst die Einrichtung weiter. Der Import zeigt, was ersetzt wird; Einnahmen, PDFs und PIN bleiben unberührt.
+- **Logo:** im Einrichtungsassistenten oder unter „Studio & Kontakt“ als PNG oder JPEG hochladen; die App verkleinert es selbst.
+- **App-Symbol:** ebenda ein quadratisches Symbol für den Home-Bildschirm hochladen (Vorschau, heller oder dunkler Hintergrund). Es muss vor „Zum Home-Bildschirm“ im Safari-Tab gesetzt sein; iPadOS übernimmt es nur beim Hinzufügen. Den Namen unter dem Symbol kannst du im Dialog ändern.
+- **Gesamtsicherung** (Übersicht): eine Datei mit Einstellungen, Logo, App-Symbol, Einnahmen, Fristen und PDFs. Sie enthält Gesundheitsangaben und Unterschriften; nur auf dem iPad („Auf meinem iPad“) oder einem eigenen Rechner ablegen, nicht in iCloud Drive. Die PIN ist nicht enthalten.
+- **Studio-Einstellungen** (Design & Sicherung): eine Datei nur mit deinen Anpassungen (Studioangaben, Logo, App-Symbol, Texte, Fragen, Sprachen, Farbschema, Fristen), ohne Kundendaten. Damit richtest du ein zweites iPad ein oder gibst die Einrichtung weiter. Der Import zeigt, was ersetzt wird; Einnahmen, PDFs und PIN bleiben unberührt.
 - **Erinnerung:** Die Übersicht erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist.
 - **Wiederherstellen:** prüft die Datei, fragt nach und ersetzt dann alle Daten außer der PIN. So zieht Inkform auch auf ein neues Gerät oder eine neue Adresse um.
 

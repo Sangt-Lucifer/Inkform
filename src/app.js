@@ -47,7 +47,7 @@ import {
   readRemovedIds,
 } from "./export.js";
 import { isSample, sampleRecords } from "./sample.js";
-import { LOGO_DB, LOGO_EDGE, LOGO_KEY, checkLogo, pngSize, shrinkLogo } from "./logo.js";
+import { ICON_EDGE, ICON_KEY, LOGO_DB, LOGO_EDGE, LOGO_KEY, checkIcon, checkLogo, pngSize, shrinkLogo, squareIcon } from "./logo.js";
 import {
   BACKUP_INTERVALS,
   BACKUP_INTERVAL_KEY,
@@ -1701,6 +1701,7 @@ async function createBackup() {
         settings,
         theme: document.documentElement.dataset.theme,
         logo: await storedLogo(),
+        icon: await storedIcon(),
         retention: readRetention(localStorage),
         backupDays: readBackupDays(localStorage),
         exports: readExportLog(localStorage),
@@ -1761,6 +1762,8 @@ backupPicker.addEventListener("change", async () => {
     if (blocker) throw Error(blocker);
     const data = readFullBackup(JSON.parse(await file.text()), validateSettings),
       { removed, records, pdfs, skipped } = applyRemovals(data, readRemovedIds(localStorage), incomeFeature.list(), localDate());
+    await checkReadable(data.logo, "backup.invalidLogo");
+    await checkReadable(data.icon, "backup.invalidIcon");
     if (
       !window.confirm(
         [
@@ -1856,14 +1859,16 @@ function replaceBlocker() {
 }
 // Writes the customisations of a studio settings file or a full backup; what is undefined stays
 // as it is. A restore adds its PDFs and list of deleted copies (before) and its income list and
-// log (after). The logo first: if writing it fails, nothing has changed. If a later step fails,
-// the logo and every key written here are put back; PDFs already written stay in the app's store.
+// log (after). Logo and icon first. If any step fails, logo, icon and every key written here are
+// put back; PDFs already written stay in the app's store.
 const REPLACED_KEYS = [PDF_REMOVED_KEY, SETTINGS_KEY, THEME_KEY, RETENTION_KEY, BACKUP_INTERVAL_KEY, EXPORT_LOG_KEY, INCOME_KEY, LAST_BACKUP_KEY];
 async function writeCustomisations(data, { before = async () => {}, after = () => {} } = {}) {
   const previousLogo = data.logo === undefined ? undefined : await logoStore.get(LOGO_KEY),
+    previousIcon = data.icon === undefined ? undefined : await logoStore.get(ICON_KEY),
     previous = REPLACED_KEYS.map((key) => [key, localStorage.getItem(key)]);
-  await writeLogo(data.logo);
   try {
+    await writeLogo(data.logo);
+    await writeIcon(data.icon);
     await before();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
     if (data.theme) localStorage.setItem(THEME_KEY, data.theme);
@@ -1877,6 +1882,7 @@ async function writeCustomisations(data, { before = async () => {}, after = () =
         else localStorage.setItem(key, value);
       } catch (_) {}
     await writeLogo(previousLogo).catch(() => {});
+    await writeIcon(previousIcon).catch(() => {});
     throw error;
   }
 }
@@ -1938,6 +1944,147 @@ async function removeLogo() {
     toast(t("logo.removed"));
   } catch (error) {
     toast(t("logo.failed", { fehler: error.message }));
+  }
+}
+// The home screen icon chosen on this device (see logo.js). iPadOS takes it from the page once,
+// when the app is added to the home screen, and keeps it. Only as a data: address: a linked file
+// it fetches from the server, past the service worker, so a stored icon would never reach it.
+const BUILT_IN_ICON = document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute("href") || BUILT_IN_LOGO;
+let ownIcon = null,
+  iconUrl = null,
+  iconDraft = null;
+const pngUrl = (blob) => URL.createObjectURL(blob);
+async function touchIcon(bytes) {
+  const image = await createImageBitmap(new Blob([bytes], { type: "image/png" })),
+    canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 180;
+  canvas.getContext("2d").drawImage(image, 0, 0, 180, 180);
+  image.close?.();
+  return canvas.toDataURL("image/png");
+}
+// PNG bytes of the own icon, or null for the built-in one.
+function showIcon(bytes) {
+  if (iconUrl) URL.revokeObjectURL(iconUrl);
+  iconUrl = bytes ? pngUrl(new Blob([bytes], { type: "image/png" })) : null;
+  ownIcon = bytes;
+  const link = document.querySelector('link[rel="apple-touch-icon"]');
+  if (link) {
+    link.href = BUILT_IN_ICON;
+    if (bytes)
+      touchIcon(bytes).then(
+        (src) => ownIcon === bytes && (link.href = src),
+        (error) => console.info("App-Symbol nicht gesetzt:", error.message),
+      );
+  }
+  redrawIconPanel();
+}
+function redrawIconPanel() {
+  const panel = document.querySelector("[data-icon-panel]");
+  if (panel) panel.outerHTML = iconPanel();
+}
+async function writeIcon(icon) {
+  if (icon === null) await logoStore.delete(ICON_KEY);
+  else if (icon) await logoStore.put(ICON_KEY, icon instanceof Blob ? icon : new Blob([icon], { type: "image/png" }));
+}
+async function storedIcon() {
+  const blob = await logoStore.get(ICON_KEY);
+  return blob && checkIcon(new Uint8Array(await blob.arrayBuffer()));
+}
+function loadIcon() {
+  return storedIcon().then(
+    (bytes) => showIcon(bytes),
+    (error) => console.info("Eigenes App-Symbol nicht geladen:", error.message),
+  );
+}
+function iconPanel() {
+  let body;
+  if (iconDraft) {
+    const choice = (background) =>
+      `<button class="ad-button" type="button" data-admin-action="icon-background" data-background="${background}" aria-pressed="${iconDraft.background === background}">${th(background === "dark" ? "icon.dark" : "icon.light")}</button>`;
+    body = /* HTML */ `<div class="logo-setting">
+        <span class="icon-preview draft"><img src="${iconDraft.url}" alt="${th("icon.preview")}" width="120" height="120" /></span>
+        <div>
+          <p class="ad-section-copy">${th("icon.draft")}</p>
+          <div class="ad-actions-row" role="group" aria-label="${th("icon.background")}">${choice("light")}${choice("dark")}</div>
+          <div class="ad-actions-row">
+            <button class="ad-button primary" type="button" data-admin-action="icon-accept">${adminIcon("check")}${th("icon.accept")}</button
+            ><button class="ad-button" type="button" data-admin-action="icon-cancel">${th("icon.cancel")}</button>
+          </div>
+        </div>
+      </div>`;
+  } else
+    body = /* HTML */ `<div class="logo-setting">
+        <span class="icon-preview"><img src="${iconUrl || BUILT_IN_ICON}" alt="" width="72" height="72" /></span>
+        <div>
+          <p class="ad-section-copy">${th(iconUrl ? "icon.custom" : "icon.builtIn")}</p>
+          <div class="ad-actions-row">
+            <button class="ad-button primary" type="button" data-admin-action="icon-choose">${adminIcon("upload")}${th("icon.choose")}</button
+            >${iconUrl ? `<button class="ad-button" type="button" data-admin-action="icon-remove">${th("icon.remove")}</button>` : ""}
+          </div>
+        </div>
+      </div>`;
+  return `<div data-icon-panel>${adminPanel(th("icon.title"), `${body}<p class="ad-preview-note">${th("icon.note", { pixel: ICON_EDGE })}</p>`)}</div>`;
+}
+// Only the latest choice counts: a slower conversion started before it, or before Cancel or
+// locking the admin, is dropped.
+let iconTurn = 0;
+async function drawIconDraft(file, background) {
+  const turn = ++iconTurn,
+    blob = await squareIcon(file, background);
+  if (turn !== iconTurn) return;
+  if (iconDraft?.url) URL.revokeObjectURL(iconDraft.url);
+  iconDraft = { file, background, blob, url: pngUrl(blob) };
+  redrawIconPanel();
+}
+function dropIconDraft() {
+  iconTurn++;
+  if (iconDraft?.url) URL.revokeObjectURL(iconDraft.url);
+  iconDraft = null;
+}
+// A logo or icon from a file must also be readable as an image, not only well-formed.
+async function checkReadable(bytes, invalid) {
+  if (!bytes) return;
+  try {
+    (await createImageBitmap(new Blob([bytes], { type: "image/png" }))).close?.();
+  } catch (_) {
+    throw Error(t(invalid, { fehler: t("logo.unreadable") }));
+  }
+}
+const iconPicker = document.createElement("input");
+iconPicker.type = "file";
+iconPicker.accept = "image/png,image/jpeg";
+iconPicker.hidden = true;
+iconPicker.id = "icon-file";
+document.body.append(iconPicker);
+iconPicker.addEventListener("change", async () => {
+  const file = iconPicker.files[0];
+  iconPicker.value = "";
+  if (!file || !adminAccess.isUnlocked()) return;
+  try {
+    await drawIconDraft(file, "light");
+  } catch (error) {
+    toast(t("icon.failed", { fehler: error.message }));
+  }
+});
+async function iconAction(action, background) {
+  if (action === "icon-choose") return iconPicker.click();
+  if (action === "icon-background" && iconDraft) return drawIconDraft(iconDraft.file, background);
+  if (action === "icon-cancel") {
+    dropIconDraft();
+    return redrawIconPanel();
+  }
+  if (action === "icon-accept" && iconDraft) {
+    const { blob } = iconDraft;
+    dropIconDraft();
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    await logoStore.put(ICON_KEY, blob);
+    showIcon(bytes);
+    return toast(t("icon.saved"));
+  }
+  if (action === "icon-remove" && window.confirm(t("icon.removeQuestion"))) {
+    await logoStore.delete(ICON_KEY);
+    showIcon(null);
+    toast(t("icon.removed"));
   }
 }
 const SETUP_FIELDS = ["name", "contact", "address", "location"];
@@ -2213,7 +2360,7 @@ function renderAdminSection() {
       <div class="ad-field"><label for="setup-income-years">${th("setup.incomeYears")}</label><input id="setup-income-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().incomeYears))}"></div></div>
       <p class="ad-preview-note">${th("setup.note")}</p>
       <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="setup-finish">${adminIcon("check")}${th("setup.finish")}</button></div>`,
-    )}${logoPanel()}${adminPanel(
+    )}${logoPanel()}${iconPanel()}${adminPanel(
       th("setup.transferTitle"),
       /* HTML */ `<p class="ad-section-copy">${th("setup.transferCopy")}</p>
         <div class="ad-actions-row">
@@ -2301,7 +2448,7 @@ function renderAdminSection() {
             })}
           </div>`,
         )}
-        ${logoPanel()}
+        ${logoPanel()}${iconPanel()}
         <div class="ad-notice">
           ${th("studioPage.privacyHint", {
             link: markup(`<button
@@ -2801,6 +2948,7 @@ function finishAdminLeave() {
   } catch (_) {}
   $("completion-screen").hidden = true;
   adminAccess?.lock();
+  dropIconDraft();
   incomeFeature?.lock();
   adminOpen = false;
   $("admin-app").hidden = true;
@@ -2819,6 +2967,7 @@ function showCompletion(setup = false) {
   adminOpen = false;
   adminDraft = null;
   adminAccess?.lock();
+  dropIconDraft();
   incomeFeature?.lock();
   $("customer-app").hidden = true;
   $("admin-app").hidden = true;
@@ -2881,6 +3030,7 @@ function exportStudioSettings() {
           settings: validateSettings(settings),
           theme: document.documentElement.dataset.theme,
           logo: ownLogo,
+          icon: ownIcon,
           retention: readRetention(localStorage),
           backupDays: readBackupDays(localStorage),
         }),
@@ -3145,6 +3295,13 @@ $("admin-app").addEventListener("click", (event) => {
     case "logo-remove":
       removeLogo();
       break;
+    case "icon-choose":
+    case "icon-background":
+    case "icon-accept":
+    case "icon-cancel":
+    case "icon-remove":
+      iconAction(button.dataset.adminAction, button.dataset.background).catch((error) => toast(t("icon.failed", { fehler: error.message })));
+      break;
     case "pending":
       if (pendingConsent && !pendingConsent.confirmed) renderPdfArtifact(pendingConsent);
       break;
@@ -3211,6 +3368,8 @@ $("admin-import-file").addEventListener("change", async (event) => {
     const blocker = replaceBlocker();
     if (blocker) throw new Error(blocker);
     const data = readStudioSettings(JSON.parse(await file.text()), validateSettings);
+    await checkReadable(data.logo, "backup.invalidLogo");
+    await checkReadable(data.icon, "backup.invalidIcon");
     if (!window.confirm(studioPreview(data))) return;
     await writeCustomisations(data);
     sessionStorage.setItem("inkform.studioImported", "1");
@@ -3234,6 +3393,7 @@ function studioPreview(data) {
     [
       t("studioFile.theme", { wert: data.theme ? t(data.theme === "dark" ? "studioFile.themeDark" : "studioFile.themeLight") : unchanged }),
       t("studioFile.logo", { wert: data.logo === undefined ? unchanged : t(data.logo ? "studioFile.logoOwn" : "studioFile.logoBuiltIn") }),
+      t("studioFile.icon", { wert: data.icon === undefined ? unchanged : t(data.icon ? "studioFile.iconOwn" : "studioFile.iconBuiltIn") }),
       t("studioFile.retention", {
         wert: data.retention ? t("studioFile.retentionYears", { pdf: years(data.retention.pdfYears), namen: years(data.retention.incomeYears) }) : unchanged,
       }),
@@ -3340,6 +3500,7 @@ try {
 } catch (_) {}
 setTheme(initialTheme, false);
 loadLogo();
+loadIcon();
 if (configLoadError) toast(configLoadError);
 if (BLANK_EDITION) document.querySelectorAll("[data-studio-only]").forEach((node) => (node.hidden = true));
 if (!OWNER_GUIDE_BASE64) document.querySelectorAll('[data-admin-action="guide"]').forEach((node) => (node.hidden = true));

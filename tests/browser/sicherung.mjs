@@ -76,7 +76,7 @@ const toastSays = (text) => until(`!document.getElementById('toast').hidden&&doc
 const ownLogo = () =>
   ev(`storedLogo().then(b=>{const s=b&&pngSize(b);const shown=[...document.querySelectorAll('.studio-logo')].every(i=>i.src.startsWith('blob:'))&&document.querySelector('link[rel="icon"]').href.startsWith('blob:');return s?s.width+'x'+s.height+(shown?' sichtbar':' unsichtbar'):'keins'})`);
 await ev(`openAdminAuthorized('studio')`);
-check("Logo-Bereich unter Studio & Kontakt mit Hinweis zum Home-Bildschirm", await ev(`!!document.querySelector('[data-admin-action="logo-choose"]')&&document.getElementById('admin-app').textContent.includes('Home-Bildschirm gehören zur installierten App')`));
+check("Logo-Bereich unter Studio & Kontakt mit Hinweis auf das eigene App-Symbol", await ev(`!!document.querySelector('[data-admin-action="logo-choose"]')&&document.getElementById('admin-app').textContent.includes('Für den Home-Bildschirm gibt es darunter ein eigenes App-Symbol')`));
 // Report with the logo drawn on page 1 (addImage with the logo alias), and the image it embeds.
 const reportLogo = (width, height) =>
   ev(`(async()=>{let drawn=false;const Original=window.jspdf.jsPDF;window.jspdf.jsPDF=function(...args){const doc=new Original(...args);const add=doc.addImage.bind(doc);doc.addImage=(...a)=>{if(a[6]==='studio-logo'&&doc.getCurrentPageInfo().pageNumber===1)drawn=true;return add(...a)};return doc};try{const t=await incomeFeature.reportPdf(incomeRecords(),'Test').text();return drawn&&t.includes('/Width '+${width})&&t.includes('/Height '+${height})}finally{window.jspdf.jsPDF=Original}})()`);
@@ -131,7 +131,7 @@ check(
     backup.pdfs.length === 2 &&
     backup.pdfs.every((p) => Buffer.from(p.pdf, "base64").subarray(0, 5).toString() === "%PDF-"),
 );
-check("Sicherung enthält das Logo (PNG, 512 × 171)", backup.schemaVersion === 2 && Buffer.from(backup.logo, "base64").readUInt32BE(16) === 512 && Buffer.from(backup.logo, "base64").readUInt32BE(20) === 171);
+check("Sicherung enthält das Logo (PNG, 512 × 171)", backup.schemaVersion === 3 && Buffer.from(backup.logo, "base64").readUInt32BE(16) === 512 && Buffer.from(backup.logo, "base64").readUInt32BE(20) === 171);
 check("Keine PIN in der Sicherung", !/839274|"salt"|"hash"/.test(json));
 check("Nach der Sicherung keine Sicherungs-Erinnerung", !(await reminder()).includes("Gesamtsicherung"));
 

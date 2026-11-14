@@ -91,7 +91,14 @@ export function createIndexedDbFiles(indexedDB = globalThis.indexedDB, name = "i
     opening ??= new Promise((resolve, reject) => {
       const request = indexedDB.open(name, 1);
       request.onupgradeneeded = () => request.result.createObjectStore("files");
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        // Another tab or a reset deletes or upgrades the database: let go, the next use opens again.
+        request.result.onversionchange = () => {
+          request.result.close();
+          opening = null;
+        };
+        resolve(request.result);
+      };
       request.onerror = () => reject(request.error);
     }).catch((error) => {
       opening = null;

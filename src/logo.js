@@ -1,6 +1,7 @@
-// Studio logo chosen on this device. Kept in IndexedDB: localStorage holds only a few megabytes,
-// shared with the income list. Always stored as a PNG within LOGO_EDGE and LOGO_MAX_BYTES; without
-// one, the logo built into the app is shown.
+// Studio logo and home screen icon chosen on this device. Kept in IndexedDB: localStorage holds
+// only a few megabytes, shared with the income list. Both are stored as PNG within their edge and
+// byte limits; without one, the logo or icon built into the app is used. The icon is square and
+// opaque: iPadOS fills transparent parts black.
 import { t } from "./i18n.js";
 import { crc32 } from "./zip.js";
 
@@ -8,6 +9,11 @@ export const LOGO_DB = "inkform-logo";
 export const LOGO_KEY = "logo";
 export const LOGO_EDGE = 512;
 export const LOGO_MAX_BYTES = 300 * 1024;
+export const ICON_KEY = "icon";
+export const ICON_EDGE = 512;
+const ICON_SMALLEST = 180;
+export const ICON_MAX_BYTES = 300 * 1024;
+export const ICON_BACKGROUNDS = { light: "#ffffff", dark: "#000000" };
 const UPLOAD_MAX_MB = 20;
 const PNG = [137, 80, 78, 71, 13, 10, 26, 10];
 const isPng = (bytes) => PNG.every((b, i) => bytes[i] === b);
@@ -46,17 +52,31 @@ export function checkLogo(bytes) {
   return bytes;
 }
 
-// A PNG or JPEG chosen by the owner, recognised by its content, drawn smaller until it fits.
-export async function shrinkLogo(file) {
+// A stored or restored icon: a square PNG between ICON_SMALLEST and ICON_EDGE within the byte limit.
+export function checkIcon(bytes) {
+  const size = pngSize(bytes);
+  if (!size) throw Error(t("icon.notPng"));
+  if (bytes.length > ICON_MAX_BYTES || size.width !== size.height || size.width < ICON_SMALLEST || size.width > ICON_EDGE)
+    throw Error(t("icon.wrongSize", { min: ICON_SMALLEST, max: ICON_EDGE, kb: ICON_MAX_BYTES / 1024 }));
+  return bytes;
+}
+
+// A PNG or JPEG chosen by the owner, recognised by its content.
+async function decode(file) {
   const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
   if (!isPng(head) && !isJpeg(head)) throw Error(t("logo.wrongType"));
   if (file.size > UPLOAD_MAX_MB * 1024 * 1024) throw Error(t("logo.fileTooLarge", { mb: UPLOAD_MAX_MB }));
-  let image;
   try {
-    image = await createImageBitmap(file);
+    return await createImageBitmap(file);
   } catch {
     throw Error(t("logo.unreadable"));
   }
+}
+const toPng = (canvas) => new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+
+// The logo, drawn smaller until it fits.
+export async function shrinkLogo(file) {
+  const image = await decode(file);
   try {
     for (const edge of [LOGO_EDGE, 384, 256, 192, 128]) {
       const scale = Math.min(1, edge / Math.max(image.width, image.height)),
@@ -64,11 +84,33 @@ export async function shrinkLogo(file) {
       canvas.width = Math.max(1, Math.round(image.width * scale));
       canvas.height = Math.max(1, Math.round(image.height * scale));
       canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      const blob = await toPng(canvas);
       if (blob && blob.size <= LOGO_MAX_BYTES) return blob;
     }
   } finally {
     image.close?.();
   }
   throw Error(t("logo.tooLarge", { pixel: LOGO_EDGE, kb: LOGO_MAX_BYTES / 1024 }));
+}
+
+// The icon: the largest square from the middle of the picture, on a light or dark background,
+// drawn smaller until it fits.
+export async function squareIcon(file, background = "light") {
+  const image = await decode(file),
+    side = Math.min(image.width, image.height);
+  try {
+    for (const edge of [ICON_EDGE, 384, 256, ICON_SMALLEST]) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = edge;
+      const context = canvas.getContext("2d");
+      context.fillStyle = ICON_BACKGROUNDS[background] ?? ICON_BACKGROUNDS.light;
+      context.fillRect(0, 0, edge, edge);
+      context.drawImage(image, (image.width - side) / 2, (image.height - side) / 2, side, side, 0, 0, edge, edge);
+      const blob = await toPng(canvas);
+      if (blob && blob.size <= ICON_MAX_BYTES) return blob;
+    }
+  } finally {
+    image.close?.();
+  }
+  throw Error(t("icon.wrongSize", { min: ICON_SMALLEST, max: ICON_EDGE, kb: ICON_MAX_BYTES / 1024 }));
 }

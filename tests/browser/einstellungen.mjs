@@ -51,6 +51,11 @@ const chooseLogo = () =>
   ev(`(async()=>{const c=document.createElement('canvas');c.width=c.height=300;const g=c.getContext('2d');g.fillStyle='#2a6';g.fillRect(0,0,300,300);g.fillStyle='#fff';g.fillRect(60,120,180,60);const b=await new Promise(r=>c.toBlob(r,'image/png'));const dt=new DataTransfer();dt.items.add(new File([b],'logo.png',{type:'image/png'}));const i=document.getElementById('logo-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
 await chooseLogo();
 await until(`document.querySelector('.studio-logo').src.startsWith('blob:')`);
+// An invented icon: a dark square with a light bar, on a transparent picture wider than high.
+await ev(`(async()=>{const c=document.createElement('canvas');c.width=400;c.height=300;const g=c.getContext('2d');g.fillStyle='#235';g.fillRect(100,50,200,200);g.fillStyle='#fd4';g.fillRect(150,130,100,40);const b=await new Promise(r=>c.toBlob(r,'image/png'));const dt=new DataTransfer();dt.items.add(new File([b],'symbol.png',{type:'image/png'}));const i=document.getElementById('icon-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
+await until(`!!document.querySelector('[data-admin-action="icon-accept"]')`);
+await ev(`document.querySelector('[data-admin-action="icon-accept"]').click()`);
+await until(`!!ownIcon`);
 const setLocation = (value) =>
   ev(`openAdminAuthorized('studio');(l=>{l.value=${JSON.stringify(value)};l.dispatchEvent(new Event('input',{bubbles:true}))})(document.getElementById('admin-studio-location'));saveAdmin()`);
 await setLocation("Exportort");
@@ -64,7 +69,8 @@ check(
   page.includes("Was wohin gehört") &&
     page.includes("In der Gesamtsicherung") &&
     page.includes("In den Studio-Einstellungen") &&
-    /Nirgends enthalten.*PIN, Sprache dieses Geräts, Symbol und Name auf dem Home-Bildschirm/.test(page),
+    /In den Studio-Einstellungen.*Logo, App-Symbol/.test(page) &&
+    /Nirgends enthalten.*PIN, Sprache dieses Geräts/.test(page),
 );
 await ev(`document.querySelector('.contents-list').scrollIntoView({block:'center'});new Promise(r=>setTimeout(r,200))`);
 await screenshot("einstellungen-uebersicht");
@@ -80,12 +86,14 @@ check(
   "Export: Einstellungen, Farbschema, Logo, Fristen und Erinnerungsabstand",
   /^Inkform_Studio-Einstellungen_\d{4}-\d{2}-\d{2}\.json$/.test(name) &&
     file.kind === "inkform-studio-einstellungen" &&
-    file.schemaVersion === 2 &&
+    file.schemaVersion === 3 &&
     file.settings.studio.location === "Exportort" &&
     file.theme === "light" &&
     file.retention.pdfYears === 10 &&
     file.backupDays === 14 &&
-    Buffer.from(file.logo, "base64").readUInt32BE(16) === 300,
+    Buffer.from(file.logo, "base64").readUInt32BE(16) === 300 &&
+    Buffer.from(file.icon, "base64").readUInt32BE(16) === 512 &&
+    Buffer.from(file.icon, "base64").readUInt32BE(20) === 512,
 );
 const keys = [];
 (function walk(value) {
@@ -95,12 +103,12 @@ check(
   "Export enthält keine Kundendaten: keine Einträge, PDFs, Unterschriften, Namen, kein Export-Protokoll, keine PIN",
   !["income", "records", "pdfs", "pdf", "pdfremoved", "exports", "signature", "pending", "salt", "hash"].some((k) => keys.includes(k)) &&
     !/Jürgen|Müller|Şahin|%PDF|JVBERi|839274|2026-02-28/.test(json) &&
-    (json.match(/iVBORw0KGgo/g) || []).length === 1,
+    (json.match(/iVBORw0KGgo/g) || []).length === 2,
 );
 
 // Change everything, then import --------------------------------------------------------------
-await ev(`window.__c=window.confirm;window.confirm=()=>true;openAdminAuthorized('studio');document.querySelector('[data-admin-action="logo-remove"]').click();window.confirm=window.__c`);
-await until(`!document.querySelector('.studio-logo').src.startsWith('blob:')`);
+await ev(`window.__c=window.confirm;window.confirm=()=>true;openAdminAuthorized('studio');document.querySelector('[data-admin-action="logo-remove"]').click();document.querySelector('[data-admin-action="icon-remove"]').click();window.confirm=window.__c`);
+await until(`!document.querySelector('.studio-logo').src.startsWith('blob:')&&!ownIcon`);
 await setLocation("Anders");
 await ev(`writeRetention(localStorage,{pdfYears:null,incomeYears:null});localStorage.setItem(BACKUP_INTERVAL_KEY,'3');setTheme('dark');openAdminAuthorized('appearance')`);
 const customerData = () =>
@@ -109,7 +117,7 @@ const before = await customerData();
 const pick = (source) =>
   ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([${source}],'einstellungen.json',{type:'application/json'}));const i=document.getElementById('admin-import-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
 const adminError = () => ev(`document.getElementById('admin-error').hidden?'':document.getElementById('admin-error').textContent`);
-const unchanged = () => ev(`settings.studio.location==='Anders'&&localStorage.getItem(THEME_KEY)==='dark'&&localStorage.getItem(BACKUP_INTERVAL_KEY)==='3'&&!document.querySelector('.studio-logo').src.startsWith('blob:')`);
+const unchanged = () => ev(`settings.studio.location==='Anders'&&localStorage.getItem(THEME_KEY)==='dark'&&localStorage.getItem(BACKUP_INTERVAL_KEY)==='3'&&!document.querySelector('.studio-logo').src.startsWith('blob:')&&!ownIcon`);
 
 await pick(`JSON.stringify({kind:'inkform-gesamtsicherung',schemaVersion:2,createdAt:new Date().toISOString()})`);
 await until(`!document.getElementById('admin-error').hidden`);
@@ -118,6 +126,13 @@ await ev(`document.getElementById('admin-error').hidden=true`);
 await pick(`JSON.stringify({...${JSON.stringify(file)},logo:'AAAA'})`);
 await until(`!document.getElementById('admin-error').hidden`);
 check("Beschädigtes Logo: ganze Datei abgelehnt, nichts geändert", (await adminError()).includes("ungültiges Logo") && (await unchanged()));
+await ev(`document.getElementById('admin-error').hidden=true`);
+// Well-formed chunks with correct checksums, but image data that cannot be decoded.
+const unreadable = `(()=>{const chunk=(type,data)=>{const body=new Uint8Array(4+data.length);body.set([...type].map(c=>c.charCodeAt(0)));body.set(data,4);const out=new Uint8Array(body.length+8),v=new DataView(out.buffer);v.setUint32(0,data.length);out.set(body,4);v.setUint32(body.length+4,crc32(body));return out};const h=new Uint8Array(13),hv=new DataView(h.buffer);hv.setUint32(0,180);hv.setUint32(4,180);h.set([8,6,0,0,0],8);const parts=[new Uint8Array([137,80,78,71,13,10,26,10]),chunk('IHDR',h),chunk('IDAT',new TextEncoder().encode('kein zlib')),chunk('IEND',new Uint8Array(0))],all=new Uint8Array(parts.reduce((n,p)=>n+p.length,0));let o=0;for(const p of parts){all.set(p,o);o+=p.length}return toBase64(all)})()`;
+check("Prüfbild: als PNG wohlgeformt", await ev(`!!checkIcon(fromBase64(${unreadable}))`));
+await pick(`JSON.stringify({...${JSON.stringify(file)},icon:${unreadable}})`);
+await until(`!document.getElementById('admin-error').hidden`);
+check("Unlesbares App-Symbol: ganze Datei abgelehnt, nichts geändert", (await adminError()).includes("ungültiges App-Symbol") && (await unchanged()));
 await ev(`document.getElementById('admin-error').hidden=true`);
 
 await ev(`window.confirm=(m)=>{window.__question=m;return false}`);
@@ -132,6 +147,7 @@ check(
     question.includes(`Ersetzt werden: Studioangaben (${studioName}`) &&
     question.includes("Farbschema: hell") &&
     question.includes("Logo: das Logo aus der Datei") &&
+    question.includes("App-Symbol: das Symbol aus der Datei") &&
     question.includes("Fristen: PDFs 10 Jahre, Namen in der Einnahmenliste 3 Jahre") &&
     question.includes("nach: 14 Tagen") &&
     question.includes("Nicht berührt: Einnahmen, PDFs, Export-Protokoll und PIN."),
@@ -142,9 +158,9 @@ await ev(`window.confirm=()=>true`);
 await pick(`window.__studioText`);
 await until(`typeof adminAccess!=='undefined' && !window.__studioText && document.readyState==='complete' && document.getElementById('toast').textContent.includes('Studio-Einstellungen übernommen')`);
 await ev(HELPERS);
-await until(`document.querySelector('.studio-logo').src.startsWith('blob:')`);
+await until(`document.querySelector('.studio-logo').src.startsWith('blob:')&&!!ownIcon`);
 check(
-  "Nach dem Import: Einstellungen, Farbschema, Logo, Fristen und Abstand aus der Datei",
+  "Nach dem Import: Einstellungen, Farbschema, Logo, App-Symbol, Fristen und Abstand aus der Datei",
   await ev(`settings.studio.location==='Exportort'&&document.documentElement.dataset.theme==='light'&&readRetention(localStorage).pdfYears===10&&readRetention(localStorage).incomeYears===3&&localStorage.getItem(BACKUP_INTERVAL_KEY)==='14'`),
 );
 check("Einnahmen, PDFs, Export-Protokoll und gelöschte Kopien unverändert", (await customerData()) === before);
