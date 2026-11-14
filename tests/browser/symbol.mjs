@@ -33,6 +33,14 @@ const choose = (name, type, body) =>
 // Invented picture: transparent, wider than high, a dark square in the middle with a light bar.
 const picture = `await (async()=>{const c=document.createElement('canvas');c.width=400;c.height=300;const g=c.getContext('2d');g.fillStyle='#223355';g.fillRect(100,50,200,200);g.fillStyle='#ffdd44';g.fillRect(150,130,100,40);return new Promise(r=>c.toBlob(r,'image/png'))})()`;
 
+await until(`!!builtInLogo&&!!builtInIconBytes`);
+await ev(`navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]};window.__shared=null;openAdminAuthorized('appearance');document.querySelector('[data-admin-action="export-json"]').click()`);
+await until(`!!window.__shared`);
+check(
+  "Studio-Build ohne eigenes Logo und Symbol: Studio-Einstellungen enthalten die eingebauten",
+  await ev(`window.__shared.text().then(t=>{const f=JSON.parse(t),i=fromBase64(f.icon),l=fromBase64(f.logo);return pngSize(i).width===192&&pngSize(i).height===192&&!!pngSize(l)})`),
+);
+await ev(`openAdminAuthorized('studio')`);
 check("Ohne eigenes Symbol: eingebautes Symbol für den Home-Bildschirm", (await link()) === "./icons/icon-192.png" && (await ev(`!!document.querySelector('[data-admin-action="icon-choose"]')&&!document.querySelector('[data-admin-action="icon-remove"]')`)));
 
 await choose("symbol.png", "image/png", picture);

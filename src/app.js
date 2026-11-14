@@ -1701,15 +1701,15 @@ async function createBackup() {
   note.textContent = "";
   start.disabled = true;
   start.querySelector("span").textContent = t("backup.creating");
-  $("backup-flow").scrollIntoView({ behavior: "instant", block: "center" });
+  $("backup-flow").scrollIntoView({ behavior: "instant", block: "nearest" });
   try {
     // PDFs first: entries and the list are read afterwards, so a copy deleted meanwhile is marked.
     const pdfs = await exportFeature.pdfs(),
       backup = createFullBackup({
         settings,
         theme: document.documentElement.dataset.theme,
-        logo: await storedLogo(),
-        icon: await storedIcon(),
+        logo: (await storedLogo()) ?? (await loadBuiltInLogo()),
+        icon: (await storedIcon()) ?? (await builtInIcon()),
         retention: readRetention(localStorage),
         backupDays: readBackupDays(localStorage),
         exports: readExportLog(localStorage),
@@ -1725,7 +1725,10 @@ async function createBackup() {
     });
     start.parentElement.hidden = true;
     ready.hidden = false;
-    ready.querySelector("button").focus();
+    // Safari opens the share sheet only within a tap: if the backup was ready while the tap still
+    // counts, it opens at once; otherwise the owner taps „Jetzt in Dateien sichern“.
+    if (navigator.userActivation?.isActive) saveBackup();
+    else ready.querySelector("button").focus();
   } catch (error) {
     note.textContent = t("backup.failed", { fehler: error.message });
   } finally {
@@ -1741,6 +1744,10 @@ function saveBackup() {
       localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
       preparedBackup = null;
       if (adminPage === "overview") renderAdminSection();
+      else {
+        document.querySelector("[data-backup-ready]").hidden = true;
+        document.querySelector("[data-backup-start]").hidden = false;
+      }
       $("backup-note").textContent =
         way === "download"
           ? t("backup.downloaded", { datei: file.name })
@@ -1760,21 +1767,21 @@ backupPicker.hidden = true;
 backupPicker.id = "backup-file";
 document.body.append(backupPicker);
 // A chosen full backup or studio settings file, read and checked as a whole, shown with what it
-// replaces and written after a yes; the same steps from the assistant and from the admin pages.
-// kind limits the file to one of the two; without it the file says what it is. Returns false if
-// the owner cancels, else reloads the app.
+// replaces and written after a yes; every picker takes both kinds and the file says what it is
+// (over the studio file's size limit only a backup is read). Returns false if the owner cancels,
+// else reloads the app.
 const STUDIO_MAX_BYTES = 2 * 1024 * 1024;
-async function applyChosenFile(file, kind = null) {
+async function applyChosenFile(file) {
   const blocker = replaceBlocker();
   if (blocker) throw Error(blocker);
-  if (kind === STUDIO_KIND && file.size > STUDIO_MAX_BYTES) throw Error(t("import.tooLarge"));
   let value;
   try {
     value = JSON.parse(await file.text());
   } catch (_) {
     throw Error(t("import.badJson"));
   }
-  const backup = kind ? kind === BACKUP_KIND : file.size > STUDIO_MAX_BYTES || value?.kind === BACKUP_KIND;
+  const backup = file.size > STUDIO_MAX_BYTES || value?.kind === BACKUP_KIND;
+  if (!backup && value?.kind !== undefined && value.kind !== STUDIO_KIND) throw Error(t("file.unknownKind"));
   if (!(await (backup ? restoreBackup(value) : importStudio(value)))) return false;
   location.reload();
   return true;
@@ -1829,7 +1836,7 @@ backupPicker.addEventListener("change", async () => {
   backupPicker.value = "";
   if (!file || !adminAccess.isUnlocked()) return;
   try {
-    await applyChosenFile(file, BACKUP_KIND);
+    await applyChosenFile(file);
   } catch (error) {
     toast(t("restore.failed", { fehler: error.message }));
   }
@@ -1849,6 +1856,24 @@ try {
   pdfLogo = logoForPdf(fromBase64(BUILT_IN_LOGO.split(",")[1]));
 } catch (_) {}
 const builtInPdfLogo = pdfLogo;
+// A studio build carries its logo and icon in the app itself. Backups and studio settings take them
+// along, so a device with another build (e.g. the neutral one) looks the same after restoring.
+// A built-in logo above the limits for stored logos is shrunk on the device, like an uploaded one.
+let builtInLogo = null;
+async function loadBuiltInLogo() {
+  if (BLANK_EDITION || builtInLogo) return builtInLogo;
+  try {
+    const bytes = fromBase64(BUILT_IN_LOGO.split(",")[1]);
+    try {
+      builtInLogo = checkLogo(bytes);
+    } catch (_) {
+      builtInLogo = checkLogo(new Uint8Array(await (await shrinkLogo(new Blob([bytes]))).arrayBuffer()));
+    }
+  } catch (error) {
+    console.info("Eingebautes Logo nicht übernommen:", error.message);
+  }
+  return builtInLogo;
+}
 // On a black square, as in the app; returns whether a logo was drawn. Whether jsPDF can read the
 // logo is tried once per logo, before anything is drawn: one it cannot read leaves the PDF
 // without a logo rather than failing it or leaving an empty square.
@@ -1993,7 +2018,17 @@ async function removeLogo() {
 const BUILT_IN_ICON = document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute("href") || BUILT_IN_LOGO;
 let ownIcon = null,
   iconUrl = null,
-  iconDraft = null;
+  iconDraft = null,
+  builtInIconBytes = null;
+// The built-in icon of a studio build, from the offline copy (the page may not fetch files).
+async function builtInIcon() {
+  if (BLANK_EDITION || builtInIconBytes || !BUILT_IN_ICON.startsWith("./") || !globalThis.caches) return builtInIconBytes;
+  try {
+    const copy = await caches.match(new URL(BUILT_IN_ICON, location.href).href);
+    if (copy) builtInIconBytes = checkIcon(new Uint8Array(await copy.arrayBuffer()));
+  } catch (_) {}
+  return builtInIconBytes;
+}
 const pngUrl = (blob) => URL.createObjectURL(blob);
 async function touchIcon(bytes) {
   const image = await createImageBitmap(new Blob([bytes], { type: "image/png" })),
@@ -3240,8 +3275,8 @@ function exportStudioSettings() {
         createStudioSettings({
           settings: validateSettings(settings),
           theme: document.documentElement.dataset.theme,
-          logo: ownLogo,
-          icon: ownIcon,
+          logo: ownLogo ?? builtInLogo,
+          icon: ownIcon ?? builtInIconBytes,
           retention: readRetention(localStorage),
           backupDays: readBackupDays(localStorage),
         }),
@@ -3586,7 +3621,7 @@ $("admin-import-file").addEventListener("change", async (event) => {
   event.target.value = "";
   if (!file || !adminAccess.isUnlocked()) return;
   try {
-    await applyChosenFile(file, STUDIO_KIND);
+    await applyChosenFile(file);
   } catch (error) {
     configError(t("import.failed", { fehler: error.message }));
   }
@@ -3721,6 +3756,12 @@ try {
 setTheme(initialTheme, false);
 loadLogo();
 loadIcon();
+loadBuiltInLogo();
+builtInIcon();
+// At the first start the offline copy with the icon is only complete once the worker reports it.
+navigator.serviceWorker?.addEventListener("message", (event) => {
+  if (event.data?.type === "INKFORM_OFFLINE_READY") builtInIcon();
+});
 if (configLoadError) toast(configLoadError);
 if (BLANK_EDITION) document.querySelectorAll("[data-studio-only]").forEach((node) => (node.hidden = true));
 if (!OWNER_GUIDE_BASE64) document.querySelectorAll('[data-admin-action="guide"]').forEach((node) => (node.hidden = true));

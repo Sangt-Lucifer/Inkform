@@ -301,6 +301,7 @@ export default {
     "file.studioHtml": "INKFORM_Studio",
     "file.studioSettings": "Inkform_Studio-Einstellungen",
     "file.unknown": "Unbekannt",
+    "file.unknownKind": "Diese Datei ist weder eine INKFORM-Gesamtsicherung noch INKFORM-Studio-Einstellungen, oder sie stammt aus einer neueren App-Version.",
     "file.version": "Dateiversion {version}",
     "filesTest.libraryMissing": "Die eingebettete PDF-Funktion ist nicht verfügbar. Bitte die vollständige App-Datei verwenden.",
     "filesTest.line1": "Dieses Testdokument enthält keine Kundendaten.",

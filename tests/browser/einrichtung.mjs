@@ -81,7 +81,7 @@ const nothingWritten = () => ev(`!localStorage.getItem(SETTINGS_KEY)&&incomeReco
 const setupError = () => ev(`(e=>e.hidden?'':e.textContent)(document.getElementById('setup-file-error'))`);
 await pickSetup(`'{"kind":"etwas"}'`);
 await until(`!document.getElementById('setup-file-error').hidden`);
-check("Fremde Datei: verständliche Meldung, nichts geschrieben, Auswahl bleibt", (await setupError()).includes("keine INKFORM-Studio-Einstellungen") && (await setupError()).includes("nichts geändert") && (await nothingWritten()));
+check("Fremde Datei: verständliche Meldung, nichts geschrieben, Auswahl bleibt", (await setupError()).includes("weder eine INKFORM-Gesamtsicherung noch") && (await setupError()).includes("nichts geändert") && (await nothingWritten()));
 await pickSetup(`${JSON.stringify(JSON.stringify({ ...JSON.parse(backupText), pdfs: [{ id: "fremd", pdf: "JVBERi0=" }] }))}`);
 await until(`(document.getElementById('setup-file-error')?.textContent||'').includes('Einnahmeneintrag')`);
 check("Beschädigte Gesamtsicherung: Meldung, nichts geschrieben", await nothingWritten());

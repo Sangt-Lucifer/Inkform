@@ -115,6 +115,15 @@ await until(`!document.querySelector('[data-backup-ready]').hidden`);
 check("Vor dem Speichern: Anzahl und Größe", /✓ Sicherung bereit: 2 Einträge, 2 PDFs, \d+ KB/.test(await ev(`document.getElementById('backup-summary').textContent`)));
 await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
 await until(`!!window.__shared && document.getElementById('admin-app').textContent.includes('Letzte Gesamtsicherung vor 0 Tagen')`);
+// One tap: a backup ready while the tap still counts opens the share sheet at once.
+await ev(`window.__firstShared=window.__shared;window.__shared=null;openAdminAuthorized('overview')`);
+const panelTop = () => ev(`Math.round(document.getElementById('backup-flow').getBoundingClientRect().top)`);
+await ev(`document.getElementById('backup-flow').scrollIntoView({block:'center'})`);
+const topBefore = await panelTop();
+await cmd("Runtime.evaluate", { expression: `document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`, userGesture: true });
+await until(`!!window.__shared`);
+check("Ein Tipp genügt, wenn die Sicherung schnell bereit ist: Teilen öffnet sofort, ohne Sprung", (await ev(`window.__shared.name===window.__firstShared.name`)) && Math.abs((await panelTop()) - topBefore) < 120);
+await ev(`window.__shared=window.__firstShared`);
 const name = await ev(`window.__shared.name`);
 const json = await ev(`window.__shared.text()`);
 await writeFile(`${OUT}/${name}`, json);
@@ -171,7 +180,7 @@ await restore(`window.__backupText.replace(/"id":"[^"]+","pdf"/,'"id":"fremd","p
 await until(`!document.getElementById('toast').hidden&&document.getElementById('toast').textContent.includes('Wiederherstellen nicht möglich')`);
 check("Beschädigte Sicherung wird abgelehnt, nichts geändert", (await ev(`document.getElementById('toast').textContent.includes('ohne passenden Einnahmeneintrag')`)) && (await unchanged()) && (await archived()) === 1);
 await restore(`'{"kind":"etwas"}'`);
-await until(`document.getElementById('toast').textContent.includes('keine INKFORM-Gesamtsicherung')`);
+await until(`document.getElementById('toast').textContent.includes('weder eine INKFORM-Gesamtsicherung noch')`);
 check("Fremde JSON-Datei wird abgelehnt", await unchanged());
 
 // A restore that fails after the logo was written puts the device's own logo back.

@@ -300,6 +300,7 @@ export default {
     "file.studioHtml": "INKFORM_Studio",
     "file.studioSettings": "Inkform_Studio_Settings",
     "file.unknown": "Unknown",
+    "file.unknownKind": "This file is neither an INKFORM full backup nor INKFORM studio settings, or it comes from a newer app version.",
     "file.version": "File version {version}",
     "filesTest.libraryMissing": "The embedded PDF function is not available. Please use the complete app file.",
     "filesTest.line1": "This test document contains no customer data.",

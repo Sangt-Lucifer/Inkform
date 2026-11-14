@@ -121,7 +121,7 @@ const unchanged = () => ev(`settings.studio.location==='Anders'&&localStorage.ge
 
 await pick(`JSON.stringify({kind:'inkform-gesamtsicherung',schemaVersion:2,createdAt:new Date().toISOString()})`);
 await until(`!document.getElementById('admin-error').hidden`);
-check("Gesamtsicherung im Studio-Import: Hinweis auf „Wiederherstellen“, nichts geändert", (await adminError()).includes("in der Übersicht unter „Wiederherstellen“") && (await unchanged()));
+check("Gesamtsicherung im Studio-Import: als Gesamtsicherung geprüft, unvollständige abgelehnt, nichts geändert", (await adminError()).includes("Die Sicherung enthält kein gültiges") && (await unchanged()));
 await ev(`document.getElementById('admin-error').hidden=true`);
 await pick(`JSON.stringify({...${JSON.stringify(file)},logo:'AAAA'})`);
 await until(`!document.getElementById('admin-error').hidden`);

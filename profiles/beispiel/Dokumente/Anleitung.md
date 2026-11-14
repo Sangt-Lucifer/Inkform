@@ -89,7 +89,7 @@ Admin-Konsole wählen und die Inhaber-PIN eingeben. Bei offenem Admin hat der In
 | Aufbewahrung | Fristen festlegen, Löschliste für fällige PDFs und Anonymisieren alter Namen in der Einnahmenliste. |
 | Datenschutz | Aufbewahrungs- und Löschkriterien, Zugriff / Empfänger und vollständige Datenschutzhinweise bearbeiten. Angaben müssen dem realen Ablauf entsprechen. |
 | iPad & Dateien | Offline-Verfügbarkeit und PDF-Funktion prüfen, Home-Bildschirm-Anleitung öffnen und eine Test-PDF ohne Kundendaten erzeugen. |
-| Design & Sicherung | Light- oder Darkmode wählen, Studio-Einstellungen (Studioangaben, Logo, App-Symbol, Texte, Sprachen, Farbschema, Fristen; ohne Kundendaten) exportieren und importieren, die App als HTML exportieren, nachsehen, was in welcher Datei steckt, und die Standardvorlage laden. Der Import zeigt vorher, was ersetzt wird; Einnahmen, PDFs und PIN bleiben unberührt. |
+| Design & Sicherung | Light- oder Darkmode wählen, Studio-Einstellungen (Studioangaben, Logo, App-Symbol, Texte, Sprachen, Farbschema, Fristen; ohne Kundendaten) exportieren und importieren, die App als HTML exportieren, nachsehen, was in welcher Datei steckt, und die Standardvorlage laden. Der Import zeigt vorher, was ersetzt wird; Einnahmen, PDFs und PIN bleiben unberührt. Wählt man hier eine Gesamtsicherung, erkennt die App sie und spielt sie wie unter Wiederherstellen ein. |
 
 ## Änderungen zuverlässig übernehmen
 
@@ -132,7 +132,7 @@ Ein Eintrag wird beim Erstellen des unterschriebenen Kunden-PDFs automatisch ang
 
 ## Gesamtsicherung
 
-In der Übersicht unter Gesamtsicherung erstellt Sicherung erstellen eine Datei mit allem, was zum Wiederherstellen nötig ist: Studioeinstellungen, Farbschema, eigenes Logo und App-Symbol, Einnahmenliste, Fristen, Export-Protokoll, Erinnerungsabstand und die PDF-Kopien in der App. Nicht enthalten sind die PIN und eine noch offene Einwilligung. Danach erscheint ein grüner Kasten mit Anzahl und Größe: Jetzt in Dateien sichern tippen, im Teilen-Fenster In Dateien sichern wählen und die Datei Auf meinem iPad sowie zusätzlich auf dem Mac in einem verschlüsselten Ordner ablegen. Die Datei enthält Gesundheitsangaben und Unterschriften; nicht in iCloud Drive ablegen.
+In der Übersicht unter Gesamtsicherung erstellt Sicherung erstellen eine Datei mit allem, was zum Wiederherstellen nötig ist: Studioeinstellungen, Farbschema, eigenes Logo und App-Symbol, Einnahmenliste, Fristen, Export-Protokoll, Erinnerungsabstand und die PDF-Kopien in der App. Logo und App-Symbol des Studios sind auch dann dabei, wenn sie mit der App ausgeliefert wurden, damit eine andere Fassung der App nach dem Wiederherstellen gleich aussieht. Nicht enthalten sind die PIN und eine noch offene Einwilligung. Danach erscheint ein grüner Kasten mit Anzahl und Größe: Jetzt in Dateien sichern tippen, im Teilen-Fenster In Dateien sichern wählen und die Datei Auf meinem iPad sowie zusätzlich auf dem Mac in einem verschlüsselten Ordner ablegen. Die Datei enthält Gesundheitsangaben und Unterschriften; nicht in iCloud Drive ablegen.
 
 Die Übersicht erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist (1, 3, 7, 14 oder 30 Tage, Standard 7). Mindestens wöchentlich sichern, besser nach jedem Arbeitstag, zusätzlich vor Updates, Gerätewechseln oder dem Löschen von Browserdaten.
 

@@ -20,6 +20,7 @@ await offline(true);
 await reload();
 await ev(HELPERS);
 check("Offline geladen: Service Worker liefert die App im Flugmodus", await ev(`!!navigator.serviceWorker.controller&&BLANK_EDITION===true`));
+check("Neutrales Logo und Symbol gehen nicht in Sicherungen", await ev(`builtInIcon().then(i=>builtInLogo===null&&i===null)`));
 check("Seitentitel ohne Studionamen beginnt mit der Marke", await ev(`document.title==='INKFORM — Tattoo-Einwilligung'||document.title==='INKFORM — Admin-Konsole'`));
 check("Keine Mac-Hinweise und keine Anleitung", await ev(`[...document.querySelectorAll('[data-studio-only]')].every(n=>n.hidden)&&[...document.querySelectorAll('[data-admin-action="guide"]')].every(n=>n.hidden)`));
 
