@@ -560,7 +560,6 @@ export function createIncomeFeature({
       return `<section class="ad-panel"><div class="ad-panel-header"><h2>${th("retention.title")}</h2></div><div class="ad-panel-body">
       <p class="ad-section-copy">${th("retention.intro")}</p>
       <div class="ad-fields">${field("retention-pdf-years", th("retention.pdfYears"), pdfYears, th("retention.pdfYearsHelp"))}${field("retention-income-years", th("retention.incomeYears"), incomeYears, th("retention.incomeYearsHelp"))}</div>
-      <div class="ad-actions-row"><button class="ad-button primary" data-retention-action="save">${th("retention.save")}</button></div>
       <p class="ad-preview-note">${th("retention.deviceOnly")}</p>
       </div></section>
       <section class="ad-panel"><div class="ad-panel-header"><h2>${th("retention.pdfList")}</h2><small>${th("retention.markedCount", { anzahl: deleted })}</small></div><div class="ad-panel-body">
@@ -589,7 +588,7 @@ export function createIncomeFeature({
           : ""
       }
       ${anonRows ? `<div class="income-table-wrap"><table class="income-table"><caption>${th(anonDue.length > 50 ? "retention.previewFirst" : "retention.preview")}</caption><thead><tr><th>${th("pdf.appointment")}</th><th>${th("csv.artist")}</th><th>${th("csv.name")}</th><th>${th("income.colTotal")}</th></tr></thead><tbody>${anonRows}</tbody></table></div>` : ""}
-      <div class="ad-actions-row"><button class="ad-button" data-income-action="backup">${th("retention.backupFirst")}</button><button class="ad-button danger" data-retention-action="anonymize"${anonDue.length ? "" : " disabled"}>${th("retention.anonymize", { anzahl: anonDue.length })}</button></div>`
+      <div class="ad-actions-row"><button class="ad-button" type="button" data-admin-page="overview">${th("retention.backupFirst")}</button><button class="ad-button danger" data-retention-action="anonymize"${anonDue.length ? "" : " disabled"}>${th("retention.anonymize", { anzahl: anonDue.length })}</button></div>`
       }
       </div></section>`;
     } catch (error) {
@@ -674,7 +673,51 @@ export function createIncomeFeature({
       } else filters[key] = event.target.value;
       refresh();
     }
+    if (RETENTION_FIELD.test(event.target.id) && isUnlocked()) {
+      try {
+        saveRetentionFields();
+      } catch (error) {
+        notify(`${event.target.labels[0]?.textContent ?? ""}: ${error.message}`);
+        return;
+      }
+      if (pressing) retentionStale = true;
+      else setTimeout(redrawRetention);
+      notify(t("retention.saved"));
+    }
   });
+  // Deadlines are saved while typing (when valid), so a page switch, lock or reload keeps them;
+  // the lists follow once the field is left. A tap in progress finishes on the old buttons first.
+  const RETENTION_FIELD = /^retention-(pdf|income)-years$/;
+  let pressing = false,
+    retentionStale = false;
+  const saveRetentionFields = () =>
+    writeRetention(storage, {
+      pdfYears: document.getElementById("retention-pdf-years").value,
+      incomeYears: document.getElementById("retention-income-years").value,
+    });
+  function redrawRetention() {
+    retentionStale = false;
+    const focused = document.activeElement?.id;
+    refresh();
+    if (focused) document.getElementById(focused)?.focus();
+  }
+  document.getElementById("admin-app").addEventListener("input", (event) => {
+    if (!RETENTION_FIELD.test(event.target.id) || !isUnlocked()) return;
+    try {
+      saveRetentionFields();
+    } catch (_) {}
+  });
+  const admin = document.getElementById("admin-app");
+  admin.addEventListener("pointerdown", () => (pressing = true), true);
+  for (const type of ["pointerup", "pointercancel"])
+    admin.addEventListener(
+      type,
+      () => {
+        pressing = false;
+        if (retentionStale) setTimeout(redrawRetention);
+      },
+      true,
+    );
   document.getElementById("admin-app").addEventListener("click", (event) => {
     const button = event.target.closest("button");
     if (!button || !isUnlocked()) return;
@@ -698,14 +741,6 @@ export function createIncomeFeature({
           refresh();
           notify(t("retention.marked"));
         }
-      }
-      if (button.dataset.retentionAction === "save") {
-        writeRetention(storage, {
-          pdfYears: document.getElementById("retention-pdf-years").value,
-          incomeYears: document.getElementById("retention-income-years").value,
-        });
-        refresh();
-        notify(t("retention.saved"));
       }
       if (button.dataset.retentionAction === "anonymize") {
         const day = today(),

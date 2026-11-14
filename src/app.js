@@ -1701,6 +1701,11 @@ async function createBackup() {
   preparedBackup = null;
   ready.hidden = true;
   note.textContent = "";
+  // The backup holds the saved state only; open edits would be missing without notice.
+  if (adminChanged()) {
+    note.textContent = t("backup.unsaved");
+    return;
+  }
   start.disabled = true;
   start.querySelector("span").textContent = t("backup.creating");
   $("backup-flow").scrollIntoView({ behavior: "instant", block: "nearest" });

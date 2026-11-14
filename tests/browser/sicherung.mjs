@@ -110,6 +110,12 @@ check("Logo-Bereich zeigt „Logo entfernen“, sobald das gespeicherte Logo gel
 await ev(`openAdminAuthorized('overview');navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]}`);
 
 // Create and save the backup -----------------------------------------------------------------
+await ev(`adminDraft.studio.location='Ungespeichert';updateAdminChrome();window.__shared=null;document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`);
+check(
+  "Offene Änderungen: keine Sicherung, Hinweis am Knopf",
+  await ev(`document.getElementById('backup-note').textContent===t('backup.unsaved')&&document.querySelector('[data-backup-ready]').hidden&&!window.__shared`),
+);
+await ev(`adminDraft=clone(settings);renderAdminSection()`);
 await ev(`window.__shared=null;document.querySelector('.ad-panel [data-admin-action="backup-create"]').click()`);
 await until(`!document.querySelector('[data-backup-ready]').hidden`);
 check("Vor dem Speichern: Anzahl und Größe", /✓ Sicherung bereit: 2 Einträge, 2 PDFs, \d+ KB/.test(await ev(`document.getElementById('backup-summary').textContent`)));
