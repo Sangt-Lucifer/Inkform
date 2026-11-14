@@ -2,7 +2,7 @@
 // real app (hosted build, offline after the first load). Synthetic test data only.
 import { HELPERS, ORIGIN, connect } from "./lib.mjs";
 
-const { cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors } = await connect();
+const { cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors, answer } = await connect();
 await cmd("Emulation.setDeviceMetricsOverride", { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
 const reset = await cmd("Page.addScriptToEvaluateOnNewDocument", {
   source: `try{localStorage.clear();sessionStorage.clear();indexedDB.deleteDatabase('inkform-pending')}catch(_){}`,
@@ -77,12 +77,14 @@ await ev(`openAdminAuthorized('retention')`);
 await deadlines({ income: '10' });
 await screenshot("aufbewahrung-seite");
 await ev(`document.querySelector('[data-retention-deleted="r1"]').click()`);
+await answer();
 check("Als gelöscht markiert: Datum gespeichert, Eintrag verschwindet aus der Liste", await ev(`incomeRecords().find(r=>r.id==='r1').pdfDeletedAt===localDate()&&!document.querySelector('[data-retention-deleted="r1"]')`));
 
 // Anonymization after 10 years: r1 and r4.
 check("Vor dem Anonymisieren: Verweis auf die Gesamtsicherung statt auf eine Einnahmen-Datei", await ev(`(b=>!!b&&b.textContent.trim()===t('retention.backupFirst')&&!document.querySelector('#retention-content [data-income-action="backup"]'))(document.querySelector('#retention-content [data-admin-page="backup"]'))`));
 check("Vorschau: 2 Einträge zur Anonymisierung", await ev(`document.querySelector('[data-retention-action="anonymize"]').textContent.includes('2 Einträge')`));
 await ev(`document.querySelector('[data-retention-action="anonymize"]').click()`);
+await answer();
 check("Anonymisiert: Name und PDF-Dateiname entfernt, Beträge erhalten", await ev(`(()=>{const r=incomeRecords();const a=r.filter(x=>x.anonymizedAt);return a.length===2&&a.every(x=>x.customer==='anonymisiert'&&x.source===''&&x.totalCents===20000)&&r.find(x=>x.id==='r2').customer==='Alt r2'})()`));
 check("Zweiter Durchlauf findet nichts mehr", await ev(`document.querySelector('[data-retention-action="anonymize"]').disabled`));
 // An entry whose PDF may still exist waits; anonymized entries stay anonymized.

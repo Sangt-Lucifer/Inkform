@@ -296,6 +296,7 @@ export function createIncomeFeature({
   hasCopy = async () => false,
   recordRemoved = (ids, write) => write(),
   beforeRemove = () => {},
+  ask,
 }) {
   const store = createIncomeStore(storage);
   const filters = { artist: "", unassigned: false, year: today().slice(0, 4), month: "" };
@@ -326,6 +327,15 @@ export function createIncomeFeature({
   editor
     .querySelectorAll("[data-income-cancel]")
     .forEach((b) => b.addEventListener("click", () => editor.close()));
+  // Runs the change only once the owner has confirmed it and the admin area is still unlocked.
+  async function confirmed(question, change) {
+    if (!(await ask(question)) || !isUnlocked()) return;
+    try {
+      change();
+    } catch (error) {
+      notify("Einnahmen: " + error.message);
+    }
+  }
   function failure(error) {
     const node = editor.querySelector("#income-edit-error");
     node.textContent = t("income.notSaved", { fehler: error.message });
@@ -391,8 +401,9 @@ export function createIncomeFeature({
       const removesCopy = !!editing && row.pdfMissing && !editing.pdfMissing && !editing.pdfRemovedAt && (await hasCopy(row.id));
       if (
         removesCopy &&
-        !window.confirm(
-          t("income.missingRemovesCopy"),
+        !(
+          (await ask({ title: t("ask.missing.title"), text: t("ask.missing.copy"), confirm: t("ask.missing.confirm") })) &&
+          isUnlocked()
         )
       )
         return;
@@ -422,12 +433,13 @@ export function createIncomeFeature({
       if (file.size > 10 * 1024 * 1024) throw Error(t("income.backupTooLarge"));
       const backup = JSON.parse(await file.text()),
         rows = validateIncomeBackup(backup);
-      if (
-        !window.confirm(
-          t("income.importQuestion", { anzahl: rows.length }),
-        )
-      )
-        return;
+      const take = await ask({
+        title: t("ask.incomeImport.title", { anzahl: rows.length }),
+        text: t("ask.incomeImport.copy"),
+        confirm: t("ask.import.confirm"),
+        danger: false,
+      });
+      if (!take || !isUnlocked()) return;
       store.merge(backup);
       refresh();
       notify(t("income.imported"));
@@ -724,37 +736,41 @@ export function createIncomeFeature({
     try {
       if (button.dataset.retentionDeleted) {
         const row = store.list().find((r) => r.id === button.dataset.retentionDeleted);
-        if (
-          row &&
-          window.confirm(
-            row.source
-              ? t("retention.confirmFile", { datei: row.source })
-              : t("retention.confirmName", { name: row.customer }),
-          )
-        ) {
-          store.updateMany([
+        if (row)
+          confirmed(
             {
-              record: { ...row, pdfDeletedAt: today(), updatedAt: new Date().toISOString() },
-              expected: row.updatedAt,
+              title: t("ask.pdfDeleted.title"),
+              text: row.source ? t("retention.confirmFile", { datei: row.source }) : t("retention.confirmName", { name: row.customer }),
+              confirm: t("ask.pdfDeleted.confirm"),
             },
-          ]);
-          refresh();
-          notify(t("retention.marked"));
-        }
+            () => {
+              store.updateMany([
+                {
+                  record: { ...row, pdfDeletedAt: today(), updatedAt: new Date().toISOString() },
+                  expected: row.updatedAt,
+                },
+              ]);
+              refresh();
+              notify(t("retention.marked"));
+            },
+          );
       }
       if (button.dataset.retentionAction === "anonymize") {
         const day = today(),
           rows = dueForAnonymization(store.list(), readRetention(storage).incomeYears, day);
-        if (
-          rows.length &&
-          window.confirm(
-            t("retention.anonQuestion", { anzahl: rows.length }),
-          )
-        ) {
-          store.updateMany(rows.map((r) => ({ record: anonymizeRecord(r, day), expected: r.updatedAt })));
-          refresh();
-          notify(t("retention.anonDone", { anzahl: rows.length }));
-        }
+        if (rows.length)
+          confirmed(
+            {
+              title: t("ask.anonymize.title", { anzahl: rows.length }),
+              text: t("ask.anonymize.copy"),
+              confirm: t("ask.anonymize.confirm"),
+            },
+            () => {
+              store.updateMany(rows.map((r) => ({ record: anonymizeRecord(r, day), expected: r.updatedAt })));
+              refresh();
+              notify(t("retention.anonDone", { anzahl: rows.length }));
+            },
+          );
       }
       if (button.dataset.incomeCopy) {
         const row = store.list().find((r) => r.id === button.dataset.incomeCopy);
@@ -764,16 +780,19 @@ export function createIncomeFeature({
         openEdit(store.list().find((r) => r.id === button.dataset.incomeEdit));
       if (button.dataset.incomeRemove) {
         const row = store.list().find((r) => r.id === button.dataset.incomeRemove);
-        if (
-          row &&
-          window.confirm(
-            t("income.removeQuestion", { name: row.customer, datum: row.date }),
-          )
-        ) {
-          beforeRemove([row]);
-          store.remove(row.id, row.updatedAt);
-          refresh();
-        }
+        if (row)
+          confirmed(
+            {
+              title: t("ask.entry.title", { name: row.customer, datum: dateDe(row.date) }),
+              text: t("ask.entry.copy"),
+              confirm: t("ask.entry.confirm"),
+            },
+            () => {
+              beforeRemove([row]);
+              store.remove(row.id, row.updatedAt);
+              refresh();
+            },
+          );
       }
       switch (button.dataset.incomeAction) {
         case "add":

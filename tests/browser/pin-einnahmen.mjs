@@ -89,6 +89,8 @@ check('Financial JSON backup includes all years and no medical data',await ev(`(
 await ev(`exportHtml()`);
 check('App HTML export excludes persisted ledger, PIN hash and customer names',await ev(`(async()=>{const text=await window.__downloadBlob.text();return !text.includes('OLD-LEDGER')&&!text.includes('LEDGER-TEST PERSON')&&!text.includes(JSON.parse(localStorage.getItem(ADMIN_PIN_KEY)).hash)})()`));
 await ev(`window.__incoming={schemaVersion:1,records:[{id:'import-extra',date:'2026-11-07',artist:'Alex',customer:'Import-Test',totalCents:30000,depositCents:null,source:'import.pdf',updatedAt:new Date().toISOString()}]};const dt=new DataTransfer();dt.items.add(new File([JSON.stringify(window.__incoming)],'income.json',{type:'application/json'}));document.getElementById('income-import-file').files=dt.files;document.getElementById('income-import-file').dispatchEvent(new Event('change',{bubbles:true}));`);
+await until(`document.getElementById('confirm-dialog').open&&!document.getElementById('confirm-ok').classList.contains('danger')`);
+await ev(`document.getElementById('confirm-ok').click()`);
 await until(`JSON.parse(localStorage.getItem(INCOME_KEY)).records.length===4`);
 check('Financial backup import merges locally and updates totals',await ev(`document.querySelector('.income-summary').textContent.includes('1.000,50')`));
 await ev(`setTheme('dark',false)`);

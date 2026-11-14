@@ -715,6 +715,31 @@ function showDialog(id) {
     $("reset-save-warning").hidden = !pdfArtifact || pdfArtifact.isTest || pdfArtifact.confirmed;
   $(id).showModal();
 }
+// One window for every question before deleting or replacing data: resolves true only on the
+// confirm button; cancel, Escape and any other close (e.g. locking) resolve false.
+let confirmAnswer = null;
+function askConfirm({ title, text, confirm, danger = true }) {
+  answerConfirm(false);
+  $("confirm-title").textContent = title;
+  $("confirm-text").textContent = text;
+  $("confirm-ok").textContent = confirm;
+  $("confirm-ok").classList.toggle("danger", danger);
+  if (!$("confirm-dialog").open) $("confirm-dialog").showModal();
+  $("confirm-cancel").focus();
+  return new Promise((resolve) => (confirmAnswer = resolve));
+}
+function answerConfirm(value) {
+  const answer = confirmAnswer;
+  confirmAnswer = null;
+  answer?.(value);
+}
+$("confirm-ok").addEventListener("click", () => {
+  answerConfirm(true);
+  $("confirm-dialog").close();
+});
+$("confirm-dialog").addEventListener("close", () => {
+  if (!$("confirm-dialog").open) answerConfirm(false);
+});
 document
   .querySelectorAll("[data-open]")
   .forEach((button) => button.addEventListener("click", () => showDialog(button.dataset.open)));
@@ -1904,22 +1929,24 @@ async function applyChosenFile(file) {
 // without an entry are removed by the next sync).
 async function restoreBackup(value) {
   const data = readFullBackup(value, validateSettings),
-    { removed, records, pdfs, skipped } = applyRemovals(data, readRemovedIds(localStorage), incomeFeature.list(), localDate());
+    removals = () => applyRemovals(data, readRemovedIds(localStorage), incomeFeature.list(), localDate()),
+    { skipped } = removals();
   await checkReadable(data.logo, "backup.invalidLogo");
   await checkReadable(data.icon, "backup.invalidIcon");
-  if (
-    !window.confirm(
-      [
-        t("restore.question", { datum: timeFormat(new Date(data.createdAt)) }),
-        t("restore.contents", { eintraege: data.records.length, pdfs: data.pdfs.length }) +
-          (skipped ? " " + t("restore.skipped", { anzahl: skipped }) : ""),
-        customisationLines(data).join("\n"),
-        t("restore.replaces", { eintraege: incomeFeature.list().length }),
-        t("file.version", { version: data.version }),
-      ].join("\n\n"),
-    )
-  )
-    return false;
+  const replace = await askConfirm({
+    title: t("restore.question", { datum: timeFormat(new Date(data.createdAt)) }),
+    text: [
+      t("restore.contents", { eintraege: data.records.length, pdfs: data.pdfs.length }) +
+        (skipped ? " " + t("restore.skipped", { anzahl: skipped }) : ""),
+      customisationLines(data).join("\n"),
+      t("restore.replaces", { eintraege: incomeFeature.list().length }),
+      t("file.version", { version: data.version }),
+    ].join("\n\n"),
+    confirm: t("ask.restore.confirm"),
+  });
+  if (!replace || !adminAccess.isUnlocked()) return false;
+  // Copies deleted in another window while the question was open stay deleted.
+  const { removed, records, pdfs } = removals();
   await writeCustomisations(data, {
     before: async () => {
       await exportFeature.restore(pdfs);
@@ -1940,7 +1967,8 @@ async function importStudio(value) {
   const data = readStudioSettings(value, validateSettings);
   await checkReadable(data.logo, "backup.invalidLogo");
   await checkReadable(data.icon, "backup.invalidIcon");
-  if (!window.confirm(studioPreview(data))) return false;
+  if (!(await askConfirm({ ...studioPreview(data), confirm: t("ask.import.confirm"), danger: false })) || !adminAccess.isUnlocked())
+    return false;
   await writeCustomisations(data);
   sessionStorage.setItem("inkform.studioImported", "1");
   return true;
@@ -2124,7 +2152,8 @@ logoPicker.addEventListener("change", async () => {
   }
 });
 async function removeLogo() {
-  if (!window.confirm(t("logo.removeQuestion"))) return;
+  if (!(await askConfirm({ title: t("ask.logo.title"), text: t("ask.logo.copy"), confirm: t("ask.logo.confirm") })) || !adminAccess.isUnlocked())
+    return;
   try {
     await logoStore.delete(LOGO_KEY);
     showLogo(null);
@@ -2278,7 +2307,11 @@ async function iconAction(action, background) {
     showIcon(bytes);
     return toast(t("icon.saved"));
   }
-  if (action === "icon-remove" && window.confirm(t("icon.removeQuestion"))) {
+  if (
+    action === "icon-remove" &&
+    (await askConfirm({ title: t("ask.icon.title"), text: t("ask.icon.copy"), confirm: t("ask.icon.confirm") })) &&
+    adminAccess.isUnlocked()
+  ) {
     await logoStore.delete(ICON_KEY);
     showIcon(null);
     toast(t("icon.removed"));
@@ -3769,12 +3802,10 @@ function customisationLines(data) {
   ];
 }
 function studioPreview(data) {
-  return [
-    data.createdAt ? t("studioFile.question", { datum: timeFormat(new Date(data.createdAt)) }) : t("studioFile.questionOld"),
-    ...customisationLines(data),
-    t("studioFile.untouched"),
-    ...(data.version ? [t("file.version", { version: data.version })] : []),
-  ].join("\n\n");
+  return {
+    title: data.createdAt ? t("studioFile.question", { datum: timeFormat(new Date(data.createdAt)) }) : t("studioFile.questionOld"),
+    text: [...customisationLines(data), t("studioFile.untouched"), ...(data.version ? [t("file.version", { version: data.version })] : [])].join("\n\n"),
+  };
 }
 window.addEventListener("keydown", (event) => {
   if (adminOpen && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
@@ -3831,14 +3862,14 @@ incomeFeature = createIncomeFeature({
     const marked = rows.filter((r) => r.pdfRemovedAt).map((r) => r.id);
     if (marked.length) addRemovedIds(localStorage, marked);
   },
-  removeCopy: (row) => {
-    if (
-      window.confirm(
-        t("copies.removeOneQuestion", { name: row.customer, datum: dateFormat(row.date) }) +
-          "\n\n" +
-          t("copies.removeOneDetail"),
-      )
-    )
+  ask: (options) => askConfirm(options),
+  removeCopy: async (row) => {
+    const remove = await askConfirm({
+      title: t("ask.copy.title", { name: row.customer, datum: dateFormat(row.date) }),
+      text: t("ask.copy.copy"),
+      confirm: t("ask.copy.confirm"),
+    });
+    if (remove && adminAccess.isUnlocked())
       removePdfCopies([{ id: row.id, updatedAt: row.updatedAt }]).then(
         () => toast(t("copies.removedOne")),
         (error) => toast(t("copies.removeOneFailed", { fehler: error.message })),
@@ -3856,6 +3887,7 @@ exportFeature = createExportFeature({
   exportLog: () => readExportLog(localStorage),
   removedIds: () => readRemovedIds(localStorage),
   removeCopies: removePdfCopies,
+  ask: (options) => askConfirm(options),
   logExport: (entry) =>
     localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify([...readExportLog(localStorage), entry].slice(-1000))),
   today: localDate,

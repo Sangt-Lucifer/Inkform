@@ -9,7 +9,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { pdfText } from "../lib/leaks.mjs";
 import { HELPERS, OUT, ORIGIN, connect } from "./lib.mjs";
 
-const { cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors } = await connect();
+const { cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors, answer } = await connect();
 await cmd("Emulation.setDeviceMetricsOverride", { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
 const reset = await cmd("Page.addScriptToEvaluateOnNewDocument", {
   source: `try{localStorage.clear();sessionStorage.clear();indexedDB.deleteDatabase('inkform-pending');indexedDB.deleteDatabase('inkform-archive')}catch(_){}`,
@@ -57,8 +57,10 @@ const idOf = (name) => `incomeRecords().find(r=>r.customer===${JSON.stringify(na
 await ev(`document.querySelector('[data-income-edit="'+${idOf("Ayşe Yıldız")}+'"]').click()`);
 await until(`document.getElementById('income-editor').open`);
 await ev(`document.getElementById('income-pdf-missing').click();document.getElementById('income-edit-form').requestSubmit()`);
+await answer();
 await until(`!document.getElementById('income-editor').open`);
 await ev(`document.querySelector('[data-income-remove="'+${idOf("Lena Weg")}+'"]').click()`);
+await answer();
 await until(`incomeRecords().length===6`);
 await until(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length===5)`);
 check("„PDF fehlt“ und entfernter Eintrag: PDF auch aus dem Export-Speicher gelöscht", (await archived()) === 5);

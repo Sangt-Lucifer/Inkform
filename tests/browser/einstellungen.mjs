@@ -7,7 +7,7 @@
 import { writeFile } from "node:fs/promises";
 import { HELPERS, OUT, ORIGIN, connect } from "./lib.mjs";
 
-const { cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors } = await connect();
+const { cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors, answer } = await connect();
 await cmd("Emulation.setDeviceMetricsOverride", { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
 const reset = await cmd("Page.addScriptToEvaluateOnNewDocument", {
   source: `try{localStorage.clear();sessionStorage.clear();indexedDB.deleteDatabase('inkform-pending');indexedDB.deleteDatabase('inkform-archive');indexedDB.deleteDatabase('inkform-logo')}catch(_){}`,
@@ -121,7 +121,7 @@ check(
 );
 
 // Change everything, then import --------------------------------------------------------------
-await ev(`window.__c=window.confirm;window.confirm=()=>true;openAdminAuthorized('studio');document.querySelector('[data-admin-action="logo-remove"]').click();document.querySelector('[data-admin-action="icon-remove"]').click();window.confirm=window.__c`);
+await ev(`askWith(()=>true);openAdminAuthorized('studio');document.querySelector('[data-admin-action="logo-remove"]').click();document.querySelector('[data-admin-action="icon-remove"]').click();askReal()`);
 await until(`!document.querySelector('.studio-logo').src.startsWith('blob:')&&!ownIcon`);
 await setLocation("Anders");
 await ev(`writeRetention(localStorage,{pdfYears:null,incomeYears:null});localStorage.setItem(BACKUP_INTERVAL_KEY,'3');setTheme('dark');openAdminAuthorized('backup')`);
@@ -149,7 +149,7 @@ await until(`!document.getElementById('restore-error').hidden`);
 check("Unlesbares App-Symbol: ganze Datei abgelehnt, nichts geändert", (await adminError()).includes("ungültiges App-Symbol") && (await unchanged()));
 await ev(`document.getElementById('restore-error').hidden=true`);
 
-await ev(`window.confirm=(m)=>{window.__question=m;return false}`);
+await ev(`askWith((m)=>{window.__question=m;return false})`);
 await ev(`window.__studioText=${JSON.stringify(json)}`);
 await pick(`window.__studioText`);
 await until(`!!window.__question`);
@@ -168,7 +168,7 @@ check(
 );
 check("Abbrechen ändert nichts", await unchanged());
 
-await ev(`window.confirm=()=>true`);
+await ev(`askWith(()=>true)`);
 await pick(`window.__studioText`);
 await until(`typeof adminAccess!=='undefined' && !window.__studioText && document.readyState==='complete' && document.getElementById('toast').textContent.includes('Studio-Einstellungen übernommen')`);
 await ev(HELPERS);
@@ -184,6 +184,7 @@ check("PIN unverändert", await ev(`adminAccess.configured()`));
 await unlock("backup");
 await ev(`window.__oldFile=${JSON.stringify(JSON.stringify({ ...file.settings, studio: { ...file.settings.studio, location: "Altdatei" }, theme: "dark" }))}`);
 await pick(`window.__oldFile`);
+await answer();
 await until(`typeof adminAccess!=='undefined' && !window.__oldFile && document.readyState==='complete' && document.getElementById('toast').textContent.includes('Studio-Einstellungen übernommen')`);
 await ev(HELPERS);
 await until(`document.querySelector('.studio-logo').src.startsWith('blob:')`);
@@ -198,11 +199,11 @@ check("HTML-Datei behält das eingebaute Logo", await ev(`Promise.all([window.__
 
 // Customer form in progress or a consent open: no import.
 await ev(`(f=>{f.value='Halb';f.dispatchEvent(new Event('input',{bubbles:true}))})(document.getElementById('firstName'));document.getElementById('restore-error').hidden=true`);
-await ev(`window.__c3=window.confirm;window.confirm=()=>{window.__asked=true;return true};window.__studioText2=${JSON.stringify(json)}`);
+await ev(`askWith(()=>{window.__asked=true;return true});window.__studioText2=${JSON.stringify(json)}`);
 await pick(`window.__studioText2`);
 await until(`!document.getElementById('restore-error').hidden`);
 check("Angefangenes Kundenformular: Import gesperrt, keine Rückfrage", (await adminError()).includes("Kundenformular abschließen oder leeren") && !(await ev(`!!window.__asked`)) && (await ev(`settings.studio.location==='Altdatei'`)));
-await ev(`resetCustomerForm();window.confirm=window.__c3`);
+await ev(`resetCustomerForm();askReal()`);
 
 check("Keine Netzwerkzugriffe außer der lokalen Vorschau", requests.every((u) => !/^https?:/.test(u) || u.startsWith(ORIGIN)));
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0);

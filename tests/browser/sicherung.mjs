@@ -9,7 +9,7 @@
 import { writeFile } from "node:fs/promises";
 import { HELPERS, OUT, ORIGIN, connect } from "./lib.mjs";
 
-const { cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors } = await connect();
+const { cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors, answer } = await connect();
 await cmd("Emulation.setDeviceMetricsOverride", { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
 const reset = await cmd("Page.addScriptToEvaluateOnNewDocument", {
   source: `try{localStorage.clear();sessionStorage.clear();indexedDB.deleteDatabase('inkform-pending');indexedDB.deleteDatabase('inkform-archive');indexedDB.deleteDatabase('inkform-logo')}catch(_){}`,
@@ -178,9 +178,10 @@ check("Sicherung kurz vor Mitternacht: nicht „heute“", await ev(`!document.g
 // Change data after the backup --------------------------------------------------------------
 await ev(`openAdminAuthorized('income');(()=>{const el=document.getElementById('income-filter-year');el.value='';el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
 await ev(`document.querySelector('[data-income-remove="'+incomeRecords().find(r=>r.customer==='Gül Şahin').id+'"]').click()`);
+await answer();
 await until(`incomeRecords().length===1`);
 await until(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length===1)`);
-await ev(`openAdminAuthorized('studio');window.__c=window.confirm;window.confirm=()=>true;document.querySelector('[data-admin-action="logo-remove"]').click();window.confirm=window.__c`);
+await ev(`openAdminAuthorized('studio');askWith(()=>true);document.querySelector('[data-admin-action="logo-remove"]').click();askReal()`);
 await toastSays("Eigenes Logo entfernt");
 check("Logo entfernt: wieder das eingebaute", (await ownLogo()) === "keins" && (await ev(`document.querySelector('.studio-logo').src.startsWith('data:image/png')`)));
 await ev(`openAdminAuthorized('studio');(l=>{l.value='Anders';l.dispatchEvent(new Event('input',{bubbles:true}))})(document.getElementById('admin-studio-location'));saveAdmin();setTheme('dark');openAdminAuthorized('overview')`);
@@ -188,7 +189,7 @@ const restore = (source) =>
   ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([${source}],'sicherung.json',{type:'application/json'}));const i=document.getElementById('backup-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
 const unchanged = () => ev(`incomeRecords().length===1&&JSON.parse(localStorage.getItem(SETTINGS_KEY)).studio.location==='Anders'&&localStorage.getItem(THEME_KEY)==='dark'`);
 
-await ev(`window.__confirm=window.confirm;window.confirm=(m)=>{window.__question=m;return false}`);
+await ev(`askWith((m)=>{window.__question=m;return false})`);
 await ev(`window.__shared.text().then(t=>window.__backupText=t)`);
 await until(`!!window.__backupText`);
 await restore(`window.__backupText`);
@@ -200,7 +201,7 @@ check(
 );
 check("Abbrechen ändert nichts", (await unchanged()) && (await archived()) === 1 && (await ownLogo()) === "keins");
 
-await ev(`window.confirm=window.__confirm`);
+await ev(`askReal()`);
 await restore(`window.__backupText.replace(/"id":"[^"]+","pdf"/,'"id":"fremd","pdf"')`);
 await until(`!document.getElementById('toast').hidden&&document.getElementById('toast').textContent.includes('Wiederherstellen nicht möglich')`);
 check("Beschädigte Sicherung wird abgelehnt, nichts geändert", (await ev(`document.getElementById('toast').textContent.includes('ohne passenden Einnahmeneintrag')`)) && (await unchanged()) && (await archived()) === 1);
@@ -209,7 +210,7 @@ await until(`document.getElementById('toast').textContent.includes('weder eine I
 check("Fremde JSON-Datei wird abgelehnt", await unchanged());
 
 // A restore that fails after the logo was written puts the device's own logo back.
-await ev(`window.__restorePdfs=exportFeature.restore;exportFeature.restore=()=>Promise.reject(Error('Testfehler'));window.__c2=window.confirm;window.confirm=()=>true`);
+await ev(`window.__restorePdfs=exportFeature.restore;exportFeature.restore=()=>Promise.reject(Error('Testfehler'));askWith(()=>true)`);
 await restore(`window.__backupText`);
 await toastSays("Testfehler");
 check("Scheitert das Wiederherstellen nach dem Logo, bleibt das Logo des Geräts", (await ownLogo()) === "keins" && (await unchanged()));
@@ -220,10 +221,11 @@ await ev(`window.__set=Storage.prototype.setItem;Storage.prototype.setItem=funct
 await restore(`window.__backupText`);
 await toastSays("voll");
 check("Speicher voll beim Wiederherstellen: Einnahmen, Einstellungen und Logo wie vorher", (await unchanged()) && (await ownLogo()) === "keins");
-await ev(`Storage.prototype.setItem=window.__set;window.confirm=window.__c2`);
+await ev(`Storage.prototype.setItem=window.__set;askReal()`);
 
 // Confirmed restore: everything replaced, page reloads, PIN unchanged.
 await restore(`window.__backupText`);
+await answer();
 await until(`typeof adminAccess!=='undefined' && document.readyState==='complete' && document.getElementById('toast').textContent.includes('Sicherung wiederhergestellt')`);
 await ev(HELPERS);
 check("Nach dem Wiederherstellen neu geladen, mit Hinweis", await ev(`!window.__backupText`));
@@ -249,10 +251,25 @@ old.schemaVersion = 1;
 delete old.logo;
 await ev(`window.__oldBackup=${JSON.stringify(JSON.stringify(old))}`);
 await restore(`window.__oldBackup`);
+await answer();
 await until(`typeof adminAccess!=='undefined' && !window.__oldBackup && document.readyState==='complete' && document.getElementById('toast').textContent.includes('Sicherung wiederhergestellt')`);
 await ev(HELPERS);
 await until(`document.querySelector('.studio-logo').src.startsWith('blob:')`);
 check("Ältere Sicherung ohne Logo: wiederhergestellt, Logo bleibt", (await ev(`incomeRecords().length===2`)) && (await ownLogo()) === "512x171 sichtbar");
+
+// A copy deleted in another window while the question is open stays deleted after the restore.
+await ev(`openAdmin('backup')`);
+await until(`document.getElementById('admin-pin-dialog').open`);
+await ev(`unlockAdmin()`);
+await until(`adminAccess.isUnlocked() && !!document.getElementById('backup-file')`);
+await ev(`window.__again=${JSON.stringify(json)};askWith(()=>{window.__gone=incomeRecords()[0].id;sessionStorage.setItem('probe.gone',window.__gone);addRemovedIds(localStorage,[window.__gone]);return true})`);
+await restore(`window.__again`);
+await until(`typeof adminAccess!=='undefined' && !window.__again && document.readyState==='complete' && document.getElementById('toast').textContent.includes('Sicherung wiederhergestellt')`);
+await ev(HELPERS);
+check(
+  "Während der Rückfrage anderswo gelöschte Kopie bleibt gelöscht",
+  await ev(`(async()=>{const id=sessionStorage.getItem('probe.gone');const keys=await createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys();return !!id&&!keys.some(k=>String(k).startsWith(id))&&!!incomeRecords().find(r=>r.id===id).pdfRemovedAt&&readRemovedIds(localStorage).has(id)&&keys.length===1})()`),
+);
 
 check("Keine Netzwerkzugriffe außer der lokalen Vorschau", requests.every((u) => !/^https?:/.test(u) || u.startsWith(ORIGIN)));
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0);

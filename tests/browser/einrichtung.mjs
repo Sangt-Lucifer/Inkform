@@ -3,7 +3,7 @@
 // a Safari tab on the iPad shows first, which only chooses the home screen icon. Synthetic data.
 import { HELPERS, ORIGIN, connect } from "./lib.mjs";
 
-const { cmd, ev, until, check, navigate, reload, screenshot, errors } = await connect();
+const { cmd, ev, until, check, navigate, reload, screenshot, errors, answer } = await connect();
 await cmd("Emulation.setDeviceMetricsOverride", { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
 const WIPE = `try{localStorage.clear();sessionStorage.clear();for(const n of ['inkform-pending','inkform-archive','inkform-logo'])indexedDB.deleteDatabase(n)}catch(_){}`;
 // A new device: storage wiped before the app starts, then the PIN dialog of the first start.
@@ -88,7 +88,7 @@ check("Beschädigte Gesamtsicherung: Meldung, nichts geschrieben", await nothing
 await pickSetup(`'kein json'`);
 await until(`(document.getElementById('setup-file-error')?.textContent||'').includes('kein gültiges JSON')`);
 check("Kein JSON: Meldung, nichts geschrieben", await nothingWritten());
-await ev(`window.confirm=(m)=>{window.__question=m;return false}`);
+await ev(`askWith((m)=>{window.__question=m;return false})`);
 await ev(`window.__question=null;window.__text=${JSON.stringify(backupText)}`);
 await pickSetup(`window.__text`);
 await until(`!!window.__question`);
@@ -106,8 +106,9 @@ check(
 check("Abbrechen in der Vorschau: nichts geschrieben", (await nothingWritten()) && (await ev(`!sessionStorage.getItem('inkform.fromSetup')`)));
 
 // Full backup on a new device: identical, then straight on to the overview ------------------
-await ev(`window.confirm=()=>true;window.__text=${JSON.stringify(backupText)}`);
+await ev(`askReal();window.__text=${JSON.stringify(backupText)}`);
 await pickSetup(`window.__text`);
+await answer();
 await unlockAfterReload("517306");
 await until(`adminPage==='overview'`);
 check("Nach der Gesamtsicherung: direkt die Übersicht, Meldung", (await ev(`document.getElementById('toast').textContent`)).includes("Sicherung wiederhergestellt"));
@@ -121,7 +122,7 @@ check(
 // Studio settings on a new device: customisations only, then what is still missing ----------
 await freshDevice();
 await setPin();
-await ev(`window.confirm=(m)=>{window.__question=m;return true};window.__text=${JSON.stringify(studioText)}`);
+await ev(`askWith((m)=>{window.__question=m;return true});window.__text=${JSON.stringify(studioText)}`);
 await pickSetup(`window.__text`);
 await unlockAfterReload();
 await until(`adminPage==='overview'`);
@@ -145,7 +146,7 @@ await setPin();
 const old = JSON.parse(backupText);
 old.schemaVersion = 2;
 delete old.icon;
-await ev(`window.confirm=()=>true;window.__text=${JSON.stringify(JSON.stringify(old))}`);
+await ev(`askWith(()=>true);window.__text=${JSON.stringify(JSON.stringify(old))}`);
 await pickSetup(`window.__text`);
 await unlockAfterReload();
 await until(`adminPage==='overview'`);

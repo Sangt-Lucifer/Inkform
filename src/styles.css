@@ -1629,6 +1629,9 @@ html[data-theme="dark"] .primary-button.danger {
   background: #b13033;
   color: #fff;
 }
+#confirm-text {
+  white-space: pre-line;
+}
 .reset-backup {
   margin: 4px 0 20px;
 }

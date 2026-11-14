@@ -735,6 +735,21 @@
         </div>
       </div>
     </dialog>
+    <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text">
+      <div class="dialog-head">
+        <h2 id="confirm-title"></h2>
+        <button type="button" class="close-button" data-close data-t-aria-label="common.closeDialog">
+          ×
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p id="confirm-text"></p>
+        <div class="dialog-actions">
+          <button class="secondary-button" type="button" id="confirm-cancel" data-close data-t="common.cancel"></button
+          ><button class="primary-button" type="button" id="confirm-ok"></button>
+        </div>
+      </div>
+    </dialog>
     <dialog id="app-reset-dialog" aria-labelledby="app-reset-title">
       <div class="dialog-head">
         <h2 id="app-reset-title" data-t="appReset.dialogTitle"></h2>

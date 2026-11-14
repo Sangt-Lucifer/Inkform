@@ -90,7 +90,7 @@ await choose("notiz.txt", "text/plain", `'kein Bild'`);
 await until(`document.getElementById('toast').textContent.includes('App-Symbol nicht übernommen')`);
 check("Kein Bild: abgelehnt, Symbol bleibt", (await ev(`document.getElementById('toast').textContent`)).includes("PNG- oder JPEG") && (await ev(`!!ownIcon`)));
 
-await ev(`window.__c=window.confirm;window.confirm=()=>true;document.querySelector('[data-admin-action="icon-remove"]').click();window.confirm=window.__c`);
+await ev(`askWith(()=>true);document.querySelector('[data-admin-action="icon-remove"]').click();askReal()`);
 await until(`!ownIcon`);
 check("Entfernt: wieder das eingebaute Symbol", (await link()) === "./icons/icon-192.png" && (await ev(`logoStore.get(ICON_KEY).then(b=>b===null)`)));
 

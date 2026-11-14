@@ -160,6 +160,7 @@ export function createExportFeature({
   exportLog,
   removedIds,
   removeCopies,
+  ask,
   today,
 }) {
   const e = escape,
@@ -414,7 +415,12 @@ export function createExportFeature({
     if (!event.target.closest("#copy-delete-confirm") || !pending || !$("copy-delete-checked").checked || !isUnlocked()) return;
     const target = pending,
       n = target.entries.length;
-    if (!window.confirm(t("export.lastQuestion", { kopien: copiesText(n), zeitraum: periodText(target.period) }))) return;
+    const remove = await ask({
+      title: t("ask.copies.title"),
+      text: t("ask.copies.copy", { kopien: copiesText(n), zeitraum: periodText(target.period) }),
+      confirm: t("ask.copies.confirm"),
+    });
+    if (!remove || pending !== target || !isUnlocked()) return;
     pending = null;
     dialog.close();
     // Only exactly what was confirmed: every entry unchanged, still in the period, copy still kept.

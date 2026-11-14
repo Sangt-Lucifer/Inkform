@@ -92,7 +92,17 @@ export async function connect() {
   // (from then on the service worker serves the app); reloads and the whole workflow run offline.
   const offline = (on = true) =>
     cmd("Network.emulateNetworkConditions", { offline: on, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
-  return { ws, cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors };
+  // Answers the app's confirmation window (#confirm-dialog) once it is open, with a real pointer
+  // click at the button's centre, which must be the topmost element there; returns the question.
+  const answer = async (yes = true) => {
+    await until(`document.getElementById('confirm-dialog').open`);
+    const id = yes ? "confirm-ok" : "confirm-cancel";
+    const { x, y, top, question } = await ev(`(()=>{const r=document.getElementById('${id}').getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;return {x,y,top:document.elementFromPoint(x,y)?.id,question:document.getElementById('confirm-title').textContent+'\\n\\n'+document.getElementById('confirm-text').textContent}})()`);
+    if (top !== id) throw Error(`Rückfrage nicht bedienbar: oben liegt ${top}`);
+    for (const type of ["mousePressed", "mouseReleased"]) await cmd("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
+    return question;
+  };
+  return { ws, cmd, ev, until, check, navigate, reload, screenshot, offline, requests, errors, answer };
 }
 
 // Browser-side helpers, installed with ev(HELPERS) after each page load.
@@ -105,6 +115,7 @@ for(const item of LEGAL){const el=document.getElementById(item.id);if(!el.checke
 if(!document.getElementById('sober').checked)document.getElementById('sober').click();
 document.querySelector('input[name="photo"][value="no"]').click();
 resizeCanvas();if(ink.width<50)throw Error('Unterschriftsfeld noch nicht vermessen');ink.strokes=[[{x:.1,y:.3,pressure:.5},{x:.4,y:.7,pressure:.5},{x:.8,y:.2,pressure:.5}]];ink.signedAt=Date.now();};
+window.askWith=(fn)=>{window.__realAsk??=askConfirm;askConfirm=async(o)=>fn(o.title+'\\n\\n'+o.text)};window.askReal=()=>{if(window.__realAsk)askConfirm=window.__realAsk};
 window.incomeRecords=()=>JSON.parse(localStorage.getItem(INCOME_KEY)||'{"records":[]}').records;
 window.blobBase64=async(blob)=>{const b=new Uint8Array(await blob.arrayBuffer());let s='';for(let i=0;i<b.length;i+=32768)s+=String.fromCharCode(...b.subarray(i,i+32768));return btoa(s)};
 `;
