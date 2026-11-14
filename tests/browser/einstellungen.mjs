@@ -74,6 +74,20 @@ check(
 );
 await ev(`document.querySelector('.contents-list').scrollIntoView({block:'center'});new Promise(r=>setTimeout(r,200))`);
 await screenshot("einstellungen-uebersicht");
+check("Studio-Import sagt, was eine Gesamtsicherung ersetzt", page.includes("Eine Gesamtsicherung ersetzt Einstellungen, Einnahmen und PDFs"));
+
+// Discard asks first, the dialog stands in the middle ---------------------------------------
+await ev(`(l=>{l.value='Entwurfsort';l.dispatchEvent(new Event('input',{bubbles:true}))})((openAdminAuthorized('studio'),document.getElementById('admin-studio-location')))`);
+await ev(`document.getElementById('admin-discard').click()`);
+check(
+  "Verwerfen fragt zuerst, Entwurf bleibt; Fenster mittig",
+  await ev(`(()=>{const d=document.getElementById('admin-discard-dialog'),r=d.getBoundingClientRect();return d.open&&adminChanged()&&Math.abs(r.left-(document.documentElement.clientWidth-r.right))<2&&Math.abs(r.top-(document.documentElement.clientHeight-r.bottom))<2})()`),
+);
+await ev(`document.querySelector('#admin-discard-dialog [data-close]').click()`);
+check("Weiter bearbeiten: Entwurf bleibt", await ev(`!document.getElementById('admin-discard-dialog').open&&adminChanged()&&document.getElementById('admin-studio-location').value==='Entwurfsort'`));
+await ev(`document.getElementById('admin-discard').click();document.getElementById('admin-discard-confirm').click()`);
+check("Alle verwerfen: gespeicherter Stand zurück", await ev(`!document.getElementById('admin-discard-dialog').open&&!adminChanged()&&document.getElementById('admin-studio-location').value==='Exportort'`));
+await ev(`openAdminAuthorized('appearance')`);
 
 // Export ------------------------------------------------------------------------------------
 await ev(`navigator.canShare=()=>true;navigator.share=async(d)=>{window.__shared=d.files[0]};document.querySelector('[data-admin-action="export-json"]').click()`);

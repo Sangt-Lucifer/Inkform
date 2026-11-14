@@ -1662,15 +1662,17 @@ function backupState() {
     last = localStorage.getItem(LAST_BACKUP_KEY);
     days = readBackupDays(localStorage);
   } catch (_) {}
-  return { age: last ? daysBetween(last) : null, days };
+  return { age: last ? daysBetween(last) : null, today: !!last && localDate(new Date(last)) === localDate(), days };
 }
 let preparedBackup = null;
 function backupPanel() {
-  const { age, days } = backupState();
+  const { age, today, days } = backupState();
   const status =
     age === null
       ? t("backup.none")
-      : t(age >= days ? "backup.ageDue" : "backup.age", { anzahl: age });
+      : today && age < days
+        ? t("backup.ageToday")
+        : t(age >= days ? "backup.ageDue" : "backup.age", { anzahl: age });
   return adminPanel(
     th("backup.title"),
     `<p class="ad-section-copy${age === null || age >= days ? " ad-warn" : ""}">${escapeHtml(status)}</p>
@@ -2368,6 +2370,7 @@ function finishSetup() {
   }
   writeRetention(localStorage, years);
   setupYears = null;
+  setupWay = null;
   adminPage = "overview";
   renderAdminSection();
   toast(t("setup.done"));
@@ -2470,7 +2473,7 @@ function languageSwitch() {
 }
 function staleNotice() {
   const buttons = languageCodes()
-    .filter((code) => code !== adminDraft.locale.content && staleCount(adminDraft, code))
+    .filter((code) => code !== adminDraft.locale.content && adminDraft.locale.customer.includes(code) && staleCount(adminDraft, code))
     .map(
       (code) =>
         `<button type="button" class="ad-button" data-stale-jump="${code}">${th("translate.staleNotice", { sprache: translator(code).name, anzahl: staleCount(adminDraft, code) })}</button>`,
@@ -3349,7 +3352,9 @@ document
   );
 $("admin-preview").addEventListener("click", requestAdminLeave);
 $("admin-save").addEventListener("click", saveAdmin);
-$("admin-discard").addEventListener("click", () => {
+$("admin-discard").addEventListener("click", () => showDialog("admin-discard-dialog"));
+$("admin-discard-confirm").addEventListener("click", () => {
+  $("admin-discard-dialog").close();
   adminDraft = clone(settings);
   renderAdminSection();
   toast(t("savebar.discarded"));

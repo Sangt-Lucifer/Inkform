@@ -111,6 +111,8 @@ check(
   "Einrichtung gespeichert, nur auf dem Gerät: Studio, Kontakt, Frist",
   await ev(`JSON.parse(localStorage.getItem(SETTINGS_KEY)).studio.name==='Atelier Probe · Kim Test'&&readRetention(localStorage).pdfYears===10`),
 );
+await ev(`openAdminAuthorized('setup')`);
+check("Einrichtung danach erneut geöffnet: Auswahl statt „noch nicht abgeschlossen“", await ev(`adminPage==='setup'&&!!document.querySelector('[data-admin-action="setup-new"]')&&document.getElementById('admin-setup-finish').hidden&&document.getElementById('admin-save-state').textContent!==t('setup.barState')`));
 await ev(`finishAdminLeave()`);
 check("Kundenformular zeigt das eingerichtete Studio", await ev(`document.getElementById('customer-studio-name').textContent==='Atelier Probe'`));
 check("Englisch aus dem Assistenten: Flaggen-Knöpfe im Formular", await ev(`JSON.parse(localStorage.getItem(SETTINGS_KEY)).locale.customer.join()==='de,en'&&!document.getElementById('customer-language').hidden&&document.querySelectorAll('[data-customer-language]').length===2`));

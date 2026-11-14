@@ -915,6 +915,7 @@ canvas {
   padding-right: 10px;
 }
 dialog {
+  margin: auto;
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 17px;

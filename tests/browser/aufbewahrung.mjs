@@ -83,8 +83,8 @@ await until(`!!document.querySelector('[data-income-action="backup"]')`);
 await ev(`openAdminAuthorized('overview');navigator.canShare=()=>true;navigator.share=async()=>{};document.querySelector('[data-admin-action="backup-create"]').click()`);
 await until(`!document.querySelector('[data-backup-ready]').hidden`);
 await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
-await until(`document.getElementById('admin-app').textContent.includes('Letzte Gesamtsicherung vor 0 Tagen')`);
-check("Nach der Gesamtsicherung: „vor 0 Tagen“, keine Erinnerung an offene Einwilligung oder Sicherung", await ev(`!document.querySelector('.ad-reminder')?.textContent.includes('seit')&&!document.querySelector('.ad-reminder')?.textContent.includes('Gesamtsicherung')`));
+await until(`document.getElementById('admin-app').textContent.includes('Letzte Gesamtsicherung heute')`);
+check("Nach der Gesamtsicherung: „heute“, keine Erinnerung an offene Einwilligung oder Sicherung", await ev(`!document.querySelector('.ad-reminder')?.textContent.includes('seit')&&!document.querySelector('.ad-reminder')?.textContent.includes('Gesamtsicherung')`));
 check("Einnahmenliste zeigt „PDF gelöscht am“", await ev(`(openAdminAuthorized('income'),(()=>{const el=document.getElementById('income-filter-year');el.value='';el.dispatchEvent(new Event('change',{bubbles:true}));return document.querySelector('.income-table').textContent.includes('PDF gelöscht am')})())`));
 await ev(`finishAdminLeave()`);
 

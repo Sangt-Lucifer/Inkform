@@ -114,7 +114,7 @@ await ev(`window.__shared=null;document.querySelector('.ad-panel [data-admin-act
 await until(`!document.querySelector('[data-backup-ready]').hidden`);
 check("Vor dem Speichern: Anzahl und Größe", /✓ Sicherung bereit: 2 Einträge, 2 PDFs, \d+ KB/.test(await ev(`document.getElementById('backup-summary').textContent`)));
 await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
-await until(`!!window.__shared && document.getElementById('admin-app').textContent.includes('Letzte Gesamtsicherung vor 0 Tagen')`);
+await until(`!!window.__shared && document.getElementById('admin-app').textContent.includes('Letzte Gesamtsicherung heute')`);
 // One tap: a backup ready while the tap still counts opens the share sheet at once.
 await ev(`window.__firstShared=window.__shared;window.__shared=null;openAdminAuthorized('overview')`);
 const panelTop = () => ev(`Math.round(document.getElementById('backup-flow').getBoundingClientRect().top)`);
@@ -143,12 +143,16 @@ check(
 check("Sicherung enthält das Logo (PNG, 512 × 171)", backup.schemaVersion === 3 && Buffer.from(backup.logo, "base64").readUInt32BE(16) === 512 && Buffer.from(backup.logo, "base64").readUInt32BE(20) === 171);
 check("Keine PIN in der Sicherung", !/839274|"salt"|"hash"/.test(json));
 check("Nach der Sicherung keine Sicherungs-Erinnerung", !(await reminder()).includes("Gesamtsicherung"));
+await ev(`openAdminAuthorized('overview')`);
+check("Status nach der Sicherung: „heute“ statt „vor 0 Tagen“", await ev(`document.getElementById('admin-app').textContent.includes(t('backup.ageToday'))&&!document.getElementById('admin-app').textContent.includes('vor 0 Tagen')`));
 
 // Interval: two days old is overdue with 1 day, not with 3 days.
 await ev(`localStorage.setItem(LAST_BACKUP_KEY,new Date(Date.now()-2*864e5-60000).toISOString());openAdminAuthorized('overview')`);
 check("Abstand 1 Tag: zwei Tage alte Sicherung wird angemahnt", (await reminder()).includes("Die letzte Gesamtsicherung ist 2 Tage alt"));
 await ev(`(()=>{const el=document.getElementById('backup-interval');el.value='3';el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
 check("Abstand 3 Tage: keine Erinnerung", !(await reminder()).includes("Gesamtsicherung"));
+await ev(`(()=>{const d=new Date();d.setHours(0,0,0,0);localStorage.setItem(LAST_BACKUP_KEY,new Date(d-60000).toISOString());openAdminAuthorized('overview')})()`);
+check("Sicherung kurz vor Mitternacht: nicht „heute“", await ev(`!document.getElementById('admin-app').textContent.includes(t('backup.ageToday'))`));
 
 // Change data after the backup --------------------------------------------------------------
 await ev(`openAdminAuthorized('income');(()=>{const el=document.getElementById('income-filter-year');el.value='';el.dispatchEvent(new Event('change',{bubbles:true}))})()`);

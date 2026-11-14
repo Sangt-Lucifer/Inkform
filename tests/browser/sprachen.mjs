@@ -135,6 +135,17 @@ check(
   await ev(`!!document.querySelector('[data-stale-jump="en"]')
     && document.querySelector('[data-locale-customer="en"]').closest('label').textContent.includes(t('translate.staleShort', { anzahl: 2 }))`),
 );
+check(
+  "Nicht angebotene Sprache: kein Hinweis „Texte prüfen“",
+  await ev(`(() => {
+    adminDraft.locale.customer = [adminDraft.locale.studio];
+    renderAdminSection();
+    const hidden = !document.querySelector('[data-stale-notice]');
+    adminDraft.locale.customer = [adminDraft.locale.studio, 'en'];
+    renderAdminSection();
+    return hidden && !!document.querySelector('[data-stale-jump="en"]');
+  })()`),
+);
 await ev(`document.querySelector('[data-stale-jump="en"]').click()`);
 check(
   "Sprung zum markierten Feld: alter und neuer deutscher Text stehen daneben",
