@@ -37,6 +37,7 @@ INKFORM_Speichertest_*
 !/package.json
 !/.prettierrc.json
 !/profiles/*/profile.json
+!/tests/fixtures/*.json
 !/profiles/*/Anleitung-iPad-und-Admin.pdf
 
 # Typische Ablageordner für echte Daten

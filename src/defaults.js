@@ -187,3 +187,41 @@ if (!hasAllTexts(DEFAULT_SETTINGS, DEFAULT_SETTINGS.locale.studio)) {
   PROFILE_LOCALE.studio = PROFILE_LOCALE.content;
   PROFILE_LOCALE.customer = [...new Set([PROFILE_LOCALE.studio, ...PROFILE_LOCALE.customer])];
 }
+
+// Format of the stored settings. Every change to it adds a step to SETTINGS_STEPS that turns
+// version n into n + 1 (SETTINGS_STEPS[n - 1]); older settings run through all steps in order. Afterwards fields and default questions the settings do not have
+// yet get their defaults; everything the studio wrote stays as it is.
+export const SETTINGS_STEPS = [];
+export const SETTINGS_VERSION = SETTINGS_STEPS.length + 1;
+const isRecord = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+function withDefaultItems(items, defaults) {
+  if (!Array.isArray(items)) return items;
+  const result = [...items];
+  let at = 0;
+  for (const item of defaults) {
+    const index = result.findIndex((entry) => entry?.id === item.id);
+    if (index === -1) result.splice(at++, 0, structuredClone(item));
+    else at = Math.max(at, index + 1);
+  }
+  return result;
+}
+// Returns settings in the current format, or the value unchanged when it is not settings of a
+// known version (the validation then rejects it). Never changes the value it gets.
+export function migrateSettings(value, defaults = DEFAULT_SETTINGS, steps = SETTINGS_STEPS) {
+  const latest = steps.length + 1;
+  if (!isRecord(value) || !Number.isInteger(value.schemaVersion) || value.schemaVersion < 1 || value.schemaVersion > latest)
+    return value;
+  let result = structuredClone(value);
+  for (let version = result.schemaVersion; version < latest; version++) result = steps[version - 1](result, defaults);
+  result.schemaVersion = latest;
+  // Defaults only fill gaps in settings written in the language of the default texts.
+  const content = isRecord(result.locale) && result.locale.content ? result.locale.content : defaults.locale.content;
+  if (!isRecord(result.studio) || !isRecord(result.app) || content !== defaults.locale.content) return result;
+  return {
+    ...result,
+    studio: { ...defaults.studio, ...result.studio },
+    app: { ...defaults.app, ...result.app },
+    medical: withDefaultItems(result.medical, defaults.medical),
+    legal: withDefaultItems(result.legal, defaults.legal),
+  };
+}

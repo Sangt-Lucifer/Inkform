@@ -3353,3 +3353,25 @@ html[data-theme="dark"] .language-button svg {
   margin: 0 0 10px;
   color: var(--ad-muted);
 }
+.settings-locked {
+  padding-block: 48px;
+}
+.settings-locked .card {
+  max-width: 640px;
+  margin-inline: auto;
+  padding: 28px 30px;
+}
+.settings-locked h1 {
+  margin: 0 0 12px;
+  font-size: 22px;
+}
+.settings-locked p {
+  margin: 0 0 20px;
+}
+.ad-broken-notice p {
+  margin: 0 0 10px;
+}
+.ad-broken-reason {
+  font-family: ui-monospace, monospace;
+  word-break: break-word;
+}

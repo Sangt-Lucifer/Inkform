@@ -33,7 +33,7 @@ import {
 } from "./languages.js";
 import { createAdminAccess } from "./access.js";
 import { INCOME_KEY, createIncomeFeature, incomeId } from "./income.js";
-import { PROFILE_LOCALE, STUDIO_DEFAULTS, DEFAULT_SETTINGS } from "./defaults.js";
+import { PROFILE_LOCALE, STUDIO_DEFAULTS, DEFAULT_SETTINGS, SETTINGS_VERSION, migrateSettings } from "./defaults.js";
 import { PDF_FONT, createPdfDocument, unsupportedPdfChars } from "./pdf-fonts.js";
 import { createIndexedDbFiles, createPendingStore } from "./pending.js";
 import { birthDateValid, fileSlug, moneyCents, studioInitials } from "./consent.js";
@@ -138,11 +138,12 @@ function inLanguage(code, run) {
     setLanguage(before);
   }
 }
-function validateSettings(value) {
+function validateSettings(input) {
+  const value = migrateSettings(input);
   if (
     !value ||
     typeof value !== "object" ||
-    value.schemaVersion !== 1 ||
+    value.schemaVersion !== SETTINGS_VERSION ||
     !value.studio ||
     !value.app
   )
@@ -226,7 +227,7 @@ function validateSettings(value) {
     throw new Error(t("settings.duplicateIds"));
   const locale = validateLocale(value.locale, PROFILE_LOCALE);
   const result = withDefaultTranslations({
-    schemaVersion: 1,
+    schemaVersion: SETTINGS_VERSION,
     savedAt:
       typeof value.savedAt === "string" && Number.isFinite(Date.parse(value.savedAt))
         ? value.savedAt
@@ -245,9 +246,12 @@ function validateSettings(value) {
   }
   return result;
 }
+// settingsBroken: the reason the stored settings cannot be read. They are then kept as they are,
+// the customer form stays locked and only a restore or an import replaces them.
 let embeddedConfig = null,
   settings = clone(DEFAULT_SETTINGS),
-  configLoadError = "";
+  configLoadError = "",
+  settingsBroken = "";
 try {
   embeddedConfig = JSON.parse(document.getElementById("inkform-config").textContent);
   if (embeddedConfig) settings = validateSettings(embeddedConfig);
@@ -256,7 +260,7 @@ try {
 }
 try {
   const saved = localStorage.getItem(SETTINGS_KEY);
-  if (saved) {
+  if (saved !== null) {
     settings = validateSettings(JSON.parse(saved));
     // Adopt the studio profile only for a completely unconfigured older installation.
     // Existing studio details and individually edited form texts keep their values.
@@ -265,8 +269,8 @@ try {
       for (const key of profileKeys) settings.studio[key] = STUDIO_DEFAULTS[key];
     }
   }
-} catch (_) {
-  configLoadError = t("settings.localInvalid");
+} catch (error) {
+  settingsBroken = error.message;
 }
 
 const $ = (id) => document.getElementById(id);
@@ -1043,7 +1047,7 @@ $("retry-library").addEventListener("click", () => {
 });
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  if (!validate()) return;
+  if (settingsBroken || !validate()) return;
   if (Object.values(studio).some((value) => !value.trim())) {
     toast(t("customer.studioMissing"));
     openStudio();
@@ -1880,6 +1884,11 @@ async function createBackup() {
   preparedBackup = null;
   ready.hidden = true;
   note.textContent = "";
+  // Without readable settings it would hold the fallback texts instead of the studio's.
+  if (settingsBroken) {
+    note.textContent = t("settingsLocked.noExport");
+    return;
+  }
   // The backup holds the saved state only; open edits would be missing without notice.
   if (adminChanged()) {
     note.textContent = t("backup.unsaved");
@@ -2507,7 +2516,7 @@ function rememberRemoved() {
   if (marked.length) addRemovedIds(localStorage, marked.map((r) => r.id));
 }
 function needsSetup() {
-  return BLANK_EDITION && SETUP_FIELDS.some((key) => !settings.studio[key].trim());
+  return !settingsBroken && BLANK_EDITION && SETUP_FIELDS.some((key) => !settings.studio[key].trim());
 }
 // The assistant first offers three ways: set up here ("new"), or bring in a full backup or studio
 // settings (one file picker; the file says which it is). A failed file keeps the choice open.
@@ -2664,6 +2673,25 @@ function languageSwitch() {
       })
       .join("")}
   </div>`;
+}
+function brokenNotice() {
+  return settingsBroken
+    ? /* HTML */ `<div class="ad-notice review ad-broken-notice" role="alert">
+        <p><strong>${th("settingsLocked.title")}</strong></p>
+        <p>${th("settingsLocked.adminCopy")}</p>
+        <p class="ad-broken-reason">${escapeHtml(settingsBroken)}</p>
+        <div class="ad-actions-row">
+          <button type="button" class="ad-button primary" data-admin-page="backup">${th("settingsLocked.toBackup")}</button>
+          <button type="button" class="ad-button" data-admin-action="broken-save">${th("settingsLocked.saveRaw")}</button>
+        </div>
+      </div>`
+    : "";
+}
+function saveBrokenSettings() {
+  const raw = localStorage.getItem(SETTINGS_KEY) ?? "";
+  saveFile(new File([raw], `${fileStamp()}_${t("file.settingsRaw")}.json`, { type: "application/json" })).catch((error) => {
+    if (error?.name !== "AbortError") toast(error.message);
+  });
 }
 function staleNotice() {
   const buttons = languageCodes()
@@ -3128,7 +3156,7 @@ function renderAdminSection() {
   }
   if (TEXT_PAGES.includes(adminPage)) content = textTabs() + staleNotice() + languageSwitch() + content;
   else if (adminPage === "overview") content = staleNotice() + content;
-  $("admin-section").innerHTML = content;
+  $("admin-section").innerHTML = brokenNotice() + content;
   if (adminPage === "export") {
     exportFeature.preview();
     exportFeature.usage();
@@ -3142,7 +3170,7 @@ function updateAdminChrome() {
   const changed = adminChanged(),
     setup = adminPage === "setup",
     finishing = setup && setupWay === "new";
-  $("admin-savebar").hidden = (setup && !finishing) || ((adminPage === "income" || adminPage === "retention") && !changed);
+  $("admin-savebar").hidden = !!settingsBroken || (setup && !finishing) || ((adminPage === "income" || adminPage === "retention") && !changed);
   $("admin-savebar").classList.toggle("unsaved", changed || finishing);
   $("admin-discard").hidden = $("admin-save").hidden = finishing;
   $("admin-setup-finish").hidden = !finishing;
@@ -3289,6 +3317,10 @@ $("customer-language").addEventListener("click", (event) => {
 });
 function saveAdmin() {
   let next;
+  if (settingsBroken) {
+    configError(t("settingsLocked.noSave"));
+    return false;
+  }
   try {
     next = validateSettings(markStale(validateSettings(adminDraft), settings, DEFAULT_SETTINGS));
   } catch (error) {
@@ -3426,6 +3458,10 @@ function downloadFile(blob, name) {
 // The studio settings file is built synchronously (the logo is kept in memory), so the share
 // sheet opens within the tap, as Safari requires.
 function exportStudioSettings() {
+  if (settingsBroken) {
+    configError(t("settingsLocked.noExport"));
+    return;
+  }
   if (adminChanged()) {
     configError(t("exportSettings.unsaved"));
     return;
@@ -3456,6 +3492,10 @@ function exportStudioSettings() {
 // The app as one HTML file with the saved settings; it keeps the built-in logo (an own logo travels
 // in the studio settings file).
 function exportHtml() {
+  if (settingsBroken) {
+    configError(t("settingsLocked.noExport"));
+    return;
+  }
   if (adminChanged()) {
     configError(t("exportSettings.unsaved"));
     return;
@@ -3724,6 +3764,9 @@ $("admin-app").addEventListener("click", (event) => {
     case "backup-restore":
       backupPicker.click();
       break;
+    case "broken-save":
+      saveBrokenSettings();
+      break;
     case "logo-choose":
       logoPicker.click();
       break;
@@ -3928,6 +3971,10 @@ navigator.serviceWorker?.addEventListener("message", (event) => {
   if (event.data?.type === "INKFORM_OFFLINE_READY") builtInIcon();
 });
 if (configLoadError) toast(configLoadError);
+$("settings-locked").hidden = !settingsBroken;
+$("start").hidden = !!settingsBroken;
+document.querySelector("#customer-app > .bottom-bar").hidden = !!settingsBroken;
+$("settings-locked-open").addEventListener("click", () => openAdmin());
 if (BLANK_EDITION) document.querySelectorAll("[data-studio-only]").forEach((node) => (node.hidden = true));
 if (!OWNER_GUIDE_BASE64) document.querySelectorAll('[data-admin-action="guide"]').forEach((node) => (node.hidden = true));
 const installing = offerInstall();
@@ -3961,7 +4008,7 @@ try {
     if (!installing) firstStart();
   } else if (hasPending || sessionStorage.getItem("inkform.completion")) showCompletion();
   else if (afterSetup) openAdmin("overview");
-  else if (location.hash === "#admin" || needsSetup()) openAdmin();
+  else if (location.hash === "#admin" || needsSetup() || settingsBroken) openAdmin();
 } catch (error) {
   showCompletion(true);
   toast(error.message);

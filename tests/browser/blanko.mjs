@@ -167,6 +167,23 @@ await until(`!document.getElementById('customer-app').hidden && incomeRecords().
 await until(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length===1)`);
 check("Gebucht und für den Export gespeichert, alles im Flugmodus", true);
 
+// Unreadable settings in the blank edition: no assistant over them (it would overwrite them), the
+// notice instead; the customer form stays locked.
+await ev(`localStorage.setItem(SETTINGS_KEY,'{"schemaVersion":1,"studio":');window.__old=true;history.replaceState(null,'',location.pathname);location.reload();0`);
+await until(`!window.__old&&typeof adminAccess!=='undefined'&&document.readyState==='complete'&&document.getElementById('admin-pin-dialog').open`);
+await ev(HELPERS);
+await ev(`unlockAdmin()`);
+await until(`adminAccess.isUnlocked()&&adminOpen`);
+check(
+  "Unlesbare Einstellungen: kein Assistent, Hinweis statt dessen, gespeicherte Daten unverändert",
+  await ev(`adminPage==='overview'&&!needsSetup()&&!!document.querySelector('.ad-broken-notice')&&!document.querySelector('[data-admin-action="setup-new"]')&&localStorage.getItem(SETTINGS_KEY)==='{"schemaVersion":1,"studio":'`),
+);
+await ev(`finishAdminLeave()`);
+await ev(`form.requestSubmit()`);
+check(
+  "Unlesbare Einstellungen: Kundenformular gesperrt, Absenden tut nichts",
+  await ev(`!document.getElementById('settings-locked').hidden&&!document.getElementById('start').checkVisibility()&&!document.querySelector('#customer-app>.bottom-bar').checkVisibility()&&!document.querySelector('[aria-invalid="true"]')&&!pendingConsent`),
+);
 check("Keine Netzwerkzugriffe außer der lokalen Vorschau", requests.every((u) => !/^https?:/.test(u) || u.startsWith(ORIGIN)));
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0);
 process.exit(0);

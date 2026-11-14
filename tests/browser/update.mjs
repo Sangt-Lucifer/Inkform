@@ -1,6 +1,7 @@
 // App update via the service worker: a newer version takes over only while the app is idle and
 // removes the older cached version, so no old app can start again on newer data. Simulated by
 // serving a changed sw.js (new cache name) from the local preview; restored afterwards.
+import { readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,6 +33,10 @@ try {
   await ev(`document.getElementById('admin-pin').value='839274';document.getElementById('admin-pin-repeat').value='839274';document.getElementById('admin-pin-form').requestSubmit()`);
   await until(`adminAccess.isUnlocked()`);
   await ev(`finishAdminLeave()`);
+  // Stored settings in today's format, as a file writes them (not as the app would): an update
+  // that needs no migration must leave them byte for byte as they are.
+  const settingsText = readFileSync(new URL("../fixtures/einstellungen-v1.json", import.meta.url), "utf8");
+  await ev(`localStorage.setItem(SETTINGS_KEY,${JSON.stringify(settingsText)})`);
   const oldCache = await ev(`caches.keys().then(k=>k.filter(n=>n.startsWith('inkform-app-')).join())`);
   check("Ausgangslage: eine App-Version im Offline-Speicher", !!oldCache && !oldCache.includes(","));
 
@@ -81,6 +86,10 @@ try {
   check("Neuere Offline-Kopie als die laufende Seite: Knopf lädt neu", (await ev(`window.inkformLookForUpdate()`)) === "loading");
   await until(`!window.__alteSeite&&document.readyState==='complete'&&!!navigator.serviceWorker.controller`, 200);
   check("Danach läuft die Seite aus der Kopie", await ev(`document.querySelector('meta[name="inkform-page"]').content==='ffffffffffff'`));
+  check(
+    "Nach den Updates: Einstellungen gelesen und Byte für Byte unverändert",
+    (await ev(`localStorage.getItem(SETTINGS_KEY)`)) === settingsText && (await ev(`settings.app.headline`)) === JSON.parse(settingsText).app.headline,
+  );
   check("Keine JavaScript-Fehler", errors.length === 0);
 } finally {
   await writeFile(swFile, original);
