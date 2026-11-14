@@ -210,9 +210,6 @@
           </div>
           <p class="offline-status" id="offline-status" role="status" data-t="offline.localFile"></p>
           <div class="side-footer">
-            <button type="button" class="text-button" data-open="sources-dialog">
-              <svg class="icon" aria-hidden="true"><use href="#i-info" /></svg><span data-t="customer.sources"></span>
-            </button>
             <button type="button" class="text-button" data-open="reset-dialog">
               <svg class="icon" aria-hidden="true"><use href="#i-reset" /></svg><span data-t="customer.newForm"></span>
             </button>
@@ -569,8 +566,7 @@
               class="flex justify-center gap-5 mt-5"
               style="display: flex; justify-content: center; gap: 20px; margin-top: 20px"
             >
-              <button type="button" class="text-button" data-open="sources-dialog" data-t="customer.sources"></button
-              ><button type="button" class="text-button" data-open="reset-dialog" data-t="customer.newForm"></button>
+              <button type="button" class="text-button" data-open="reset-dialog" data-t="customer.newForm"></button>
             </div>
           </form>
         </main>
@@ -866,111 +862,6 @@
         <div class="dialog-actions">
           <button class="primary-button" type="button" data-close data-t="common.understood"></button>
         </div>
-      </div>
-    </dialog>
-    <dialog id="sources-dialog" aria-labelledby="sources-title">
-      <div class="dialog-head">
-        <h2 id="sources-title" data-t="customer.sources"></h2>
-        <button type="button" class="close-button" data-close data-t-aria-label="common.closeDialog">
-          ×
-        </button>
-      </div>
-      <div class="dialog-body">
-        <p><strong data-t="sources.version"></strong></p>
-        <p data-t="sources.intro"></p>
-        <ul>
-          <li data-t="sources.allStyle">
-            <a
-              class="source-link"
-              href="https://www.allstyletattoo.de/wp-content/uploads/2020/07/tattoo-einversta%CC%88ndniserkla%CC%88rung.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-t-slot="link"
-              data-t="sources.allStyleLink"
-              ></a
-            >
-          </li>
-          <li data-t="sources.blackRabbit">
-            <a
-              class="source-link"
-              href="https://www.blackrabbit.ink/einverstaendnis"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-t-slot="link"
-              data-t="sources.blackRabbitLink"
-              ></a
-            >
-          </li>
-          <li data-t="sources.leguan">
-            <a
-              class="source-link"
-              href="https://leguantattoo.at/wp/wp-content/uploads/Einverstaendniserklaerung_Tattoo.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-t-slot="link"
-              data-t="sources.leguanLink"
-              ></a
-            >
-          </li>
-          <li data-t="sources.wko">
-            <a
-              class="source-link"
-              href="https://www.wko.at/gewerbe-handwerk/fusspfleger-kosmetiker-masseure/einwilligungserklaerung-neu"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-t-slot="link"
-              data-t="sources.wkoLink"
-              ></a
-            >
-          </li>
-          <li data-t="sources.bfr">
-            <a
-              class="source-link"
-              href="https://www.bfr.bund.de/fragen-und-antworten/thema/fragen-und-antworten-zu-taetowiermitteln/"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-t-slot="link"
-              data-t="sources.bfrLink"
-              ></a
-            >
-            <a
-              class="source-link"
-              href="https://www.bfr.bund.de/cm/343/infektionsrisiken-durch-taetowierungen.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-t-slot="link2"
-              data-t="sources.bfrLink2"
-              ></a
-            >
-          </li>
-          <li data-t="sources.dsgvo">
-            <a
-              class="source-link"
-              href="https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX%3A32016R0679"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-t-slot="link"
-              data-t="sources.dsgvoLink"
-              ></a
-            >
-          </li>
-        </ul>
-        <div class="review" data-t="sources.review">
-          <span class="review-label" data-t-slot="label" data-t="common.reviewLabel"></span>
-        </div>
-        <p data-t="sources.local"></p>
-        <p data-t="sources.ipad">
-          <a
-            class="source-link"
-            href=""
-            data-t-href="sources.appleUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            data-t-slot="link"
-            data-t="sources.appleLink"
-            ></a
-          >
-        </p>
       </div>
     </dialog>
     <div class="toast" id="toast" role="status" hidden></div>

@@ -963,10 +963,6 @@ dialog::backdrop {
   padding-left: 20px;
   list-style: disc;
 }
-.dialog-body a.source-link {
-  color: var(--accent-text);
-  text-decoration: underline;
-}
 .dialog-actions {
   display: flex;
   flex-wrap: wrap;
@@ -3023,110 +3019,109 @@ html[data-theme="dark"] dialog::backdrop {
    Inputs below 16 px would also make Safari on the iPad zoom in on every focused field.
    Scoped by id so it wins over the compact admin styles and the media queries above. */
 /* inputs */
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .field input,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .field textarea,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .field select,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .details-field textarea,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .field input::placeholder,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .field textarea::placeholder,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .details-field textarea::placeholder {
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .field input,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .field textarea,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .field select,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .details-field textarea,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .field input::placeholder,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .field textarea::placeholder,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .details-field textarea::placeholder {
     font-size: 16px;
 }
 /* labels, running text, questions, buttons */
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .field label,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .field-label,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .details-field label,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .side-copy,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .side-card p,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .intro p,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .intro .studio-contact,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .card-head p,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .callout,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .check-text strong,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .check-text small,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .question-title small,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .choice span,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .photo-options .choice span,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .photo-box p,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .photo-hint,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .privacy-details summary,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) #privacy-text,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) #photo-text,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .signature-tools label,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) #signature-confirmation,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) #signature-help,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .signature-error,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .price-help,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .price-balance,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .error-summary,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .offline-status,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .dialog-body p,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .dialog-body li,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .text-button,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .secondary-button,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .primary-button,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .signature-tools .text-button,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .top-actions .text-button,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .bottom-export .primary-button {
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .field label,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .field-label,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .details-field label,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .side-copy,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .side-card p,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .intro p,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .intro .studio-contact,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .card-head p,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .callout,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .check-text strong,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .check-text small,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .question-title small,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .choice span,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .photo-options .choice span,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .photo-box p,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .photo-hint,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .privacy-details summary,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) #privacy-text,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) #photo-text,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .signature-tools label,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) #signature-confirmation,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) #signature-help,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .signature-error,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .price-help,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .price-balance,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .error-summary,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .offline-status,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .dialog-body p,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .dialog-body li,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .text-button,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .secondary-button,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .primary-button,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .signature-tools .text-button,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .top-actions .text-button,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .bottom-export .primary-button {
     font-size: 16px;
 }
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .question-title,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .photo-box h3 {
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .question-title,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .photo-box h3 {
     font-size: 18px;
 }
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .field-divider h3 {
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .field-divider h3 {
     font-size: 16px;
 }
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .card-head h2 {
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .card-head h2 {
     font-size: max(18px, 1em);
 }
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .card-head p,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .intro p,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .side-copy,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .check-text small,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .question-title small,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .dialog-body li,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) #privacy-text,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) #photo-text {
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .card-head p,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .intro p,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .side-copy,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .check-text small,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .question-title small,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .dialog-body li,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) #privacy-text,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) #photo-text {
     line-height: 1.55;
 }
 /* secondary: step labels, badges, status lines, small notes */
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .eyebrow,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .step-number,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .step-note,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .side-card strong,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .intro-bottom,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .intro-bottom span,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .section-number,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .section-status,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .optional,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .required,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .field-divider span,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .review,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .review-label,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .inline-review,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .canvas-placeholder span,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .signature-meta,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .signature-meta span,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .export-footnote,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .bottom-info strong,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .bottom-info small,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .format-tag,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .brand-copy small,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .mobile-steps a,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .source-link,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .theme-button,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .theme-button span,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) #age-hint,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) #studio-button-label,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) #overall-label,
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) #export-status {
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .eyebrow,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .step-number,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .step-note,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .side-card strong,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .intro-bottom,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .intro-bottom span,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .section-number,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .section-status,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .optional,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .required,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .field-divider span,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .review,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .review-label,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .inline-review,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .canvas-placeholder span,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .signature-meta,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .signature-meta span,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .export-footnote,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .bottom-info strong,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .bottom-info small,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .format-tag,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .brand-copy small,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .mobile-steps a,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .theme-button,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .theme-button span,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) #age-hint,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) #studio-button-label,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) #overall-label,
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) #export-status {
     font-size: 14px;
 }
-:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog, #sources-dialog) .step-name {
+:is(#customer-app, #completion-screen, #reset-dialog, #install-dialog) .step-name {
     font-size: 15px;
 }
-:is(#reset-dialog, #install-dialog, #sources-dialog) :is(p, li, label, summary) {
+:is(#reset-dialog, #install-dialog) :is(p, li, label, summary) {
   font-size: 16px;
 }
 .toast {

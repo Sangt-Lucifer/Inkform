@@ -17,7 +17,7 @@ Ein Studio entsteht nur auf dem iPad: über den Einrichtungsassistenten oder aus
    - **Neu einrichten:** Studio, Datenschutzkontakt, Anschrift und Ort der Unterschrift eintragen, optional Fristen, Logo und App-Symbol.
    - **Aus Datei übernehmen:** eine Gesamtsicherung (alles von einem anderen Gerät, auch Einnahmen und PDFs) oder Studio-Einstellungen (dieselbe Datei wie in Schritt 2, nur die Anpassungen; die Einnahmenliste bleibt leer).
    Vor dem Übernehmen zeigt die App, was in der Datei steckt. Eine falsche Datei ändert nichts.
-7. Formulartexte, Gesundheitsfragen und Datenschutzhinweise prüfen und an das Studio anpassen. Sie sind neutral vorbereitet und vor dem Einsatz rechtlich zu prüfen.
+7. Formulartexte, Gesundheitsfragen und Datenschutzhinweise prüfen und an das Studio anpassen. Sie sind neutral vorbereitet und vor dem Einsatz rechtlich zu prüfen. Woher die Vorlage kommt: [docs/QUELLEN.md](docs/QUELLEN.md).
 8. Unter „iPad & Einstellungen“ die PDF-Ablage testen.
 
 Zum Ausprobieren gibt es in der Übersicht „Beispieldaten laden“ (erfundene Einträge mit PDFs). „Beispieldaten entfernen“ löscht sie wieder vollständig.
