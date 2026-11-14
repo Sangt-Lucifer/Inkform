@@ -2,7 +2,7 @@
 //
 //   npm run test:browser                          profile "beispiel", then the "blanko" check
 //   node tests/browser/run.mjs                    profile "beispiel", all checks of that profile
-//   npm run test:browser -- --profile ../Inkform-Studios/<studio>   a studio profile
+//   npm run test:browser -- --profile <studio-ordner>             a studio profile
 //   npm run test:browser -- offline               only some checks (file names without .mjs)
 //
 // Starts the local preview server on 127.0.0.1, launches Google Chrome headless with an
@@ -17,11 +17,11 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defaultOut, isBuiltin, resolveProfileDir, root } from "../../scripts/build.mjs";
 
-const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "export", "kopien", "sicherung", "einstellungen", "schriftgroessen", "offline", "update", "symbol", "werkstatt", "blanko", "einrichtung", "unterpfad", "sprachen", "flaggen", "zuruecksetzen", "rueckfragen", "seitenleiste", "migration"];
+const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "export", "kopien", "sicherung", "einstellungen", "schriftgroessen", "offline", "update", "symbol", "blanko", "einrichtung", "unterpfad", "sprachen", "flaggen", "zuruecksetzen", "rueckfragen", "seitenleiste", "migration"];
 // Checks bound to one built-in profile; that profile runs only these.
 const PROFILE_CHECKS = { blanko: ["blanko", "einrichtung", "unterpfad"] };
 // Checks of the core itself, not of a studio's app: only with the built-in profile.
-const CORE_ONLY = ["werkstatt", "sprachen", "flaggen"];
+const CORE_ONLY = ["sprachen", "flaggen"];
 const argv = process.argv.slice(2);
 const pi = argv.indexOf("--profile");
 const profile = pi >= 0 ? argv[pi + 1] : "beispiel";

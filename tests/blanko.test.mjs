@@ -8,7 +8,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildProfile, root } from "../scripts/build.mjs";
 import { BLANKO_FILES, checkBlanko, checksums, collectPrivate, pngChunks, readBuildDir } from "../scripts/blanko-pruefen.mjs";
-import { solidPng } from "./lib/werkstatt.mjs";
+import { solidPng } from "./lib/png.mjs";
 
 const base = await mkdtemp(path.join(tmpdir(), "inkform-blanko-"));
 test.after(() => rm(base, { recursive: true, force: true }));

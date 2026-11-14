@@ -1,137 +1,103 @@
-# INKFORM
+# Inkform
 
-Lokale Tattoo-Einwilligung mit Unterschrift, PDF-Ablage und Einnahmenliste je Artist. Die App läuft vollständig auf dem Gerät und offline. Kundendaten verlassen das Gerät nie: keine Cloud, kein Tracking, keine Bibliotheken oder Schriften aus dem Netz.
+Tattoo-Einwilligung mit Unterschrift, PDF-Ablage und Einnahmenliste für das iPad. Inkform läuft vollständig auf dem Gerät: keine Anmeldung, kein Server, keine Cloud, keine Bibliotheken oder Schriften aus dem Netz. Kundendaten verlassen das iPad nur, wenn du selbst eine Datei teilst oder sicherst.
 
-Dieses Repository ist der **neutrale Kern**. Er enthält keine Daten eines echten Studios, weder im Code noch in der Git-Historie. Studios liegen außerhalb, standardmäßig in `../Inkform-Studios/<studio>/`, jedes mit eigenem lokalen Git-Repo. Ein neues Studio legt die Werkstatt an, siehe [NEUES-STUDIO.md](NEUES-STUDIO.md). Eine weitere Sprache: [NEUE-SPRACHE.md](NEUE-SPRACHE.md). Bedienung und Kundenablauf beschreibt die eingebettete Anleitung (`profiles/beispiel/Dokumente/Anleitung.md`).
+Dieses Repository enthält den Quellcode der neutralen App, ohne Studio und ohne Daten. Die fertige App liegt im Zweig `gh-pages` und wird über GitHub Pages ausgeliefert, unter `https://<konto>.github.io/<repo>/`. Diese Adresse bleibt für immer dieselbe, denn die Daten auf dem iPad gehören zu ihr: Konto und Repository werden nicht umbenannt, und neben Inkform läuft in diesem Konto kein anderes Pages-Projekt (alle teilen sich `<konto>.github.io` und damit den Speicher).
 
-## Aufbau
+Ein Studio entsteht nur auf dem iPad: über den Einrichtungsassistenten oder aus einer Gesamtsicherung bzw. Studio-Einstellungen-Datei. Im Repository liegen nie Studio- oder Kundendaten.
+
+## Einrichten
+
+1. Die Adresse der App (`https://<konto>.github.io/<repo>/`) einmal in **Safari** öffnen, mit Internetverbindung. Es erscheint „INKFORM auf den Home-Bildschirm“.
+2. **Symbol wählen:** deine Studio-Einstellungen-Datei, falls du schon eine hast, oder ein Bild. Hier nur die Studio-Einstellungen, nicht die Gesamtsicherung mit Kundendaten. Im Safari-Tab wird nichts gespeichert.
+3. Teilen → **Zum Home-Bildschirm**. Den Namen unter dem Symbol kannst du dort ändern, zum Beispiel in den Studionamen. „Als Web-App öffnen“ aktiviert lassen, Hinzufügen.
+4. Inkform über das neue Symbol starten, beim ersten Mal mit Internet. Safari-Tab und Home-Bildschirm-App haben **getrennte Speicher**; ab jetzt nur noch das Symbol benutzen.
+5. Eine **PIN** festlegen: 6 bis 12 Ziffern. Sie steht in keiner Datei, es gibt keinen Online-Reset. Ändern lässt sie sich unter „iPad & Einstellungen“.
+6. Einen der zwei Wege wählen:
+   - **Neu einrichten:** Studio, Datenschutzkontakt, Anschrift und Ort der Unterschrift eintragen, optional Fristen, Logo und App-Symbol.
+   - **Aus Datei übernehmen:** eine Gesamtsicherung (alles von einem anderen Gerät, auch Einnahmen und PDFs) oder Studio-Einstellungen (dieselbe Datei wie in Schritt 2, nur die Anpassungen; die Einnahmenliste bleibt leer).
+   Vor dem Übernehmen zeigt die App, was in der Datei steckt. Eine falsche Datei ändert nichts.
+7. Formulartexte, Gesundheitsfragen und Datenschutzhinweise prüfen und an das Studio anpassen. Sie sind neutral vorbereitet und vor dem Einsatz rechtlich zu prüfen.
+8. Unter „iPad & Einstellungen“ die PDF-Ablage testen.
+
+Zum Ausprobieren gibt es in der Übersicht „Beispieldaten laden“ (erfundene Einträge mit PDFs). „Beispieldaten entfernen“ löscht sie wieder vollständig.
+
+## Offline nutzen
+
+Nach dem ersten Start mit Internet läuft Inkform auch im Flugmodus. Zum Prüfen: Flugmodus an, App vom Home-Bildschirm öffnen, eine Test-Einwilligung ausfüllen.
+
+## Daten und Sicherung
+
+Alles liegt im Speicher dieser App auf diesem iPad: Einstellungen, PIN, Einnahmenliste und die unterschriebenen PDFs für den ZIP-Export. Die Daten gehören zur Adresse der App. Wechselt die Adresse oder wird die App vom Home-Bildschirm entfernt oder werden die Safari-Websitedaten gelöscht, sind sie weg.
+
+- **Logo:** im Einrichtungsassistenten oder unter „Studio & Kontakt“ als PNG oder JPEG hochladen; die App verkleinert es selbst.
+- **App-Symbol:** ebenda ein quadratisches Symbol für den Home-Bildschirm hochladen (Vorschau, heller oder dunkler Hintergrund). iPadOS übernimmt es nur beim Hinzufügen aus dem Safari-Tab (Schritt 2 oben). Ein späterer Wechsel braucht: Gesamtsicherung, App vom Home-Bildschirm entfernen, mit dem neuen Symbol neu hinzufügen, wiederherstellen.
+- **Gesamtsicherung** (Sichern & Wiederherstellen): eine Datei mit Einstellungen, Logo, App-Symbol, Einnahmen, Fristen und PDFs. Sie enthält Gesundheitsangaben und Unterschriften; nur auf dem iPad („Auf meinem iPad“) oder einem eigenen Rechner ablegen, nicht in iCloud Drive. Die PIN ist nicht enthalten.
+- **Studio-Einstellungen** (Sichern & Wiederherstellen, „Nur Studio-Einstellungen weitergeben“): eine Datei nur mit deinen Anpassungen (Studioangaben, Logo, App-Symbol, Texte, Fragen, Sprachen, Farbschema, Fristen), ohne Kundendaten. Damit richtest du ein zweites iPad ein oder gibst die Einrichtung weiter. Eingespielt wird sie über „Aus Datei wiederherstellen“; die App zeigt, was ersetzt wird, Einnahmen, PDFs und PIN bleiben unberührt.
+- **Erinnerung:** Die Übersicht zeigt den Stand und erinnert, wenn die letzte Gesamtsicherung älter als der eingestellte Abstand ist.
+- **Zurücksetzen:** unter „Aufbewahren & Löschen“ löscht „App auf diesem iPad zurücksetzen“ alle Daten dieser App, auch die PIN (vorher Gesamtsicherung erstellen).
+- **Wiederherstellen:** prüft die Datei, fragt nach und ersetzt dann alle Daten außer der PIN. So zieht Inkform auch auf ein neues Gerät oder eine neue Adresse um.
+
+## Exportieren
+
+Unter „Export“ entsteht für einen Monat, ein Jahr oder einen freien Zeitraum eine ZIP-Datei mit den Einwilligungs-PDFs und der Einnahmenübersicht (PDF und CSV). Gespeichert wird über das Teilen-Menü („In Dateien sichern“). Die Übersicht erinnert an abgeschlossene Monate, die noch nicht exportiert wurden.
+
+## PDF-Kopien in der App löschen
+
+Damit der Speicher nicht dauerhaft wächst, lassen sich die PDF-Kopien in der App löschen, wenn ein Zeitraum als ZIP gesichert und geprüft ist: nach dem Export, nach Zeitraum oder einzeln. Vorher kommt ein Prüfschritt. Gelöscht werden nur die Kopien in der App, nie Dateien in der Dateien-App, auf einem Rechner oder auf USB-Sticks. Die Einträge in der Einnahmenliste bleiben vollständig.
+
+## Updates
+
+Eine neue Version erscheint unter derselben Adresse. Die App sucht einmal am Tag beim ersten Öffnen mit Internet danach, jederzeit über „Nach Update suchen“ unter „iPad & Einstellungen“, lädt sie und übernimmt sie erst, wenn nichts in Arbeit ist (kein Formular, keine offene Einwilligung); über den Knopf lädt sie sofort. Die Daten bleiben erhalten. Vor einem Update ist eine Gesamtsicherung sinnvoll. Alle Geräte möglichst gemeinsam aktualisieren.
+
+## English
+
+Inkform is a tattoo consent form with signature, PDF filing and an income list for the iPad. It runs entirely on the device and offline: no account, no server, no cloud.
+
+**Set up**
+
+1. Open the app's address once in **Safari**, with an internet connection, and wait for “Ready offline”.
+2. Share → **Add to Home Screen**, keep “Open as Web App” on, then start Inkform from the new icon (it has its own storage, separate from the Safari tab).
+3. Choose a **PIN** of 6 to 12 digits. There is no online reset; change it under “iPad & Settings”.
+4. In the setup assistant, enter the studio, privacy contact, address and place of signature. Everything stays on the iPad and can be changed later under “Studio & Contact”.
+5. Check the form texts, health questions and privacy notice and adapt them to the studio. They are neutral drafts and need a legal review before use.
+6. Test PDF filing under “iPad & Settings”.
+
+**Languages**
+
+- The admin area follows the language chosen under “iPad & Settings” → “Language of this Device”. This applies to this iPad only and is not part of the backup.
+- The customer form starts in the studio language. Under “Studio & Contact” → “Languages and Currency”, tick further **Languages for Customers**; a language selector then appears on the form.
+- English form texts are included as a **draft, not legally reviewed**, also after updating an existing installation. They are not offered to customers until you tick English. Have them reviewed first, then tick “Legally reviewed” next to the language.
+- To edit the English texts, use the “Deutsch | English” switch under “Texts” (Welcome & Signature, Health Questions, Consent Texts, Privacy). The German text is shown below each field as a reference.
+- If you change a German text, its English version is kept but marked, and English is not offered until you have checked it: the admin area shows “English: check 2 texts”, jumps to each one and shows the old and the new German text. Edit the English text or tap “Translation fits”. A new health question or declaration needs its English text before English is offered again.
+- Switching the language keeps the customer's details and health answers; declarations, photo choice and signature start again. The PDF is created in the customer's language.
+
+**Data and backup**
+
+Everything is stored in this app on this iPad and belongs to the app's address. Make a **full backup** regularly (Back Up & Restore) and keep it on the iPad (“On My iPad”) or your own computer, not in iCloud Drive: it contains health information and signatures. Restoring replaces all data except the PIN. Under “Export”, ZIP files with the consent PDFs and the income overview are created per month, year or period.
+
+## Für Entwickler
+
+Node.js ab Version 22, keine Paketinstallation, keine Abhängigkeiten aus dem Netz.
+
+```sh
+npm run build          # Beispiel und Blanko nach build/<profil>/
+npm run check          # Syntax, Sprachdateien, Aktualität der Builds
+npm test               # Unit-, Profil- und Leak-Tests
+npm run test:browser   # Browser-Prüfungen mit Chrome headless (Beispiel, dann Blanko)
+npm run pages          # geprüften Blanko-Build als Commit in den lokalen Zweig gh-pages schreiben
+```
+
+`npm run pages` (`scripts/pages-bauen.mjs`) arbeitet nur mit einem vollständig committeten Stand, baut die Blanko-App, prüft sie (`scripts/blanko-pruefen.mjs`) und führt die Leak-Tests aus. Erst wenn beides grün ist, schreibt es genau diese Dateien mit `.nojekyll` über ein temporäres `git worktree` in `gh-pages`; `main` bleibt unberührt. Der Commit-Text nennt die Kern-Version (`Inkform blanko <version> (Kern <hash>)`). Das Skript legt kein Remote an und pusht nie. Ohne Studio-Profile auf dem Rechner bricht es ab; nur mit den neutralen Prüfungen: `node scripts/pages-bauen.mjs --ohne-studios`. In einem Klon ohne Studio-Profile laufen die Leak-Tests mit `INKFORM_NUR_NEUTRAL=1 npm test`.
 
 | Ordner | Inhalt |
 |---|---|
-| `src/` | App-Code für alle Studios: Formular, Admin mit PIN, Einnahmen, Aufbewahrung, PDF, Service Worker |
-| `src/sprachen/` | Texte der Oberfläche, eine Datei je Sprache (`de.js` ist die Grundsprache) |
-| `public/vendor/` | jsPDF 4.2.1, Tailwind CSS Browser 4.3.4, Schrift Noto Sans 2.015 (SIL OFL 1.1), jeweils mit Lizenz |
-| `profiles/beispiel/` | „Beispiel“: Profil mit einem erfundenen Musterstudio, Vorlage für neue Studios |
-| `profiles/blanko/` | „Blanko“: neutrale Fassung ohne Studio, ohne Daten und ohne Anleitung; Einrichtung beim ersten Start auf dem Gerät |
-| `scripts/` | Build, Vorschau und Auslieferung (`serve.mjs`), lokales Zertifikat, Anleitung als PDF |
-| `werkstatt/` | Lokale Oberfläche zum Anlegen, Bearbeiten, Prüfen, Exportieren und Ausliefern |
-| `tests/` | Unit-, Profil-, Leak- und Werkstatt-Tests; `tests/browser/` Browser-Prüfungen |
-| `docs/` | Frühere Pläne und Vorschläge (nicht der Ist-Stand) |
-| `build/` | Erzeugte Apps der eingebauten Profile (nicht in Git) |
+| `src/` | App: Formular, Verwaltung mit PIN, Einnahmen, Aufbewahrung, PDF, Sicherung, Service Worker |
+| `src/sprachen/` | Texte der Oberfläche, eine Datei je Sprache, siehe [NEUE-SPRACHE.md](NEUE-SPRACHE.md) |
+| `public/vendor/` | jsPDF, Tailwind CSS Browser, Noto Sans, jeweils mit Lizenz |
+| `profiles/blanko/` | die neutrale App, die GitHub Pages ausliefert |
+| `profiles/beispiel/` | erfundenes Musterstudio für Tests und die Beispiel-Anleitung |
+| `scripts/` | Build, Prüfung, `gh-pages`, lokale Vorschau, lokales Zertifikat |
+| `tests/` | Unit-, Migrations-, Profil- und Leak-Tests, `tests/browser/` Browser-Prüfungen, `tests/fixtures/` Dateien älterer Formate |
 
-Ein Profil besteht aus `profile.json`, `logo.png`, `icons/`, `manifest.webmanifest`, `Anleitung-iPad-und-Admin.pdf` und `Dokumente/`. In `profile.json` stehen:
-
-- `text`: alle studiospezifischen Texte für die Platzhalter `%%name%%` im Code. Der Build bricht ab bei fehlenden oder ungenutzten Texten und bei Zeichen, die aus JavaScript oder HTML ausbrechen könnten (`"`, `` ` ``, `\`, `<`, `>`, `${`, Zeilenumbruch). Alle Profile haben dieselben Texte.
-- `markers`: die eigenen Kennzeichen des Studios (Name, Inhaber, Adresse, Domains …) als Text oder `{"regex": "…"}`. Die Leak-Tests lesen sie von dort; im Kern steht keine Liste echter Studios.
-- `guide`: Kopfzeile, Datum und Autor der PDF-Anleitung.
-- `languages` (optional): `content` (Sprache der Studiotexte), `studio` (Startsprache, muss zu `lang` im Manifest passen), `customer` (Sprachen, die Kunden wählen dürfen) und `note` (Hinweis je Sprache im PDF, z. B. „Maßgeblich ist die deutsche Fassung“). Ohne Angabe gilt überall Deutsch.
-- `currency` (optional): Währungscode nach ISO 4217, Standard `EUR`. Lässt sich in der App ändern.
-- `translations` (optional): Formulartexte in weiteren Sprachen, je Sprache `app`, `studio`, `medical` und `legal` (Einträge nach `id`), dieselben Platzhalter `{{studio.…}}` wie im deutschen Text. `<` und `>` sind nicht erlaubt. `"draft": true` kennzeichnet einen nicht juristisch geprüften Entwurf; die App zeigt das neben der Kundensprache, der Inhaber kann ihn dort als geprüft markieren. `basedOn` hält die Profiltexte (`%%name%%`) fest, von denen übersetzt wurde: Weicht ein Profiltext davon ab, lässt der Build die betroffenen Übersetzungen mit einer Warnung weg, und die Sprache wird nicht mehr angeboten. Angeboten wird eine Sprache erst, wenn sie unter `languages.customer` steht oder der Inhaber sie in der App ankreuzt. Beispiel und Blanko bringen einen englischen Entwurf mit. Ein neues Studio aus der Werkstatt übernimmt ihn nicht, weil er das Musterstudio nennt.
-
-## Sprachen
-
-Jede Sprache ist eine Datei `src/sprachen/<code>.js` mit `name` (in der eigenen Sprache), `locale` (für Datum, Zahlen, Geld und Mehrzahl über `Intl`), `dir` (`ltr` oder `rtl`), `pdfFont` und `texts`. Welche Sprachen es gibt, ergibt sich nur aus diesen Dateien. Deutsch ist die Grundsprache: Jede andere Sprache braucht genau dieselben Schlüssel, dieselben Platzhalter (`{wert}` setzt die App ein, `%%name%%` der Build aus dem Profil; `{waehrung}` und `{waehrungszeichen}` gibt es überall) und die Mehrzahlformen ihrer Sprache (`{ one: "…", other: "…" }`, Zahl in `{anzahl}`). Erlaubt sind nur `<b>`, `<strong>` und `<code>`. Build und Tests brechen ab bei fehlenden, überzähligen, doppelten oder ungenutzten Schlüsseln. Im HTML stehen Texte als `data-t="schlüssel"`, Attribute als `data-t-<attribut>`, im Code als `t()` (Text) und `th()` (HTML).
-
-Die Verwaltung erscheint in der Sprache des Geräts (iPad & Einstellungen → Sprache dieses Geräts, `inkform.language.v1`, nicht in der Gesamtsicherung), sonst in der Studiosprache. Das Kundenformular startet immer in der Studiosprache. Auf der Studio-Seite stehen Studiosprache, Kundensprachen, Währung und Hinweise; die Texte des Formulars in anderen Sprachen liegen in `settings.translations`. Bearbeitet werden sie auf den Textseiten der Verwaltung über den Umschalter „Deutsch | English | …“; unter jedem Feld steht der deutsche Text als Vorlage. Fehlt eine Übersetzung, ergänzt die App sie aus dem Profil, solange der deutsche Text noch der des Profils ist; eigene Übersetzungen überschreibt sie nie. Ändert der Inhaber einen deutschen Text, bleibt die Übersetzung stehen und kommt auf die Liste `stale` (mit dem alten deutschen Text in `staleBase`, beides auch in der Sicherung). Solange die Liste nicht leer ist, wird die Sprache Kunden nicht angeboten; die Verwaltung zeigt „… Texte prüfen“, springt zum Feld und stellt alten und neuen deutschen Text gegenüber. Bearbeiten der Übersetzung oder „Übersetzung passt“ nimmt das Feld von der Liste. Hat die Studiosprache selbst veraltete Texte, startet das Formular so lange in der Sprache der Studiotexte. Eine Kundensprache wird nur angeboten, wenn jeder Text des Formulars in ihr vorliegt. Wechselt der Kunde die Sprache, bleiben Eingaben und Gesundheitsangaben, Erklärungen, Foto-Auswahl und Unterschrift werden zurückgesetzt; das nächste Formular beginnt wieder in der Studiosprache. Das PDF erscheint in der Kundensprache und vermerkt sie, wenn sie von der Sprache der Studiotexte abweicht, mit dem Hinweis dieser Sprache. Dateinamen folgen der Studiosprache, die Ordner im ZIP heißen immer `Einwilligungen/` und `Einnahmen/`.
-
-## Bauen und prüfen
-
-Node.js ab Version 22, keine Paketinstallation.
-
-```sh
-npm run build                                                 # Beispiel und Blanko nach build/<profil>/
-node scripts/build.mjs --profile ../Inkform-Studios/<studio>  # nach <studio>/build/
-npm run check                                                 # Syntax und Aktualität der eingebauten Builds
-node scripts/blanko-pruefen.mjs                               # Blanko-Build auf Privates prüfen
-npm test                                                      # alle Tests, nacheinander (~35 s)
-npm run test:browser                                          # Browser-Prüfungen mit Beispiel, dann Blanko
-npm run preview                                               # Vorschau auf http://127.0.0.1:8080
-npm run werkstatt                                             # Werkstatt auf http://127.0.0.1:8090
-```
-
-Je Profil entstehen `index.html` (Einzeldatei, ohne Server nutzbar) und `dist/` (Web-App mit Service Worker für den Offline-Betrieb). Ein Studio-Build landet nie im Kern. Der Build ersetzt nur einen vorhandenen Build und bricht ab, wenn der Zielordner andere Dateien enthält. Die Version des Service Workers hängt von allen Dateien ab, die er speichert; jede Änderung erreicht so auch installierte Geräte.
-
-## Verhalten der App
-
-- **PDF-Schrift:** Noto Sans ist eingebettet, Namen wie Gül Şahin oder Łukasz Ćwik funktionieren. Zeichen, die die Schrift nicht kann (Emojis, Arabisch, Devanagari …), meldet die App vor dem Erstellen.
-- **Abschluss:** Die Einnahme wird erst gebucht, wenn der Inhaber die Ablage des PDFs bestätigt, genau einmal je Einwilligung. Bis dahin bleiben Metadaten (`inkform.pending.v1`) und PDF (IndexedDB `inkform-pending`) auf dem Gerät; danach werden sie gelöscht. Ist das PDF nicht mehr lesbar, lässt sich die Einnahme als „PDF fehlt“ buchen. Jede Einnahme merkt sich die beim Erfassen gültige Währung; ändert sich die Studio-Währung später, zeigt die Liste ältere Einnahmen weiter in ihrer eigenen Währung, nur die Summen gelten in der aktuellen.
-- **Export nach Zeitraum:** Beim Bestätigen der Ablage kommt das PDF zusätzlich in die IndexedDB `inkform-archive` (Schlüssel = Einnahmen-Eintrag). Die Admin-Seite „Export“ erstellt daraus für einen Monat, ein Jahr oder einen freien Zeitraum (Termindatum) eine unkomprimierte ZIP-Datei ohne Bibliothek: `Einwilligungen/JJJJ-MM-TT_Nachname_Vorname.pdf` und `Einnahmen/` mit Übersicht als PDF und CSV, mit Vorschau von Anzahl und Größe. Gespeichert wird über das Teilen-Menü. Wird ein Eintrag als gelöscht markiert, als „PDF fehlt“ gebucht, entfernt oder anonymisiert, löscht die App auch diese Kopie. Einwilligungen, die vor diesem Update abgelegt wurden, haben keine Kopie.
-- **PDF-Kopien in der App löschen:** Die Export-Seite zeigt Anzahl und Größe der Kopien in `inkform-archive` (Hinweis ab 200 MB). Gelöscht wird nur auf eigenen Auftrag: nach einem ZIP-Export über das Angebot, nach Zeitraum (gleiche Auswahl wie beim Export, Warnung, wenn der Zeitraum nie als ZIP gesichert wurde) oder einzeln in der Einnahmenliste. Vor dem Löschen nach Zeitraum steht ein Prüfschritt: Warnung, Anleitung zum Prüfen der ZIP-Datei mit der Anzahl, ein Kästchen „Ich habe die ZIP-Datei geöffnet und geprüft“ und eine letzte Rückfrage; „Später löschen“ geht jederzeit. PDFs in der Dateien-App, auf dem Mac oder auf USB-Sticks werden nie berührt. Der Eintrag bleibt vollständig und bekommt `pdfRemovedAt` („PDF nicht mehr in der App“), getrennt von `pdfDeletedAt` (überall gelöscht); er bleibt auf der Löschliste der Aufbewahrung, weil das PDF anderswo noch liegen kann. Die Kennungen stehen dauerhaft in `inkform.pdf-removed.v1` und reisen mit der Gesamtsicherung; Wiederherstellen holt solche Kopien nie zurück, auch nicht aus einer älteren Sicherung.
-- **Eigenes Logo:** Unter „Studio & Kontakt“ und im Einrichtungsassistenten lässt sich ein PNG oder JPEG hochladen. Die App erkennt das Format am Inhalt, verkleinert auf dem Gerät auf höchstens 512 × 512 Pixel und 300 KB und speichert ein PNG in IndexedDB (`inkform-logo`; localStorage ist mit wenigen MB zu knapp). Es ersetzt das eingebaute Logo im Kopf, in der Verwaltung, in der Vorschau und als Favicon, über `blob:`-Adressen (die CSP bleibt). Das jeweils gültige Logo (eigenes oder eingebautes) steht auf schwarzem Feld im Kopf jeder Seite des Einwilligungs-PDFs und oben in der Einnahmenübersicht; kann jsPDF es nicht lesen, entsteht das PDF ohne Logo. „Logo entfernen“ zeigt wieder das eingebaute.
-- **App-Symbol für den Home-Bildschirm:** Daneben lässt sich ein eigenes Symbol hochladen (PNG oder JPEG). Die App nimmt das größte Quadrat aus der Bildmitte, legt es auf einen hellen oder dunklen Hintergrund (iPadOS füllt Durchsichtiges sonst schwarz), zeigt eine Vorschau mit Sicherheitsrand und speichert nach „Übernehmen“ ein PNG von 180 bis 512 Pixeln (höchstens 300 KB) neben dem Logo. Die Seite setzt `apple-touch-icon` zur Laufzeit auf eine `data:`-Adresse mit 180 × 180 Pixeln. Auf dem iPad geprüft: Safari holt ein verlinktes Symbol beim Hinzufügen direkt vom Server, am Service Worker vorbei; ein gespeichertes Symbol erreicht es nur so. iPadOS übernimmt das Symbol einmal beim Hinzufügen; den Namen schlägt es aus dem Manifest vor (er lässt sich im Dialog ändern). Ein späterer Wechsel braucht Sicherung, App entfernen, neu hinzufügen, wiederherstellen.
-- **Gesamtsicherung:** Eine JSON-Datei (Version 3) mit Einstellungen, Farbschema, eigenem Logo und App-Symbol (jeweils oder `null`), Einnahmen, Fristen, Export-Protokoll (`inkform.export.v1`), Erinnerungsabstand (`inkform.backup.interval.v1`) und den PDFs für den Export (Base64). Nicht enthalten: PIN und offene Einwilligung. Gespeichert wird in zwei Schritten (erstellen, dann über das Teilen-Menü sichern), damit Safari das Teilen zulässt. Version 1 ohne Logo und Version 2 ohne App-Symbol bleiben lesbar und lassen, was ihnen fehlt, auf dem Gerät unverändert. Wiederherstellen prüft die ganze Datei vorher, auch Typ und Größe von Logo und App-Symbol, fragt mit Datum und Inhalt nach, ersetzt dann alles außer der PIN und lädt die App neu. Die Übersicht erinnert, wenn die letzte Gesamtsicherung (`inkform.backup.v1`) älter als der eingestellte Abstand (1 bis 30 Tage) ist, und nennt abgeschlossene Monate mit PDFs, die noch in keiner gespeicherten ZIP-Datei mit Einwilligungen enthalten waren.
-- **Studio-Einstellungen** (Sichern & Wiederherstellen): dieselben Anpassungen wie in der Gesamtsicherung (Einstellungen mit Texten, Fragen, Sprachen und Übersetzungen; Farbschema, Logo, App-Symbol, Fristen, Erinnerungsabstand), ohne Einnahmen, PDFs, Export-Protokoll und PIN. Beide Dateien teilen Format und Versionsnummer (`kind` unterscheidet sie, `src/backup.js`), also auch die Prüfung und die Migration. Der Import prüft die ganze Datei, nennt in der Rückfrage, was ersetzt wird, schreibt dann nur die Anpassungen (Logo und App-Symbol zuerst, bei einem Fehler alles wieder zurück) und lädt neu. Ältere Dateien nur mit Einstellungen und Farbschema bleiben importierbar; was ihnen fehlt, bleibt auf dem Gerät. Eine Dateiauswahl unter „Sichern & Wiederherstellen“ nimmt beide Arten an und erkennt sie an `kind`; Übersicht und iPad & Einstellungen haben keine eigenen Dateiwege mehr. „Was wohin gehört“ auf derselben Seite zeigt, was in welcher Datei steckt und was nirgends (PIN, Sprache dieses Geräts, offene Einwilligung; Symbol und Name einer schon installierten App ändert keine Datei). Die HTML-Datei der App behält das eingebaute Logo; ein eigenes überträgt die Studio-Einstellungen-Datei (sonst ginge es beim nächsten Export aus der HTML-Datei verloren). Import und Wiederherstellen sind gesperrt, solange ein Kundenformular angefangen, eine Einwilligung offen oder eine Änderung ungespeichert ist; beides steht auch im Einrichtungsassistenten zur Verfügung.
-- **Einstellungen und Migration:** Die Einstellungen (`inkform.settings.v1`) tragen `schemaVersion`. Beim Laden, Speichern, Wiederherstellen und Importieren läuft zuerst `migrateSettings` (`src/defaults.js`): die Schritte aus `SETTINGS_STEPS` nacheinander von der Version der Datei bis zur aktuellen, danach bekommen fehlende Felder ihren Standard und fehlende Standardfragen ihren Platz zurück (nur wenn die Einstellungen in der Sprache der Standardtexte geschrieben sind; sonst lehnt die Prüfung sie ab, statt Sprachen zu mischen). Eigene Texte, Fragen, Übersetzungen, Logo und App-Symbol bleiben unverändert. Laden schreibt nie zurück; gespeichert wird erst beim nächsten „Änderungen speichern“. Sind die gespeicherten Einstellungen unlesbar (kaputt, aus einer neueren Version, ungültig), bleiben sie unverändert liegen: Die Verwaltung zeigt oben einen Hinweis mit dem Grund, einem Weg zu „Sichern & Wiederherstellen“ und „Unlesbare Einstellungen als Datei sichern“; Speichern, der Einrichtungsassistent sowie Gesamtsicherung, Studio-Einstellungen und HTML-Datei (sie enthielten die Standardvorlage) sind gesperrt, das Kundenformular auch, bis eine Gesamtsicherung oder Studio-Einstellungen eingespielt sind.
-- **Regel für Formatänderungen:** Jede Änderung am Format der Einstellungen oder der Sicherungsdateien braucht einen Migrationsschritt (`SETTINGS_STEPS` bzw. eine neue Version in `src/backup.js`, die ältere weiter liest). Die Fixtures in `tests/fixtures/` (erfundenes Studio, erfundenes Logo und Symbol) werden dafür nie neu erzeugt oder angepasst: Sie stehen für Dateien, die schon auf iPads liegen, und müssen mit `tests/einstellungen-migration.test.mjs` und der Browser-Prüfung `migration` weiter bestehen. Für ein neues Format kommt eine neue Fixture dazu.
-- **PIN:** 6 bis 12 Ziffern. Andere Zeichen werden schon beim Tippen entfernt; bei der Einrichtung gibt es getrennte Meldungen für „nur Ziffern“, „zu kurz“ und „zu lang“.
-- **PIN-Sperre:** Nach 5 Fehlversuchen 30 Sekunden, gespeichert in `inkform.admin.lock.v1` und damit auch nach einem Neuladen wirksam. Eine zurückgestellte Uhr verlängert die Sperre nicht. Bekannte Grenze: Mit zwei gleichzeitig offenen Fenstern kann eine Sperre überschrieben werden oder bis zu 30 Sekunden länger dauern; auf dem iPad läuft die App in einem Fenster.
-- **Aufbewahrung:** Zwei Fristen in Jahren (`inkform.retention.v1`). Die Löschliste zeigt fällige PDFs; Anonymisieren entfernt Name und Dateiname, Beträge bleiben. Anonymisiert wird nur, wenn das PDF als gelöscht markiert oder als „PDF fehlt“ gebucht ist, und es ist endgültig. Die Übersicht erinnert an offene Einwilligungen.
-- **Updates:** Die App startet immer aus dem Offline-Speicher, auch online; so wartet sie ohne Netz nie auf den Server. Nach einer neuen Version fragt sie von selbst nur beim ersten Start des Tages und nur, wenn kein Kunde dran ist (Safari sucht nicht selbst, und jede Anfrage zeigt im Flugmodus den Hinweis von iPadOS); sonst über „Nach Update suchen“ unter „iPad & Einstellungen“. Eine neue Version übernimmt erst, wenn die App leer ist (kein Formular in Arbeit, keine offene Einwilligung, keine ungespeicherten Änderungen), und löscht dann die alte aus dem Offline-Speicher; sichtbar wird sie beim nächsten Öffnen, über „Nach Update suchen“ sofort (die Seite lädt neu). Ältere Versionen kennen die Felder `pdfMissing`, `pdfDeletedAt` und `anonymizedAt` nicht: alle Geräte gemeinsam aktualisieren.
-- **Schriftgrößen:** Im Kundenbereich mindestens 16 px für Eingaben und Fließtext, nichts unter 14 px.
-
-## Blanko
-
-`profiles/blanko/` hat `"blank": true`: leere Studioangaben, neutrale Texte, eigenes Logo, keine eingebettete Anleitung. Die App zeigt dann nach der PIN einen Einrichtungsassistenten mit zwei Wegen: „Neu einrichten“ (Studio, Kontakt, Anschrift, Ort, optional Fristen, Logo und App-Symbol) und „Aus Datei übernehmen“ (Gesamtsicherung oder Studio-Einstellungen). Die App erkennt die Datei selbst und prüft, zeigt und schreibt sie mit denselben Funktionen wie Wiederherstellen und Import in der Verwaltung (`applyChosenFile`); eine falsche Datei lässt den Assistenten mit Meldung offen. Danach geht es (nach der PIN) direkt in die Übersicht, nach Studio-Einstellungen mit „Was fehlt noch?“. Der Assistent bleibt, bis die vier Studioangaben gespeichert sind; alles bleibt im Browser-Speicher des Geräts und ist unter „Studio & Kontakt“ änderbar. In einem Safari-Tab auf dem iPad (`navigator.standalone === false`) zeigt eine frische Blanko-Installation vor der PIN die Seite „INKFORM auf den Home-Bildschirm“: Symbol aus den Studio-Einstellungen oder einem Bild wählen (eine Gesamtsicherung wird dort abgelehnt), dann hinzufügen und in der App einrichten. Der Tab speichert dabei nichts, denn die Home-Bildschirm-App hat einen eigenen Speicher; „Ohne Home-Bildschirm im Safari-Tab weiter“ führt zur PIN. Mac-Hinweise und der Anleitungs-Knopf sind ausgeblendet. „Beispieldaten laden“ legt sechs erfundene Einwilligungen mit PDFs an (Kennungen `beispiel-…`), „Beispieldaten entfernen“ löscht sie samt PDFs.
-
-`node scripts/blanko-pruefen.mjs` (oder `--dir <ordner>` für einen geschriebenen Build, `--sha256 <datei>` für die Prüfsummen der geprüften Dateien) prüft in zwei Ebenen:
-
-- **Herkunft:** Der Kern muss ohne Änderungen committet sein, und jede Datei muss Byte für Byte dem Build entsprechen, den `build.mjs` daraus erzeugt. Privates könnte dann nur aus committeten Kerndateien stammen, und die prüfen die Leak-Tests samt Git-Historie. Ein Ordner darf nur die festen Dateien enthalten, keine versteckten Einträge, weiteren Ordner oder Verknüpfungen.
-- **Suche:** Kennzeichen und Studiotexte (Name, Anschrift, Kontakt …), Logos, Icons, Anleitungen und andere Bilder des Beispiels und aller Studios; Benutzername, Rechnername, Home-Pfad und Git-E-Mail dieses Macs; alle Dateien unter `~/Library/Application Support/Inkform/zertifikat(e)/` (auch DER) und PEM-Blöcke; Werkstatt- und Vor-Ort-Bezüge; E-Mail-Adressen außer den zwei Platzhaltern und den Angaben in `public/vendor/`; eine eingebettete Konfiguration; PNG-Metadaten; Studioangaben im Profil. Gesucht wird auch nach Prozent-, HTML- und JavaScript-Dekodierung, ohne Zeichen ohne Breite, als UTF-16 und in kurzen Base64-Blöcken.
-
-Die gesuchten Namen liest das Skript zur Laufzeit; im Kern stehen sie nicht. Ein nicht lesbarer Studio-Ordner bricht ab, ebenso das Fehlen jedes Studio-Profils (bewusst ohne: `--ohne-studios`). Nicht erkennbar sind ein neu kodiertes oder skaliertes Studio-Logo und Kundendaten ohne Kennzeichen; beides kann nur über committete Kerndateien hineinkommen.
-
-## Build-Repo für GitHub
-
-`node scripts/blanko-uebergeben.mjs` legt bei Bedarf `../Inkform-GitHub/` als eigenes lokales Git-Repo (Zweig `main`) an, prüft den Blanko-Build wie `blanko-pruefen.mjs` samt `profiles/blanko/README.md`, schreibt genau diese Bytes (Inhalt von `dist/` auf oberster Ebene und die README), vergleicht sie danach über ihre Prüfsummen und committet lokal als `Sven <sven@inkform.invalid>`, ohne Hooks. Das Ziel darf außer `.git`, README und den App-Dateien nichts enthalten; sonst wird nichts geschrieben. Das Skript legt kein Remote an und pusht nie. Alle Pfade sind relativ; die App läuft auch unter einem Unterpfad (`/inkform/`, geprüft in `tests/browser/unterpfad.mjs`).
-
-Lokaler Test auf dem iPad, getrennt von bestehenden Studio-Installationen (eigener Port, also eigene Adresse und eigener Speicher):
-
-```sh
-node scripts/serve.mjs --dir ../Inkform-GitHub --lan --port 8444   # https://<mac>.local:8444/
-```
-
-## Leak-Tests
-
-`npm test` findet Studios über `INKFORM_STUDIOS` (Ordner, getrennt durch `:`) oder in `../Inkform-Studios/`.
-
-- **Über Kreuz:** Kein Build und kein Profilordner enthält Kennzeichen, Logo, Icons oder Anleitung eines anderen Profils, auch nicht als eingebettetes Base64.
-- **Kern:** Arbeitsordner und die komplette Git-Datenbank (auch nicht mehr erreichbare Objekte, Refs, Reflogs) enthalten nichts von einem Studio.
-- **Gegentests:** Eingeschleuste Kennzeichen und Dateien werden erkannt.
-
-Durchsucht werden Text, Base64-Blöcke, PNG-Textfelder und der Text von PDFs. Die Browser-Prüfungen nutzen ein leeres Wegwerf-Profil von Chrome und nur erfundene Daten; Details in `tests/browser/README.md`.
-
-## Werkstatt
-
-`npm run werkstatt` startet eine Oberfläche nur auf `127.0.0.1`. Jede Anfrage braucht den richtigen Host und ein Sitzungs-Token, dazu gilt eine strenge CSP. Kundendaten liest oder speichert die Werkstatt nicht. Ihr Zustand liegt außerhalb der Repos unter `~/Library/Application Support/Inkform/` (`werkstatt/`, `zertifikate/`).
-
-**Schutz:** Studios sind nur Anzeige, bis ihr Ordner in `werkstatt/freigegeben.json` steht (`{"studios": ["/pfad"]}`); neu angelegte Studios werden automatisch eingetragen. Das Beispiel kann immer gebaut und geprüft, aber nicht bearbeitet werden. Blanko erscheint nicht in der Werkstatt. Vor jedem Schreiben prüft die Werkstatt, dass der Ordner genau so freigegeben ist, keine Verknüpfung ist und in Wirklichkeit kein geschütztes Studio. Die Studio-Kennung muss 3 bis 40 Zeichen aus `a–z`, `0–9` und `-` haben.
-
-**Funktionen:**
-
-- **Bauen und Prüfen:** Build, `npm test` und Browser-Prüfungen, mit kurzer Zusammenfassung und aufklappbarem Protokoll. Es läuft immer nur ein Lauf.
-- **Neues Studio:** kopiert das Beispiel nach `../Inkform-Studios/<kennung>/`, legt `.gitignore` und ein Git-Repo ohne Remote an. Ein vorhandener Ordner wird nie angefasst.
-- **Profil-Editor:** Texte, Kennzeichen (mit Probe im eigenen Build), Anleitung, Logo (quadratisches PNG; die Icons erzeugt `sips`) und die änderbaren Manifest-Felder. Gespeichert wird nur ohne Fehler, ganz oder gar nicht, und nur wenn sich die Dateien seit dem Laden nicht geändert haben.
-- **Commit:** genau die angezeigten Dateien, lokal als `Sven <sven@inkform.invalid>`, ohne Hooks. Nicht committet werden Build-Ordner, Zertifikate, Schlüssel und Kundendaten-Exporte, ebenso wenig in Repos mit Git-Filtern.
-- **Export:** nur bei sauber committetem Kern und Studio, grünen Tests für genau diese Commits und aktuellem Build. Das Paket (`index.html`, `dist/`, `PRUEFBERICHT.txt`, `SHA256SUMS`) entsteht unter `../Inkform-Exporte/<studio>/inkform-<studio>-<version>-<datum>/`, ist schreibgeschützt und wird nie überschrieben. Vorher läuft die Leak-Prüfung gegen alle anderen Profile. Geschrieben wird das Paket von `werkstatt/publish.py` (python3 der Command Line Tools), das keine Verknüpfungen verfolgt und exklusiv umbenennt.
-- **Vor Ort:** liefert einen gültigen Export im WLAN unter `https://inkform-app.local:8443/` aus, nur solange er läuft. Er nutzt ein Zertifikat je Studio, dessen Schlüssel mit einem Passwort verschlüsselt ist, das nirgends gespeichert wird. Vorher prüft die Werkstatt Zertifikat, WLAN, freien Namen, keinen Rückschritt der Version und FileVault. Die Anzeige bietet Adresse mit QR-Code, `.webloc` und Zertifikat zum AirDrop sowie eine Checkliste. Nach 30 Minuten ohne Anfrage endet der Modus.
-
-**Noch nicht geprüft:** ob ein echtes iPad `inkform-app.local` findet und das Zertifikat annimmt. Bis das mit dem Beispiel an einem Test-iPad bestätigt ist, bleibt der Vor-Ort-Modus für Studios gesperrt.
-
-## Bestehende Installation ohne Werkstatt
-
-Für eine bereits installierte App liefert der Mac den Build im WLAN unter seinem eigenen Bonjour-Namen aus, solange der Befehl läuft:
-
-```sh
-node scripts/lokales-zertifikat.mjs                                  # einmalig
-node scripts/serve.mjs --profile ../Inkform-Studios/<studio> --lan   # https://<mac>.local:8443/
-```
-
-Das Stammzertifikat gilt nur für den Namen dieses Macs; die Schlüssel liegen in `~/Library/Application Support/Inkform/zertifikat/`. Rechnername und Port nicht ändern: Das iPad speichert die App-Daten pro Adresse.
-
-## Anleitung als PDF
-
-`python3 scripts/anleitung.py <profil>` erzeugt das PDF aus `Dokumente/Anleitung.md`. Dafür sind ReportLab und Arial nötig; ReportLab ist derzeit nicht installiert. Ohne neues PDF bleibt der Leak-Test für ein neues Studio rot, weil es noch das PDF der Beispiel-Fassung enthält.
-
-## Git und Daten
-
-Git ist rein lokal, ohne Remotes; gesichert wird über Time Machine. `.gitignore` schließt App-Exporte sowie PDF-, CSV-, JSON-, Tabellen-, Foto- und ZIP-Dateien aus; erlaubt sind nur ausdrücklich freigegebene Projektdateien. Kundendaten gehören nie in diese Ordner.
+Aufbau, Verhalten der App, Migration der Einstellungen und Prüfungen im Detail: [docs/ENTWICKLUNG.md](docs/ENTWICKLUNG.md).

@@ -2,7 +2,7 @@
 //
 //   node scripts/build.mjs                                   built-in profiles -> build/<id>/
 //   node scripts/build.mjs --profile beispiel                built-in sample profile
-//   node scripts/build.mjs --profile ../Inkform-Studios/x    studio profile outside this repo
+//   node scripts/build.mjs --profile <studio-ordner>         studio profile outside this repo
 //   node scripts/build.mjs --profile <pfad> --out <ziel>     explicit output folder
 //   node scripts/build.mjs --check [...]                     fail if the output is outdated
 //
@@ -63,12 +63,23 @@ export async function listBuiltinProfiles() {
     .sort();
 }
 
-// Studio profiles outside the repository: INKFORM_STUDIOS (list separated by ":"; each entry is a
-// profile folder or a folder of profiles), otherwise ../Inkform-Studios next to this repository.
+// Where the studio profiles lie, always outside the repository; each entry is a profile folder or a
+// folder of profiles. In this order: INKFORM_STUDIOS (separated by ":"), the file .inkform-studios
+// in the repository (one path per line, relative to the repository; ignored by Git), otherwise
+// ../Inkform-Studios next to the repository.
+export const STUDIOS_FILE = ".inkform-studios";
+// places (file, fallback) exist for the tests. A root is "fallback" when nothing named it.
+export const STUDIOS_FALLBACK = path.resolve(root, "..", "Inkform-Studios");
+export async function studioRoots(env = process.env, { file = path.join(root, STUDIOS_FILE), fallback = STUDIOS_FALLBACK } = {}) {
+  if (env.INKFORM_STUDIOS) return env.INKFORM_STUDIOS.split(path.delimiter).filter(Boolean).map((p) => path.resolve(p));
+  const listed = await readFile(file, "utf8").then(
+    (text) => text.split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#")),
+    () => [],
+  );
+  return listed.length ? listed.map((p) => path.resolve(path.dirname(file), p)) : [fallback];
+}
 export async function discoverStudioProfiles(env = process.env) {
-  const roots = env.INKFORM_STUDIOS
-    ? env.INKFORM_STUDIOS.split(path.delimiter).filter(Boolean).map((p) => path.resolve(p))
-    : [path.resolve(root, "..", "Inkform-Studios")];
+  const roots = await studioRoots(env);
   const found = [];
   for (const dir of roots) {
     const has = (d) => readFile(path.join(d, "profile.json")).then(() => true, () => false);
@@ -98,7 +109,7 @@ async function loadProfile(ref) {
   const profile = JSON.parse(await readFile(path.join(dir, "profile.json"), "utf8"));
   if (profile.id !== id) throw new Error(`${dir}/profile.json: id muss "${id}" sein (Ordnername).`);
   if (inside(dir, root) && !isBuiltin(dir))
-    throw new Error("Studio-Profile gehören nicht in das Kern-Repo, sondern nach ../Inkform-Studios/.");
+    throw new Error("Studio-Profile gehören nicht in das Kern-Repo, sondern in einen Ordner außerhalb.");
   if (profile.blank !== undefined && typeof profile.blank !== "boolean")
     throw new Error(`${id}: "blank" muss true oder false sein.`);
   if (!profile.blank && !profile.guide) throw new Error(`${id}: profile.json braucht "guide" (Anleitung als PDF).`);

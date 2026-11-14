@@ -6,16 +6,16 @@ import path from "node:path";
 
 // Local preview: binds to 127.0.0.1, never to the network.
 //   node scripts/serve.mjs                                  build/beispiel/dist
-//   node scripts/serve.mjs --profile ../Inkform-Studios/x   <profil>/build/dist
+//   node scripts/serve.mjs --profile <studio-ordner>        <profil>/build/dist
 //   node scripts/serve.mjs --dir <ordner mit index.html>    any built dist folder
 //
 // iPad installation or update over the home network (only while this command runs):
-//   node scripts/serve.mjs --profile ../Inkform-Studios/x --lan
+//   node scripts/serve.mjs --profile <profil> --lan
 // serves HTTPS on port 8443 with the certificate from scripts/lokales-zertifikat.mjs, reachable
 // as https://<mac>.local:8443. Keep host name and port unchanged: the iPad stores the app's data
 // per address. Only the static app is served; customer data never passes through this server.
 //
-// Additional options, used by the Werkstatt's on-site mode (without them nothing changes):
+// Additional options (without them nothing changes):
 //   --cert-dir <ordner>   certificate folder (server.key, server.crt, host.txt) instead of the default
 //   --bind <ip>           listen only on this address (e.g. the Wi-Fi address) instead of all
 //   --log-requests        one line per request: time and path, never the client address

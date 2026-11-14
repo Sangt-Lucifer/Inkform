@@ -1,5 +1,5 @@
 // Profile tests for the built-in sample profile and every studio profile found next to the core
-// (../Inkform-Studios/* or INKFORM_STUDIOS). Each profile lists its own markers in profile.json;
+// (see studioRoots in scripts/build.mjs). Each profile lists its own markers in profile.json;
 // no build may contain another studio's markers or embedded logo, icon or guide files.
 import assert from "node:assert/strict";
 import test from "node:test";

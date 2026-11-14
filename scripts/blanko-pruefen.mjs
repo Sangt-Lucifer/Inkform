@@ -20,7 +20,7 @@ import { homedir, hostname, userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileMarkers, filesBelow, findFingerprints, findMarkers, fingerprints, scanText } from "../tests/lib/leaks.mjs";
-import { buildProfile, resolveProfileDir, root } from "./build.mjs";
+import { STUDIOS_FALLBACK, buildProfile, resolveProfileDir, root, studioRoots } from "./build.mjs";
 
 export const BLANKO_FILES = [
   "index.html",
@@ -133,18 +133,15 @@ export async function readBuildDir(dir) {
   return { files, problems };
 }
 
-function studioRoots(env) {
-  return env.INKFORM_STUDIOS
-    ? env.INKFORM_STUDIOS.split(path.delimiter).filter(Boolean).map((p) => path.resolve(p))
-    : [path.resolve(root, "..", "Inkform-Studios")];
-}
-
 // Everything private this check knows about, read now from the studios and this Mac. A studio
 // folder that cannot be read stops the check instead of being skipped.
-export async function collectPrivate({ env = process.env, home = homedir() } = {}) {
-  const studios = [];
-  for (const dir of studioRoots(env)) {
+// withoutStudios: a missing default folder (nothing named one) counts as no studios.
+export async function collectPrivate({ env = process.env, home = homedir(), withoutStudios = false, places = {} } = {}) {
+  const studios = [],
+    fallback = places.fallback ?? STUDIOS_FALLBACK;
+  for (const dir of await studioRoots(env, places)) {
     const entries = await readdir(dir, { withFileTypes: true }).catch((error) => {
+      if (withoutStudios && error.code === "ENOENT" && dir === fallback) return [];
       throw new Error(`Studio-Ordner nicht lesbar: ${dir} (${error.code})`);
     });
     if (entries.some((e) => e.name === "profile.json")) studios.push(dir);
@@ -265,7 +262,7 @@ async function main(argv) {
   const profile = JSON.parse(await readFile(path.join(resolveProfileDir("blanko"), "profile.json"), "utf8")),
     reference = (await buildProfile("blanko")).files;
   const { files, problems: layout } = dir ? await readBuildDir(dir) : { files: reference, problems: [] };
-  const priv = await collectPrivate();
+  const priv = await collectPrivate({ withoutStudios: argv.includes("--ohne-studios") });
   if (!priv.studios.length && !argv.includes("--ohne-studios"))
     throw new Error("Keine Studio-Profile gefunden. Ohne sie ist die Prüfung unvollständig; bewusst ohne: --ohne-studios.");
   const problems = [...layout, ...(await checkBlanko(files, profile, priv, { reference }))];

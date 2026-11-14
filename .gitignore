@@ -53,3 +53,21 @@ Einwilligungen/
 *.key
 *.pem
 secrets/
+
+# Sicherungen und Exporte der App nach Dateinamen, auch in sonst freigegebenen Ordnern (steht am
+# Ende, damit keine Freigabe oben sie wieder zulässt). Deutsch und Englisch.
+Tattoo_Einwilligung_*
+Tattoo_Consent_*
+*Inkform_Sicherung*
+*Inkform_Backup*
+*Inkform_Studio-Einstellungen*
+*Inkform_Studio_Settings*
+*Inkform_Einnahmen*
+*Inkform_Income*
+*Inkform_Einstellungen_unlesbar*
+*Inkform_Settings_unreadable*
+INKFORM_Speichertest_*
+INKFORM_StorageTest_*
+
+# Lokaler Pfad zu den Studio-Profilen für die Leak-Tests (nur auf diesem Mac)
+/.inkform-studios

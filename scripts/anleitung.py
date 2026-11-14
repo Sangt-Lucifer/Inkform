@@ -6,7 +6,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 # Aufruf: python3 scripts/anleitung.py beispiel                    (eingebautes Profil)
-#         python3 scripts/anleitung.py ../Inkform-Studios/<studio>  (Studio-Profil)
+#         python3 scripts/anleitung.py <studio-ordner>  (Studio-Profil)
 # Liest <profil>/Dokumente/Anleitung.md und schreibt <profil>/Anleitung-iPad-und-Admin.pdf.
 root=Path(__file__).resolve().parents[1]
 if len(sys.argv)!=2:sys.exit('Aufruf: python3 scripts/anleitung.py <profil oder pfad>')
