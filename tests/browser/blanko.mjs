@@ -20,6 +20,7 @@ await offline(true);
 await reload();
 await ev(HELPERS);
 check("Offline geladen: Service Worker liefert die App im Flugmodus", await ev(`!!navigator.serviceWorker.controller&&BLANK_EDITION===true`));
+check("Seitentitel ohne Studionamen beginnt mit der Marke", await ev(`document.title==='INKFORM — Tattoo-Einwilligung'||document.title==='INKFORM — Admin-Konsole'`));
 check("Keine Mac-Hinweise und keine Anleitung", await ev(`[...document.querySelectorAll('[data-studio-only]')].every(n=>n.hidden)&&[...document.querySelectorAll('[data-admin-action="guide"]')].every(n=>n.hidden)`));
 
 // PIN at the first start -------------------------------------------------------------------
@@ -45,8 +46,13 @@ check(
   await ev(`document.querySelectorAll('.setup-way').length===3&&document.getElementById('admin-app').textContent.includes('Aus Gesamtsicherung wiederherstellen')&&document.getElementById('admin-app').textContent.includes('Studio-Einstellungen einspielen')&&document.getElementById('admin-app').textContent.includes('Gesundheitsangaben und Unterschriften')`),
 );
 await screenshot("blanko-drei-wege");
+check("Bei der Auswahl keine Speicherleiste", await ev(`document.getElementById('admin-savebar').hidden`));
 await ev(`document.querySelector('[data-admin-action="setup-new"]').click()`);
 await until(`!!document.getElementById('admin-studio-name')`);
+check(
+  "Pflichtfelder mit Stern und aria-required, die Fristen ohne",
+  await ev(`['name','contact','address','location'].every(k=>{const f=document.getElementById('admin-studio-'+k);return f.getAttribute('aria-required')==='true'&&document.querySelector('label[for="admin-studio-'+k+'"] .required')?.textContent==='*'})&&!document.querySelector('label[for="setup-pdf-years"] .required')`),
+);
 check("Neu einrichten öffnet den Einrichtungsassistenten, Felder leer", await ev(`document.getElementById('admin-page-title').textContent==='Einrichtung'&&['name','contact','address','location'].every(k=>document.getElementById('admin-studio-'+k).value==='')`));
 await ev(`(async()=>{const c=document.createElement('canvas');c.width=c.height=64;c.getContext('2d').fillRect(8,8,48,48);const b=await new Promise(r=>c.toBlob(r,'image/png'));const dt=new DataTransfer();dt.items.add(new File([b],'logo.png',{type:'image/png'}));const i=document.getElementById('logo-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
 await until(`document.querySelector('.studio-logo').src.startsWith('blob:')`);
@@ -58,9 +64,18 @@ check("Vor der Einrichtung führt jede Admin-Seite zum Assistenten", await ev(`a
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
 check("Ohne Angaben: klare Meldung, nichts gespeichert", await ev(`!document.getElementById('admin-error').hidden&&document.getElementById('admin-error').textContent.includes('Bitte Studio')&&!localStorage.getItem(SETTINGS_KEY)`));
 await type("admin-studio-name", "Atelier Probe · Kim Test");
-await ev(`document.getElementById('admin-save').click()`);
+check(
+  "Unten nur „Einrichtung abschließen“, kein Speichern in Teilen",
+  await ev(`(()=>{const v=id=>{const e=document.getElementById(id);return !e.hidden&&e.getBoundingClientRect().width>0};return v('admin-savebar')&&v('admin-setup-finish')&&!v('admin-save')&&!v('admin-discard')&&document.getElementById('admin-save-state').textContent==='Einrichtung noch nicht abgeschlossen'&&document.querySelectorAll('#admin-section [data-admin-action="setup-finish"]').length===0})()`),
+);
 await ev(`document.querySelector('#admin-nav [data-admin-page="overview"]').click()`);
-check("Nur ein Name gespeichert: Navigation führt weiter zum Assistenten", await ev(`adminPage==='setup'&&needsSetup()&&JSON.parse(localStorage.getItem(SETTINGS_KEY)).studio.name==='Atelier Probe · Kim Test'`));
+check("Navigation führt weiter zum Assistenten, Eingabe bleibt, nichts gespeichert", await ev(`adminPage==='setup'&&needsSetup()&&document.getElementById('admin-studio-name').value==='Atelier Probe · Kim Test'&&!localStorage.getItem(SETTINGS_KEY)`));
+await ev(`document.getElementById('admin-error').hidden=true;window.dispatchEvent(new KeyboardEvent('keydown',{key:'s',metaKey:true,cancelable:true}))`);
+check("⌘S im Assistenten: kein Speichern in Teilen, Hinweis auf Pflichtangaben", await ev(`!document.getElementById('admin-error').hidden&&adminPage==='setup'&&!localStorage.getItem(SETTINGS_KEY)`));
+await ev(`document.querySelector('[data-admin-action="setup-back"]').click()`);
+check("Zurück zur Auswahl verwirft die Eingaben: Datei einspielen nicht blockiert", await ev(`!adminChanged()&&!replaceBlocker()&&!!document.querySelector('[data-admin-action="setup-file"]')`));
+await ev(`document.querySelector('[data-admin-action="setup-new"]').click()`);
+await type("admin-studio-name", "Atelier Probe · Kim Test");
 await type("setup-pdf-years", "abc");
 await ev(`document.querySelector('[data-admin-action="sample-load"]').click()`);
 await until(`!!document.querySelector('[data-admin-action="sample-remove"]')`);
@@ -83,6 +98,12 @@ for (const [id, value] of [
   ["setup-pdf-years", "10"],
 ])
   await type(id, value);
+check(
+  "Assistent: Studiosprache eine, Kundensprachen zum Ankreuzen (Studiosprache immer dabei)",
+  await ev(`!!document.getElementById('locale-studio')&&(b=>b.de.checked&&b.de.disabled&&!b.en.checked&&!b.en.disabled)({de:document.querySelector('[data-locale-customer="de"]'),en:document.querySelector('[data-locale-customer="en"]')})`),
+);
+await ev(`(e=>{e.checked=true;e.dispatchEvent(new Event('change',{bubbles:true}))})(document.querySelector('[data-locale-customer="en"]'))`);
+check("Angekreuzt, Eingaben bleiben", await ev(`document.querySelector('[data-locale-customer="en"]').checked&&document.getElementById('admin-studio-name').value==='Atelier Probe · Kim Test'&&document.getElementById('setup-pdf-years').value==='10'`));
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
 await until(`adminPage==='overview'`);
 check(
@@ -91,6 +112,7 @@ check(
 );
 await ev(`finishAdminLeave()`);
 check("Kundenformular zeigt das eingerichtete Studio", await ev(`document.getElementById('customer-studio-name').textContent==='Atelier Probe'`));
+check("Englisch aus dem Assistenten: Flaggen-Knöpfe im Formular", await ev(`JSON.parse(localStorage.getItem(SETTINGS_KEY)).locale.customer.join()==='de,en'&&!document.getElementById('customer-language').hidden&&document.querySelectorAll('[data-customer-language]').length===2`));
 await reload();
 await ev(HELPERS);
 check("Nach dem Neuladen kein Assistent mehr", await ev(`!document.getElementById('admin-pin-dialog').open&&!document.getElementById('customer-app').hidden`));

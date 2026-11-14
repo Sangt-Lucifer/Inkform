@@ -121,11 +121,13 @@ function useLanguage(code) {
     updateProgress();
     if (ink.signedAt) $("signature-time").textContent = timeFormat(ink.signedAt);
   });
-  document.title = adminOpen
-    ? t("meta.adminTitle", { studio: studio.name.split(" · ")[0] })
-    : inLanguage(customerLanguage, () =>
-        t("meta.customerTitle", { studio: studio.name.split(" · ")[0], marke: shown.app.brand }),
-      );
+  document.title = adminOpen ? pageTitle() : inLanguage(customerLanguage, () => pageTitle(shown.app.brand));
+}
+// Without a studio name yet (neutral edition before setup) the title starts with the brand.
+function pageTitle(brand = null) {
+  const name = studio.name.split(" · ")[0].trim();
+  if (brand === null) return name ? t("meta.adminTitle", { studio: name }) : t("meta.adminTitleBare");
+  return name ? t("meta.customerTitle", { studio: name, marke: brand }) : t("meta.customerTitleBare", { marke: brand });
 }
 function inLanguage(code, run) {
   const before = language().code;
@@ -1451,16 +1453,16 @@ function getDraft(path) {
 function adminField(
   path,
   label,
-  { area = false, rows = 3, placeholder = "", help = "", type = "text", max = 3000 } = {},
+  { area = false, rows = 3, placeholder = "", help = "", type = "text", max = 3000, required = false } = {},
 ) {
   const id = "admin-" + path.replaceAll(".", "-"),
     value = escapeHtml(getDraft(path));
   return /* HTML */ `<div class="ad-field${area ? " full" : ""}">
-    <label for="${id}">${escapeHtml(label)}</label>${
+    <label for="${id}">${escapeHtml(label)}${required ? '<span class="required" aria-hidden="true">*</span>' : ""}</label>${
       area
         ? /* HTML */ `<textarea
             id="${id}"
-            data-config-path="${path}"
+            data-config-path="${path}"${required ? ' aria-required="true"' : ""}
             rows="${rows}"
             maxlength="${max}"
             placeholder="${escapeHtml(placeholder)}"
@@ -1468,7 +1470,7 @@ function adminField(
 ${value}</textarea>`
         : /* HTML */ `<input
             id="${id}"
-            data-config-path="${path}"
+            data-config-path="${path}"${required ? ' aria-required="true"' : ""}
             type="${type}"
             maxlength="${max}"
             value="${value}"
@@ -1494,8 +1496,10 @@ function studioLanguageField() {
     >${languageSelect("locale-studio", complete, adminDraft.locale.studio)}<small>${th("languages.studioHelp")}</small>
   </div>`;
 }
-function languagePanel() {
+// The languages customers may switch to; in the assistant only when there is a choice.
+function customerLanguageField(setup = false) {
   const locale = adminDraft.locale;
+  if (setup && languageCodes().filter((code) => hasAllTexts(adminDraft, code)).length < 2) return "";
   const boxes = languageCodes()
     .map((code) => {
       const complete = hasAllTexts(adminDraft, code),
@@ -1519,6 +1523,13 @@ function languagePanel() {
       }`;
     })
     .join("");
+  return /* HTML */ `<fieldset class="ad-field full">
+    <legend>${th("languages.customer")}</legend>
+    ${boxes}<small>${th("languages.customerHelp")}</small>
+  </fieldset>`;
+}
+function languagePanel() {
+  const locale = adminDraft.locale;
   const notes = locale.customer
     .filter((code) => code !== locale.content)
     .map((code) =>
@@ -1532,11 +1543,7 @@ function languagePanel() {
     th("languages.title"),
     /* HTML */ `${staleNotice()}<p class="ad-section-copy">${th("languages.copy")}</p>
       <div class="ad-fields">
-        ${studioLanguageField()}
-        <fieldset class="ad-field full">
-          <legend>${th("languages.customer")}</legend>
-          ${boxes}<small>${th("languages.customerHelp")}</small>
-        </fieldset>
+        ${studioLanguageField()}${customerLanguageField()}
         ${adminField("locale.currency", t("languages.currency"), { max: 3, help: th("languages.currencyHelp") })}${notes}
       </div>`,
   );
@@ -2303,28 +2310,33 @@ function setupYearsShown() {
   const { pdfYears, incomeYears } = readRetention(localStorage);
   return { pdfYears: pdfYears ?? "", incomeYears: incomeYears ?? "" };
 }
+// In the assistant every save goes through finishing it, so it is never stored in parts.
+function saveCurrent() {
+  return adminPage === "setup" && setupWay === "new" ? finishSetup() : saveAdmin();
+}
 function finishSetup() {
   if (SETUP_FIELDS.some((key) => !adminDraft.studio[key].trim())) {
     configError(t("setup.missing"));
-    return;
+    return false;
   }
   let years;
   try {
     years = validateRetention(setupYearsShown());
   } catch (error) {
     configError(error.message);
-    return;
+    return false;
   }
-  if (!saveAdmin()) return;
+  if (!saveAdmin()) return false;
   if (!storageWorking) {
     configError(t("setup.noStorage"));
-    return;
+    return false;
   }
   writeRetention(localStorage, years);
   setupYears = null;
   adminPage = "overview";
   renderAdminSection();
   toast(t("setup.done"));
+  return true;
 }
 function missingPanel() {
   return adminPanel(
@@ -2549,12 +2561,11 @@ function renderAdminSection() {
     content = `${adminPanel(
       th("setup.welcome"),
       `<p class="ad-section-copy">${th("setup.copy")}</p>
-      <div class="ad-fields">${studioLanguageField()}${adminField("studio.name", t("studioPage.name"), { placeholder: t("studioPage.namePlaceholder"), max: 160 })}${adminField("studio.contact", t("studioPage.contact"), { type: "email", placeholder: t("studioPage.contactPlaceholder"), max: 160 })}${adminField("studio.address", t("studioPage.address"), { area: true, rows: 2, placeholder: t("studioPage.addressPlaceholder"), max: 300 })}${adminField("studio.location", t("studioPage.location"), { placeholder: t("studioPage.locationPlaceholder"), max: 100 })}
+      <div class="ad-fields">${studioLanguageField()}${customerLanguageField(true)}${adminField("studio.name", t("studioPage.name"), { placeholder: t("studioPage.namePlaceholder"), max: 160, required: true })}${adminField("studio.contact", t("studioPage.contact"), { type: "email", placeholder: t("studioPage.contactPlaceholder"), max: 160, required: true })}${adminField("studio.address", t("studioPage.address"), { area: true, rows: 2, placeholder: t("studioPage.addressPlaceholder"), max: 300, required: true })}${adminField("studio.location", t("studioPage.location"), { placeholder: t("studioPage.locationPlaceholder"), max: 100, required: true })}
       <div class="ad-field"><label for="setup-pdf-years">${th("setup.pdfYears")}</label><input id="setup-pdf-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().pdfYears))}"></div>
       <div class="ad-field"><label for="setup-income-years">${th("setup.incomeYears")}</label><input id="setup-income-years" inputmode="numeric" maxlength="2" value="${escapeHtml(String(setupYearsShown().incomeYears))}"></div></div>
       <p class="ad-preview-note">${th("setup.note")}</p>
-      <div class="ad-actions-row"><button class="ad-button primary" type="button" data-admin-action="setup-finish">${adminIcon("check")}${th("setup.finish")}</button
-      ><button class="ad-button" type="button" data-admin-action="setup-back">${th("setup.back")}</button></div>`,
+      <div class="ad-actions-row"><button class="ad-button" type="button" data-admin-action="setup-back">${th("setup.back")}</button></div>`,
     )}${logoPanel()}${iconPanel()}${samplePanel()}`;
   } else if (adminPage === "export") {
     content = `<div id="export-content">${exportFeature.view()}</div>`;
@@ -2930,12 +2941,19 @@ function renderAdminSection() {
   updateAdminChrome();
   updateThemeButtons();
 }
+// In the assistant the bar holds only "finish"; the setup is saved as a whole, never in parts.
 function updateAdminChrome() {
-  const changed = adminChanged();
-  $("admin-savebar").hidden = (adminPage === "income" || adminPage === "retention") && !changed;
-  $("admin-savebar").classList.toggle("unsaved", changed);
-  $("admin-save-state").textContent = t(changed ? "savebar.unsaved" : "savebar.saved");
-  $("admin-save-detail").textContent = changed
+  const changed = adminChanged(),
+    setup = adminPage === "setup",
+    finishing = setup && setupWay === "new";
+  $("admin-savebar").hidden = (setup && !finishing) || ((adminPage === "income" || adminPage === "retention") && !changed);
+  $("admin-savebar").classList.toggle("unsaved", changed || finishing);
+  $("admin-discard").hidden = $("admin-save").hidden = finishing;
+  $("admin-setup-finish").hidden = !finishing;
+  $("admin-save-state").textContent = t(finishing ? "setup.barState" : changed ? "savebar.unsaved" : "savebar.saved");
+  $("admin-save-detail").textContent = finishing
+    ? t("setup.barDetail")
+    : changed
     ? t("savebar.unsavedDetail")
     : storageWorking
       ? settings.savedAt
@@ -3025,7 +3043,7 @@ function renderShown() {
     renderStudio();
     renderLanguageChoice();
     $("customer-brand").textContent = shown.app.brand;
-    document.title = t("meta.customerTitle", { studio: studio.name.split(" · ")[0], marke: shown.app.brand });
+    document.title = pageTitle(shown.app.brand);
     $("customer-headline").textContent = shown.app.headline;
     $("customer-description").textContent = shown.app.description;
     $("customer-eyebrow").textContent = shown.app.eyebrow;
@@ -3122,7 +3140,7 @@ function openAdminAuthorized(page = "overview") {
   adminOpen = true;
   $("customer-app").hidden = true;
   $("admin-app").hidden = false;
-  document.title = t("meta.adminTitle", { studio: studio.name.split(" · ")[0] });
+  document.title = pageTitle();
   history.replaceState(null, "", "#admin");
   renderAdminSection();
   window.scrollTo(0, 0);
@@ -3148,7 +3166,7 @@ function finishAdminLeave() {
   adminDraft = null;
   useLanguage(customerLanguage);
   history.replaceState(null, "", "#start");
-  document.title = t("meta.customerTitle", { studio: studio.name.split(" · ")[0], marke: settings.app.brand });
+  document.title = pageTitle(settings.app.brand);
   window.scrollTo(0, 0);
   resizeCanvas();
   $("studio-open").focus({ preventScroll: true });
@@ -3306,7 +3324,7 @@ $("admin-leave-discard").addEventListener("click", () => {
   finishAdminLeave();
 });
 $("admin-leave-save").addEventListener("click", () => {
-  if (saveAdmin()) {
+  if (saveCurrent()) {
     $("admin-leave-dialog").close();
     finishAdminLeave();
   } else $("admin-leave-dialog").close();
@@ -3470,6 +3488,10 @@ $("admin-app").addEventListener("click", (event) => {
     case "setup-back":
       setupWay = button.dataset.adminAction === "setup-new" ? "new" : null;
       setupError = "";
+      if (!setupWay) {
+        adminDraft = clone(settings);
+        setupYears = null;
+      }
       renderAdminSection();
       break;
     case "setup-file":
@@ -3603,7 +3625,7 @@ function studioPreview(data) {
 window.addEventListener("keydown", (event) => {
   if (adminOpen && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
     event.preventDefault();
-    saveAdmin();
+    saveCurrent();
   }
 });
 window.addEventListener("hashchange", () => {

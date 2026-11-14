@@ -2143,6 +2143,19 @@ html[data-theme="dark"] .ad-notice.review {
 .ad-savebar.unsaved .ad-save-status-dot {
   background: #efae71;
 }
+#admin-setup-finish {
+  min-height: 48px;
+  padding: 0 22px;
+  font-size: 14px;
+  background: #f0f0f0;
+  border-color: #f0f0f0;
+  color: #141414;
+}
+html[data-theme="light"] #admin-setup-finish {
+  background: #1f1f1f;
+  border-color: #1f1f1f;
+  color: #fff;
+}
 .ad-reset-row {
   display: flex;
   align-items: center;
@@ -3069,6 +3082,22 @@ html[data-theme="dark"] dialog::backdrop {
 .income-check input {
   width: 18px;
   height: 18px;
+}
+.ad-field label.income-check {
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+.ad-field .income-check input {
+  flex: none;
+  width: 18px;
+  min-height: 0;
+  padding: 0;
+}
+.ad-field .income-check small {
+  display: inline;
+  margin: 0;
 }
 .ad-reminder p {
   margin: 0 0 6px;
