@@ -2,13 +2,13 @@
 
 Tattoo-Einwilligung mit Unterschrift, PDF-Ablage und Einnahmenliste für das iPad. Inkform läuft vollständig auf dem Gerät: keine Anmeldung, kein Server, keine Cloud, keine Bibliotheken oder Schriften aus dem Netz. Kundendaten verlassen das iPad nur, wenn du selbst eine Datei teilst oder sicherst.
 
-Dieses Repository enthält den Quellcode der neutralen App, ohne Studio und ohne Daten. Die fertige App liegt im Zweig `gh-pages` und wird über GitHub Pages ausgeliefert, unter `https://<konto>.github.io/<repo>/`. Diese Adresse bleibt für immer dieselbe, denn die Daten auf dem iPad gehören zu ihr: Konto und Repository werden nicht umbenannt, und neben Inkform läuft in diesem Konto kein anderes Pages-Projekt (alle teilen sich `<konto>.github.io` und damit den Speicher).
+Dieses Repository enthält den Quellcode der neutralen App, ohne Studio und ohne Daten. Die fertige App liegt im Zweig `gh-pages` und wird über GitHub Pages ausgeliefert, unter [https://sangt-lucifer.github.io/Inkform/](https://sangt-lucifer.github.io/Inkform/). Diese Adresse bleibt für immer dieselbe, denn die Daten auf dem iPad gehören zu ihr: Konto und Repository werden nicht umbenannt, und neben Inkform läuft in diesem Konto kein anderes Pages-Projekt (alle teilen sich `sangt-lucifer.github.io` und damit den Speicher).
 
 Ein Studio entsteht nur auf dem iPad: über den Einrichtungsassistenten oder aus einer Gesamtsicherung bzw. Studio-Einstellungen-Datei. Im Repository liegen nie Studio- oder Kundendaten.
 
 ## Einrichten
 
-1. Die Adresse der App (`https://<konto>.github.io/<repo>/`) einmal in **Safari** öffnen, mit Internetverbindung. Es erscheint „INKFORM auf den Home-Bildschirm“.
+1. Die Adresse der App ([https://sangt-lucifer.github.io/Inkform/](https://sangt-lucifer.github.io/Inkform/)) einmal in **Safari** öffnen, mit Internetverbindung. Es erscheint „INKFORM auf den Home-Bildschirm“.
 2. **Symbol wählen:** deine Studio-Einstellungen-Datei, falls du schon eine hast, oder ein Bild. Hier nur die Studio-Einstellungen, nicht die Gesamtsicherung mit Kundendaten. Im Safari-Tab wird nichts gespeichert.
 3. Teilen → **Zum Home-Bildschirm**. Den Namen unter dem Symbol kannst du dort ändern, zum Beispiel in den Studionamen. „Als Web-App öffnen“ aktiviert lassen, Hinzufügen.
 4. Inkform über das neue Symbol starten, beim ersten Mal mit Internet. Safari-Tab und Home-Bildschirm-App haben **getrennte Speicher**; ab jetzt nur noch das Symbol benutzen.
@@ -56,7 +56,7 @@ Inkform is a tattoo consent form with signature, PDF filing and an income list f
 
 **Set up**
 
-1. Open the app's address once in **Safari**, with an internet connection, and wait for “Ready offline”.
+1. Open the app's address (https://sangt-lucifer.github.io/Inkform/) once in **Safari**, with an internet connection, and wait for “Ready offline”.
 2. Share → **Add to Home Screen**, keep “Open as Web App” on, then start Inkform from the new icon (it has its own storage, separate from the Safari tab).
 3. Choose a **PIN** of 6 to 12 digits. There is no online reset; change it under “iPad & Settings”.
 4. In the setup assistant, enter the studio, privacy contact, address and place of signature. Everything stays on the iPad and can be changed later under “Studio & Contact”.
