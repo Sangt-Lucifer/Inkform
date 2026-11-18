@@ -2,7 +2,7 @@
 // app starts in (studio), the languages customers may choose and the currency. Texts of the form
 // in other languages live in settings.translations; a language is offered to customers only when
 // every text the form shows exists in it, never with German as a stand-in.
-import { BASE_LANGUAGE, hasLanguage, t, translator } from "./i18n.js";
+import { BASE_LANGUAGE, builtinLanguage, hasLanguage, isBuiltinLanguage, t, translator } from "./i18n.js";
 
 export const TRANSLATED = {
   app: ["documentTitle", "eyebrow", "headline", "description", "photoText", "photoDeniedText", "signatureText", "privacyTemplate"],
@@ -270,3 +270,61 @@ export const startLanguage = (settings) => (contentIn(settings, settings.locale.
 export const offeredLanguages = (settings) => [
   ...new Set([startLanguage(settings), ...settings.locale.customer.filter((code) => contentIn(settings, code))]),
 ];
+
+// Language packs: a language that is not built in, loaded from the app's own site (sprachen/) or
+// from a backup, and kept on the device. A pack has the shape of a language file and must pass the
+// same rules as the built-in ones: every key of the base language, the same placeholders, the
+// plural forms of its locale, no markup but <b>, <strong> and <code>.
+export const PACK_CODE = /^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2})?$/;
+export const PACKS_MAX = 30;
+const PACK_TEXT_MAX = 4000;
+const PLURAL_FORMS = ["zero", "one", "two", "few", "many", "other"];
+const packForms = (value) => (typeof value === "string" ? [value] : Object.values(value));
+const packPlaceholders = (value) =>
+  [...new Set(packForms(value).flatMap((text) => [...String(text).matchAll(/\{(\w+)\}/g)].map((m) => m[0])))].sort().join(" ");
+export function validatePack(code, value) {
+  const fail = () => {
+    throw Error(t("pack.invalid", { sprache: String(code).slice(0, 20) }));
+  };
+  const base = builtinLanguage(BASE_LANGUAGE);
+  if (typeof code !== "string" || !PACK_CODE.test(code) || isBuiltinLanguage(code) || !base) fail();
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail();
+  const { name, locale, dir, pdfFont, texts } = value;
+  if (typeof name !== "string" || !name.trim() || name.length > 80) fail();
+  let categories;
+  try {
+    if (typeof locale !== "string" || Intl.getCanonicalLocales(locale)[0] !== locale) fail();
+    categories = new Intl.PluralRules(locale).resolvedOptions().pluralCategories;
+  } catch (_) {
+    fail();
+  }
+  if (!["ltr", "rtl"].includes(dir) || pdfFont !== base.pdfFont) fail();
+  if (!texts || typeof texts !== "object" || Array.isArray(texts)) fail();
+  const keys = Object.keys(base.texts);
+  if (Object.keys(texts).length !== keys.length) fail();
+  const clean = {};
+  for (const key of keys) {
+    const own = texts[key],
+      model = base.texts[key];
+    if (!Object.hasOwn(texts, key)) fail();
+    if (typeof model === "string") {
+      if (typeof own !== "string") fail();
+    } else {
+      if (!own || typeof own !== "object" || Array.isArray(own)) fail();
+      const forms = Object.keys(own);
+      if (forms.some((f) => !PLURAL_FORMS.includes(f) || typeof own[f] !== "string") || categories.some((f) => !forms.includes(f))) fail();
+    }
+    for (const text of packForms(own))
+      if (!text.trim() || text.length > PACK_TEXT_MAX || /[<>]/.test(text.replace(/<\/?(?:b|strong|code)>/g, ""))) fail();
+    if (packPlaceholders(own) !== packPlaceholders(model)) fail();
+    clean[key] = typeof own === "string" ? own : { ...own };
+  }
+  return { name: name.trim(), locale, dir, pdfFont, texts: clean };
+}
+// Several packs, e.g. from a backup: { code: pack }.
+export function validatePacks(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw Error(t("pack.invalid", { sprache: "?" }));
+  const entries = Object.entries(value);
+  if (entries.length > PACKS_MAX) throw Error(t("pack.tooMany", { anzahl: PACKS_MAX }));
+  return Object.fromEntries(entries.map(([code, pack]) => [code, validatePack(code, pack)]));
+}

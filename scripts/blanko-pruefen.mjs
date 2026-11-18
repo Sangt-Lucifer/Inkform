@@ -20,7 +20,7 @@ import { homedir, hostname, userInfo } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileMarkers, filesBelow, findFingerprints, findMarkers, fingerprints, scanText } from "../tests/lib/leaks.mjs";
-import { STUDIOS_FALLBACK, buildProfile, resolveProfileDir, root, studioRoots } from "./build.mjs";
+import { STUDIOS_FALLBACK, buildProfile, packCodes, resolveProfileDir, root, studioRoots } from "./build.mjs";
 
 export const BLANKO_FILES = [
   "index.html",
@@ -33,8 +33,10 @@ export const BLANKO_FILES = [
   "dist/licenses/jsPDF.txt",
   "dist/licenses/Tailwind.txt",
   "dist/licenses/NotoSans.txt",
+  "dist/sprachen/index.json",
+  ...packCodes().map((code) => `dist/sprachen/${code}.json`),
 ];
-const BLANKO_DIRS = ["dist", "dist/icons", "dist/licenses"];
+const BLANKO_DIRS = ["dist", "dist/icons", "dist/licenses", "dist/sprachen"];
 const STUDIO_FIELDS = ["studioName", "studioAddress", "studioContact", "studioLocation"];
 // Texts of a profile that name the studio; searched in addition to its markers.
 const STUDIO_TEXTS = [

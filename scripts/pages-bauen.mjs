@@ -23,7 +23,7 @@ const SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"
 const AUTHOR = ["-c", "user.name=Sven", "-c", "user.email=sven@inkform.invalid", "-c", "commit.gpgsign=false"];
 // Build path -> path in gh-pages: the hosted app at the top level.
 export const PAGES_FILES = new Map(BLANKO_FILES.filter((n) => n.startsWith("dist/")).map((n) => [n, n.slice("dist/".length)]));
-const PAGES_DIRS = ["icons", "licenses"];
+const PAGES_DIRS = ["icons", "licenses", "sprachen"];
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 // The leak tests of the core over its working tree and its whole history, all branches included.

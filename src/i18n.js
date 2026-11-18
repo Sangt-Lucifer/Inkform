@@ -8,11 +8,22 @@ let LANGUAGES = {},
   currency = "EUR",
   everywhere = new Map();
 
+// The languages built into the app; language packs loaded later come on top (addLanguages) and
+// never replace a built-in one.
+let BUILTIN = {};
 export function registerLanguages(languages) {
+  BUILTIN = languages;
   LANGUAGES = languages;
   everywhere = new Map();
   active = translator(active?.code);
 }
+export function addLanguages(packs) {
+  LANGUAGES = { ...packs, ...BUILTIN };
+  everywhere = new Map();
+  active = translator(active?.code);
+}
+export const isBuiltinLanguage = (code) => Object.hasOwn(BUILTIN, code ?? "");
+export const builtinLanguage = (code) => BUILTIN[code];
 // ISO 4217 code for money() and the placeholders {waehrung} (code) and {waehrungszeichen} (symbol).
 export function setCurrency(code) {
   currency = code;

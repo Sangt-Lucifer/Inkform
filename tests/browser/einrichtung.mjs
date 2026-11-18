@@ -102,7 +102,7 @@ check(
     question.includes("Sprachen (Deutsch") &&
     question.includes("Logo: das Logo aus der Datei") &&
     question.includes("App-Symbol: das Symbol aus der Datei") &&
-    question.includes("Dateiversion 3"),
+    question.includes("Dateiversion 4"),
 );
 check("Abbrechen in der Vorschau: nichts geschrieben", (await nothingWritten()) && (await ev(`!sessionStorage.getItem('inkform.fromSetup')`)));
 
@@ -285,6 +285,8 @@ await freshDevice();
 await until(`document.getElementById('admin-pin-dialog')?.open`);
 check("Erster PIN-Dialog: Deutsch, Englisch und Automatisch", await ev(`[...document.querySelectorAll('#admin-pin-language button')].map(b=>b.dataset.operatorLanguage).join()==='de,en,auto'`));
 await ev(`${flag("admin-pin-language", "auto")}.click()`);
+// First it looks for a pack on the app's own site; the note follows the answer.
+await until(`document.getElementById('admin-pin-language-note').textContent.startsWith('Chinese (China) has')`);
 check(
   "Automatisch mit Chinesisch: Englisch, Hinweis „noch nicht übersetzt“ mit dem Namen der Sprache",
   await ev(`document.documentElement.lang==='en'&&!document.getElementById('admin-pin-language-note').hidden&&document.getElementById('admin-pin-language-note').textContent.startsWith('Chinese')&&localStorage.getItem('inkform.language.v1')==='auto'`),
@@ -297,6 +299,7 @@ check("Seite iPad: „Sprache dieses Geräts“ zeigt Automatisch", (await ev(`d
 await ev(`(()=>{const s=document.getElementById('operator-language');s.value='de';s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
 check("Dort Deutsch gewählt: Verwaltung deutsch, gespeichert", await ev(`document.documentElement.lang==='de'&&localStorage.getItem('inkform.language.v1')==='de'`));
 await ev(`(()=>{const s=document.getElementById('operator-language');s.value='auto';s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+await until(`document.getElementById('toast').textContent.startsWith('Chinese')`);
 check("Wieder Automatisch: Englisch mit Meldung", await ev(`document.documentElement.lang==='en'&&localStorage.getItem('inkform.language.v1')==='auto'&&document.getElementById('toast').textContent.startsWith('Chinese')`));
 await ev(`adminPage='setup';renderAdminSection()`);
 await cmd("Page.removeScriptToEvaluateOnNewDocument", { identifier: chinese.identifier });

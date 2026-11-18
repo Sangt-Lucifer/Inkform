@@ -83,7 +83,7 @@ await until(`!document.querySelector('[data-backup-ready]').hidden`);
 await ev(`document.querySelector('[data-admin-action="backup-save"]').click()`);
 await until(`!!window.__shared`);
 const backup = JSON.parse(await ev(`window.__shared.text()`));
-check("Gesamtsicherung enthält das App-Symbol", backup.schemaVersion === 3 && Buffer.from(backup.icon, "base64").readUInt32BE(16) === 512);
+check("Gesamtsicherung enthält das App-Symbol", backup.schemaVersion === 4 && Buffer.from(backup.icon, "base64").readUInt32BE(16) === 512);
 
 await ev(`openAdminAuthorized('studio');window.__toast=null`);
 await choose("notiz.txt", "text/plain", `'kein Bild'`);

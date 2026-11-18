@@ -2,6 +2,13 @@
 
 Eine Sprache besteht aus einer Sprachdatei im Kern (Oberfläche) und den Formulartexten des Studios (Begrüßung, Gesundheitsfragen, Einwilligungen, Datenschutz). Deutsch bleibt die Grundsprache. Angeboten wird eine Sprache Kunden erst, wenn alle Formulartexte in ihr vorliegen, keiner veraltet ist und der Inhaber sie ankreuzt.
 
+Zwei Wege:
+
+- **Eingebaut** (`src/sprachen/<code>.js`): Die Sprache ist in jeder Installation sofort da, auch auf der Installationsseite und im ersten PIN-Dialog als Auswahl. Macht die App größer und braucht ein Update der App.
+- **Als Sprachpaket** (`sprachpakete/<code>.js`): gleiche Datei, gleiche Regeln, aber nicht eingebaut. Die App lädt das Paket von ihrer eigenen Seite, sobald ein Gerät in dieser Sprache „Automatisch“ wählt, und behält es offline. Ein neues Paket braucht kein App-Update. Für alle Sprachen außer Deutsch und Englisch ist das der vorgesehene Weg.
+
+Die Schritte unten gelten für beide; für ein Paket die Datei unter `sprachpakete/` statt `src/sprachen/` anlegen.
+
 ## 1. Sprachdatei anlegen
 
 `src/sprachen/en.js` nach `src/sprachen/<code>.js` kopieren. `<code>` ist ein Sprachcode wie `fr`, `tr` oder `pl`. Oben in der Datei:

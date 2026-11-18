@@ -68,7 +68,7 @@ test("wrong or damaged files are refused as a whole", () => {
     assert.throws(() => readFullBackup(value, validateSettings), message);
   };
   refuse((v) => (v.kind = "etwas-anderes"), /keine INKFORM-Gesamtsicherung/);
-  refuse((v) => (v.schemaVersion = 4), /keine INKFORM-Gesamtsicherung/);
+  refuse((v) => (v.schemaVersion = 5), /keine INKFORM-Gesamtsicherung/);
   refuse((v) => (v.createdAt = "gestern"), /Erstellungsdatum/);
   refuse((v) => (v.theme = "blau"), /Farbschema/);
   refuse((v) => (v.backupDays = 5), /Erinnerungsabstand/);

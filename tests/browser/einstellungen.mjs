@@ -100,7 +100,8 @@ check(
   "Export: Einstellungen, Farbschema, Logo, Fristen und Erinnerungsabstand",
   /^Inkform_Studio-Einstellungen_\d{4}-\d{2}-\d{2}\.json$/.test(name) &&
     file.kind === "inkform-studio-einstellungen" &&
-    file.schemaVersion === 3 &&
+    file.schemaVersion === 4 &&
+    JSON.stringify(file.languages) === "{}" &&
     file.settings.studio.location === "Exportort" &&
     file.theme === "light" &&
     file.retention.pdfYears === 10 &&

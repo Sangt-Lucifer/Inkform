@@ -16,10 +16,8 @@ export function pseudo(text) {
   return `[${parts.join("")} ${extra.replace(/(.{8})(?=.)/g, "$1 ")}]`;
 }
 
-// Copies the real language files into dir and adds the pseudo language next to them.
-export async function writePseudoLanguages(dir) {
-  for (const file of await readdir(LANGUAGE_DIR))
-    if (file.endsWith(".js")) await copyFile(path.join(LANGUAGE_DIR, file), path.join(dir, file));
+// The pseudo language as the text of a language file.
+export async function pseudoLanguageSource() {
   const base = (await loadLanguages(LANGUAGE_DIR))[BASE_LANGUAGE];
   const categories = new Intl.PluralRules(PSEUDO).resolvedOptions().pluralCategories;
   const lines = Object.entries(base.texts).map(([key, value]) => {
@@ -29,8 +27,17 @@ export async function writePseudoLanguages(dir) {
         : Object.fromEntries(categories.map((form) => [form, pseudo(value[form] ?? value.other)]));
     return `    ${JSON.stringify(key)}: ${JSON.stringify(text)},`;
   });
-  await writeFile(
-    path.join(dir, `${PSEUDO}.js`),
-    `export default {\n  name: "Pséúdó",\n  locale: "${PSEUDO}",\n  dir: "rtl",\n  pdfFont: "NotoSans",\n  texts: {\n${lines.join("\n")}\n  },\n};\n`,
-  );
+  return `export default {\n  name: "Pséúdó",\n  locale: "${PSEUDO}",\n  dir: "rtl",\n  pdfFont: "NotoSans",\n  texts: {\n${lines.join("\n")}\n  },\n};\n`;
+}
+
+// Copies the real language files into dir and adds the pseudo language next to them.
+export async function writePseudoLanguages(dir) {
+  for (const file of await readdir(LANGUAGE_DIR))
+    if (file.endsWith(".js")) await copyFile(path.join(LANGUAGE_DIR, file), path.join(dir, file));
+  await writeFile(path.join(dir, `${PSEUDO}.js`), await pseudoLanguageSource());
+}
+
+// A folder of language packs holding only the pseudo language.
+export async function writePseudoPack(dir) {
+  await writeFile(path.join(dir, `${PSEUDO}.js`), await pseudoLanguageSource());
 }

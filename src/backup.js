@@ -7,18 +7,20 @@
 // Neither holds the PIN, the language of this device or an open, unconfirmed consent. Copies
 // deleted from the app on purpose stay deleted: the list of their ids travels with the backup and
 // is merged with the device's own list when restoring.
-// Version 1 (full backup only) has no logo; version 2 adds it, version 3 the home screen icon.
+// Version 1 (full backup only) has no logo; version 2 adds it, version 3 the home screen icon,
+// version 4 the language packs installed on the device (languages: { code: pack }).
 import { t } from "./i18n.js";
 import { validateIncomeBackup } from "./income.js";
 import { validateRetention } from "./retention.js";
 import { exportable, validateExportLog, validateRemovedIds } from "./export.js";
 import { checkIcon, checkLogo } from "./logo.js";
+import { validatePacks } from "./languages.js";
 
 export const BACKUP_INTERVAL_KEY = "inkform.backup.interval.v1";
 export const BACKUP_INTERVALS = [1, 3, 7, 14, 30];
 export const BACKUP_KIND = "inkform-gesamtsicherung";
 export const STUDIO_KIND = "inkform-studio-einstellungen";
-const FORMAT_VERSION = 3;
+const FORMAT_VERSION = 4;
 
 export function readBackupDays(storage) {
   const days = Number(storage.getItem(BACKUP_INTERVAL_KEY));
@@ -42,18 +44,22 @@ export function fromBase64(text) {
 const SETTINGS_PARTS = ["schemaVersion", "savedAt", "studio", "app", "medical", "legal", "locale", "translations"];
 const ITEM_PARTS = ["id", "title", "hint", "text", "review"];
 const pick = (value, keys) => Object.fromEntries(keys.filter((key) => key in value).map((key) => [key, value[key]]));
-function studioPart({ settings, theme, logo = null, icon = null, retention, backupDays }) {
+function studioPart({ settings, theme, logo = null, icon = null, retention, backupDays, packs = {} }) {
   const picked = pick(settings, SETTINGS_PARTS);
   for (const key of ["medical", "legal"]) if (Array.isArray(picked[key])) picked[key] = picked[key].map((item) => pick(item, ITEM_PARTS));
-  return { settings: picked, theme, logo: logo && toBase64(logo), icon: icon && toBase64(icon), retention, backupDays };
+  return { settings: picked, theme, logo: logo && toBase64(logo), icon: icon && toBase64(icon), retention, backupDays, languages: packs };
 }
+// The packs are read first: the settings may name their languages. validateSettings(settings,
+// packs) checks the settings as if those packs were installed.
 function readStudioPart(value, validateSettings) {
   if (!["dark", "light"].includes(value.theme)) throw Error(t("backup.invalidTheme"));
+  const languages = value.schemaVersion < 4 ? undefined : validatePacks(value.languages);
   const logo = value.schemaVersion === 1 ? undefined : readImage(value.logo, checkLogo, "backup.invalidLogo"),
     icon = value.schemaVersion < 3 ? undefined : readImage(value.icon, checkIcon, "backup.invalidIcon");
   if (!BACKUP_INTERVALS.includes(value.backupDays)) throw Error(t("backup.invalidInterval"));
   return {
-    settings: validateSettings(value.settings),
+    settings: validateSettings(value.settings, languages),
+    languages,
     theme: value.theme,
     logo,
     icon,
@@ -83,6 +89,7 @@ export function readStudioSettings(value, validateSettings) {
       createdAt: null,
       version: null,
       settings: validateSettings(value),
+      languages: undefined,
       theme: ["dark", "light"].includes(value.theme) ? value.theme : undefined,
       logo: undefined,
       icon: undefined,

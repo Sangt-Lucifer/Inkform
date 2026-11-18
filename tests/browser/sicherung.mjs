@@ -159,7 +159,7 @@ check(
     backup.pdfs.length === 2 &&
     backup.pdfs.every((p) => Buffer.from(p.pdf, "base64").subarray(0, 5).toString() === "%PDF-"),
 );
-check("Sicherung enthält das Logo (PNG, 512 × 171)", backup.schemaVersion === 3 && Buffer.from(backup.logo, "base64").readUInt32BE(16) === 512 && Buffer.from(backup.logo, "base64").readUInt32BE(20) === 171);
+check("Sicherung enthält das Logo (PNG, 512 × 171)", backup.schemaVersion === 4 && Buffer.from(backup.logo, "base64").readUInt32BE(16) === 512 && Buffer.from(backup.logo, "base64").readUInt32BE(20) === 171);
 check("Keine PIN in der Sicherung", !/839274|"salt"|"hash"/.test(json));
 await ev(`openAdminAuthorized('overview')`);
 check("Nach der Sicherung keine Sicherungs-Erinnerung", (await ev(`!!document.querySelector('.ad-stats')`)) && !(await reminder()).includes("Gesamtsicherung"));

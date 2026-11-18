@@ -17,6 +17,7 @@
 // contains any studio's data. Their builds default to <profil>/build/ and may never be
 // written into this repository.
 import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -132,6 +133,32 @@ function fillTokens(source, text, name, used = new Set()) {
 }
 
 export const LANGUAGE_DIR = path.join(root, "src", "sprachen");
+// Language packs: languages not built into the app, published next to it as sprachen/<code>.json
+// with the list sprachen/index.json. The app loads one only when it is needed (e.g. the device
+// language under "Automatisch") and keeps it on the device. Same file format and rules as
+// src/sprachen/; a code built into the app cannot also be a pack.
+export const PACK_DIR = path.join(root, "sprachpakete");
+export function packCodes(dir = PACK_DIR) {
+  try {
+    return readdirSync(dir)
+      .filter((f) => f.endsWith(".js"))
+      .map((f) => f.slice(0, -3))
+      .sort();
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+}
+export async function readPacks(builtins, dir = PACK_DIR) {
+  if (!packCodes(dir).length) return {};
+  const packs = await loadLanguages(dir);
+  const errors = Object.keys(packs)
+    .filter((code) => Object.hasOwn(builtins, code))
+    .map((code) => `${code}.js: ist schon in src/sprachen/ eingebaut.`);
+  errors.push(...checkLanguages({ [BASE_LANGUAGE]: builtins[BASE_LANGUAGE], ...packs }));
+  if (errors.length) throw new Error(`Sprachpakete in ${path.relative(root, dir) || dir}:\n${errors.join("\n")}`);
+  return packs;
+}
 
 // Language files of the app, checked against each other and against the code.
 export async function readLanguages(dir = LANGUAGE_DIR) {
@@ -221,16 +248,16 @@ function profileTranslations(profile, languages, content) {
 }
 
 // `languages` (a folder of language files) is for tests only; a real build reads src/sprachen/.
-export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR } = {}) {
+export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR, packs: packDir = PACK_DIR } = {}) {
   const profile = await loadProfile(ref);
   const id = profile.id;
   const read = (name) => readFile(path.join(root, name), "utf8");
   const used = new Set();
   const filled = {};
   for (const name of TEMPLATED) filled[name] = fillTokens(await read(name), profile.text, name, used);
-  const languages = languagesForApp(await readLanguages(languageDir), (text) =>
-    fillTokens(text, profile.text, "src/sprachen", used),
-  );
+  const builtins = await readLanguages(languageDir);
+  const languages = languagesForApp(builtins, (text) => fillTokens(text, profile.text, "src/sprachen", used));
+  const packs = languagesForApp(await readPacks(builtins, packDir), (text) => fillTokens(text, profile.text, "sprachpakete", new Set()));
   const locale = profileLocale(
     profile,
     languages,
@@ -365,6 +392,12 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR 
     ["dist/index.html", hosted],
     ["dist/sw.js", worker],
     ...assets,
+    // Packs are fetched on demand, not cached with the app: a new pack needs no app update.
+    [
+      "dist/sprachen/index.json",
+      JSON.stringify({ schemaVersion: 1, packs: Object.fromEntries(Object.entries(packs).map(([code, pack]) => [code, { name: pack.name }])) }),
+    ],
+    ...Object.entries(packs).map(([code, pack]) => [`dist/sprachen/${code}.json`, JSON.stringify(pack)]),
   ]);
   return { profile, files, bundledJs, warnings };
 }

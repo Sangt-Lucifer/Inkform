@@ -1,5 +1,6 @@
 import {
   LANGUAGE_KEY,
+  addLanguages,
   applyTexts,
   hasLanguage,
   language,
@@ -20,6 +21,9 @@ import {
   hasAllTexts,
   languageMark,
   languageName,
+  PACK_CODE,
+  validatePack,
+  validatePacks,
   languageRegion,
   flagEmoji,
   markField,
@@ -93,6 +97,29 @@ const OWNER_GUIDE_PAGES = Number("__OWNER_GUIDE_PAGES__");
 // Neutral edition without a studio: setup assistant, sample data, no owner guide.
 const BLANK_EDITION = "__BLANK_EDITION__" === "true";
 const THEME_KEY = "inkform.theme.v1";
+// Language packs kept on this device (see validatePack in languages.js), there before any text is
+// shown. A damaged pack is skipped, never shown half.
+const PACKS_KEY = "inkform.sprachpakete.v1";
+function storedPacks() {
+  const packs = {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(PACKS_KEY) || "{}");
+    for (const [code, pack] of Object.entries(raw && typeof raw === "object" ? raw : {}))
+      try {
+        packs[code] = validatePack(code, pack);
+      } catch (_) {}
+  } catch (_) {}
+  return packs;
+}
+let installedPacks = storedPacks();
+addLanguages(installedPacks);
+// store false: only for this page (the Safari tab of the install page stores nothing).
+function installPacks(packs, store = true) {
+  const next = { ...installedPacks, ...packs };
+  if (store) localStorage.setItem(PACKS_KEY, JSON.stringify(next));
+  installedPacks = next;
+  addLanguages(installedPacks);
+}
 // A language chosen on the install page goes along in the address (?sprache=en): the home screen
 // app added from there has its own storage and starts setup in it until one is saved.
 // "auto" follows the device language each time the app starts.
@@ -105,13 +132,17 @@ const START_LANGUAGE = (() => {
     return null;
   }
 })();
-// The first of the device's preferred languages the app has (also by its base, "pt" for "pt-BR").
+const deviceTags = () => (navigator.languages?.length ? [...navigator.languages] : [navigator.language]).filter(Boolean).map(String);
+// The device's first language as the app has it ("pt" for "pt-BR"), or null.
+function inApp(tag) {
+  if (hasLanguage(tag)) return tag;
+  const base = String(tag).split("-")[0];
+  return hasLanguage(base) ? base : null;
+}
+const firstDeviceMissing = () => !!deviceTags()[0] && !inApp(deviceTags()[0]);
+// The first of the device's preferred languages the app has.
 function deviceLanguage() {
-  for (const tag of navigator.languages?.length ? navigator.languages : [navigator.language]) {
-    if (hasLanguage(tag)) return tag;
-    const base = String(tag).split("-")[0];
-    if (hasLanguage(base)) return base;
-  }
+  for (const tag of deviceTags()) if (inApp(tag)) return inApp(tag);
   return null;
 }
 // Without a match "auto" falls back to English (or the base language if that is missing).
@@ -144,7 +175,7 @@ function operatorLanguage() {
 // first PIN dialog and in the assistant. The install page (a Safari tab) stores nothing and
 // passes the choice on in the address; everywhere else it is saved on this device.
 // With "auto" and a device language the app lacks, a note says so next to the buttons (or as a
-// message where there is no room for one).
+// message where there is no room for one): loading its pack, none there yet, or no connection.
 let autoNote = "";
 function fillOperatorLanguage(group, visible) {
   const codes = languageCodes(),
@@ -160,20 +191,60 @@ function fillOperatorLanguage(group, visible) {
     note.hidden = group.hidden || !auto || !autoNote;
   }
 }
-function missingDeviceLanguage() {
-  const tag = (navigator.languages?.length ? navigator.languages : [navigator.language])[0] || "";
-  let name = tag;
-  try {
-    name = new Intl.DisplayNames([language().locale], { type: "language" }).of(tag) || tag;
-  } catch (_) {}
-  return t("languages.autoMissing", { sprache: name });
+function deviceLanguageNote(key) {
+  const tag = deviceTags()[0] || "";
+  const name = (code) => {
+    try {
+      return new Intl.DisplayNames([language().locale], { type: "language" }).of(code) || code;
+    } catch (_) {
+      return code;
+    }
+  };
+  return t(key, { sprache: name(tag), ersatz: name(language().code) });
+}
+// The pack of the device's first language from the app's own site (sprachen/), if there is one.
+// Returns "installed", "none" (not translated yet) or "failed" (offline, or a broken file).
+let packRequest = null;
+function loadDevicePack() {
+  return (packRequest ??= (async () => {
+    try {
+      const get = async (file) => {
+        const response = await fetch(`sprachen/${file}`, { cache: "no-cache" });
+        if (!response.ok) throw Error(String(response.status));
+        return response.json();
+      };
+      const listed = (await get("index.json"))?.packs;
+      const tag = deviceTags()[0],
+        code = [tag, tag.split("-")[0]].find((c) => PACK_CODE.test(c) && listed && Object.hasOwn(listed, c));
+      if (!code) return "none";
+      installPacks({ [code]: validatePack(code, await get(`${code}.json`)) }, $("install-screen").hidden);
+      return "installed";
+    } catch (_) {
+      return "failed";
+    } finally {
+      packRequest = null;
+    }
+  })());
+}
+// Shows the language now chosen everywhere it appears.
+function showOperatorLanguage(code) {
+  if (needsSetup() && customerLanguage !== formStartLanguage()) {
+    customerLanguage = formStartLanguage();
+    renderShown();
+  }
+  useLanguage(code);
+  if (!$("install-screen").hidden) renderInstallScreen();
+  if (!$("completion-screen").hidden) completionTexts();
+  if ($("admin-pin-dialog")?.open) adminAccess.showTexts();
+  if (adminOpen) {
+    if (adminPage === "setup" && setupWay === "new") setupStudioLanguage(code);
+    renderAdminSection();
+  }
 }
 function chooseOperatorLanguage(choice) {
   if (!validChoice(choice)) return;
-  const code = resolveLanguage(choice);
   chosenLanguage = choice;
-  const installing = !$("install-screen").hidden;
-  if (installing) {
+  if (!$("install-screen").hidden) {
     const url = new URL(location.href);
     url.searchParams.set("sprache", choice);
     history.replaceState(history.state, "", url);
@@ -181,19 +252,21 @@ function chooseOperatorLanguage(choice) {
     try {
       localStorage.setItem(LANGUAGE_KEY, choice);
     } catch (_) {}
-  if (needsSetup() && customerLanguage !== formStartLanguage()) {
-    customerLanguage = formStartLanguage();
-    renderShown();
-  }
-  useLanguage(code);
-  autoNote = choice === AUTO && !deviceLanguage() ? missingDeviceLanguage() : "";
-  if (autoNote && adminOpen) toast(autoNote);
-  if (installing) renderInstallScreen();
-  if (!$("completion-screen").hidden) completionTexts();
-  if ($("admin-pin-dialog")?.open) adminAccess.showTexts();
-  if (adminOpen) {
-    if (adminPage === "setup" && setupWay === "new") setupStudioLanguage(code);
-    renderAdminSection();
+  const fetching = choice === AUTO && firstDeviceMissing();
+  autoNote = fetching ? deviceLanguageNote("languages.packLoading") : "";
+  showOperatorLanguage(resolveLanguage(choice));
+  if (fetching) followDeviceLanguage(true);
+}
+// "Automatisch" with a device language the app lacks: fetch its pack and switch to it once there.
+async function followDeviceLanguage(asked = false) {
+  const result = await loadDevicePack();
+  if (operatorChoice() !== AUTO) return;
+  autoNote = result === "installed" ? "" : deviceLanguageNote(result === "none" ? "languages.autoMissing" : "languages.packFailed");
+  // Without being asked (at start) only what the owner sees switches; the customer form never.
+  const ownerView = adminOpen || $("admin-pin-dialog")?.open || !$("completion-screen").hidden || !$("install-screen").hidden;
+  if (asked || (result === "installed" && ownerView)) {
+    showOperatorLanguage(resolveLanguage(AUTO));
+    if (asked && autoNote && adminOpen) toast(autoNote);
   }
 }
 // Until the neutral edition is set up, its form follows the language chosen for the setup.
@@ -242,7 +315,15 @@ function inLanguage(code, run) {
     setLanguage(before);
   }
 }
-function validateSettings(input) {
+function validateSettings(input, packs) {
+  if (packs) {
+    addLanguages({ ...installedPacks, ...packs });
+    try {
+      return validateSettings(input);
+    } finally {
+      addLanguages(installedPacks);
+    }
+  }
   const value = migrateSettings(input);
   if (
     !value ||
@@ -2011,6 +2092,7 @@ async function createBackup() {
         icon: (await storedIcon()) ?? (await builtInIcon()),
         retention: readRetention(localStorage),
         backupDays: readBackupDays(localStorage),
+        packs: installedPacks,
         exports: readExportLog(localStorage),
         pdfs,
         records: incomeFeature.list(),
@@ -2231,7 +2313,7 @@ function replaceBlocker() {
 // as it is. A restore adds its PDFs and list of deleted copies (before) and its income list and
 // log (after). Logo and icon first. If any step fails, logo, icon and every key written here are
 // put back; PDFs already written stay in the app's store.
-const REPLACED_KEYS = [PDF_REMOVED_KEY, SETTINGS_KEY, THEME_KEY, RETENTION_KEY, BACKUP_INTERVAL_KEY, EXPORT_LOG_KEY, INCOME_KEY, LAST_BACKUP_KEY];
+const REPLACED_KEYS = [PACKS_KEY, PDF_REMOVED_KEY, SETTINGS_KEY, THEME_KEY, RETENTION_KEY, BACKUP_INTERVAL_KEY, EXPORT_LOG_KEY, INCOME_KEY, LAST_BACKUP_KEY];
 async function writeCustomisations(data, { before = async () => {}, after = () => {} } = {}) {
   const previousLogo = data.logo === undefined ? undefined : await logoStore.get(LOGO_KEY),
     previousIcon = data.icon === undefined ? undefined : await logoStore.get(ICON_KEY),
@@ -2240,6 +2322,8 @@ async function writeCustomisations(data, { before = async () => {}, after = () =
     await writeLogo(data.logo);
     await writeIcon(data.icon);
     await before();
+    // Packs from the file join those of the device (the page reloads afterwards).
+    if (data.languages) localStorage.setItem(PACKS_KEY, JSON.stringify({ ...installedPacks, ...data.languages }));
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
     if (data.theme) localStorage.setItem(THEME_KEY, data.theme);
     if (data.retention) writeRetention(localStorage, data.retention);
@@ -3609,6 +3693,7 @@ function exportStudioSettings() {
           icon: ownIcon ?? builtInIconBytes,
           retention: readRetention(localStorage),
           backupDays: readBackupDays(localStorage),
+          packs: installedPacks,
         }),
         null,
         2,
@@ -3975,7 +4060,7 @@ function customisationLines(data) {
       studio: s.studio.name || "–",
       fragen: s.medical.length,
       texte: s.legal.length,
-      sprachen: s.locale.customer.map((code) => (hasLanguage(code) ? translator(code).name : code)).join(", "),
+      sprachen: s.locale.customer.map((code) => (hasLanguage(code) ? translator(code).name : (data.languages?.[code]?.name ?? code))).join(", "),
     }),
     [
       t("studioFile.theme", { wert: data.theme ? t(data.theme === "dark" ? "studioFile.themeDark" : "studioFile.themeLight") : unchanged }),
@@ -4144,6 +4229,8 @@ try {
   showCompletion(true);
   toast(error.message);
 }
+// "Automatisch" on a device whose language came later than this page: look for its pack.
+if (operatorChoice() === AUTO && firstDeviceMissing()) followDeviceLanguage();
 // An unconfirmed consent from before a reload: keep the thank-you screen and restore it for
 // the owner (PDF from this device, or "PDF fehlt" if it cannot be read back).
 restoring = restorePending();
