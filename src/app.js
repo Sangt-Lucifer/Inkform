@@ -19,6 +19,9 @@ import {
   fieldOf,
   hasAllTexts,
   languageMark,
+  languageName,
+  languageRegion,
+  flagEmoji,
   markField,
   markStale,
   offeredLanguages,
@@ -92,18 +95,36 @@ const BLANK_EDITION = "__BLANK_EDITION__" === "true";
 const THEME_KEY = "inkform.theme.v1";
 // A language chosen on the install page goes along in the address (?sprache=en): the home screen
 // app added from there has its own storage and starts setup in it until one is saved.
+// "auto" follows the device language each time the app starts.
+const AUTO = "auto";
+const validChoice = (code) => (code === AUTO || hasLanguage(code) ? code : null);
 const START_LANGUAGE = (() => {
   try {
-    const code = new URL(location.href).searchParams.get("sprache");
-    return hasLanguage(code) ? code : null;
+    return validChoice(new URL(location.href).searchParams.get("sprache"));
   } catch (_) {
     return null;
   }
 })();
+// The first of the device's preferred languages the app has (also by its base, "pt" for "pt-BR").
+function deviceLanguage() {
+  for (const tag of navigator.languages?.length ? navigator.languages : [navigator.language]) {
+    if (hasLanguage(tag)) return tag;
+    const base = String(tag).split("-")[0];
+    if (hasLanguage(base)) return base;
+  }
+  return null;
+}
+// Without a match "auto" falls back to English (or the base language if that is missing).
+const resolveLanguage = (code) => (code === AUTO ? (deviceLanguage() ?? (hasLanguage("en") ? "en" : null)) : code);
 let chosenLanguage = null;
-try {
-  setLanguage(localStorage.getItem(LANGUAGE_KEY) ?? START_LANGUAGE);
-} catch (_) {}
+function storedLanguage() {
+  try {
+    return validChoice(localStorage.getItem(LANGUAGE_KEY));
+  } catch (_) {
+    return null;
+  }
+}
+setLanguage(resolveLanguage(storedLanguage() ?? START_LANGUAGE));
 function applyLanguage() {
   document.documentElement.lang = language().code;
   document.documentElement.dir = language().dir;
@@ -114,38 +135,59 @@ applyLanguage();
 // the admin area shows the language chosen on this device (kept out of every backup).
 let customerLanguage = null,
   shown = null;
+// The admin language as chosen (a code, "auto" or null) and as shown (always a code).
+const operatorChoice = () => storedLanguage() ?? chosenLanguage ?? START_LANGUAGE;
 function operatorLanguage() {
-  try {
-    const code = localStorage.getItem(LANGUAGE_KEY);
-    if (hasLanguage(code)) return code;
-  } catch (_) {}
-  return chosenLanguage ?? START_LANGUAGE ?? settings.locale.studio;
+  return resolveLanguage(operatorChoice()) ?? settings.locale.studio;
 }
 // Flag buttons for the admin language, offered while setting up: on the install page, in the
 // first PIN dialog and in the assistant. The install page (a Safari tab) stores nothing and
 // passes the choice on in the address; everywhere else it is saved on this device.
+// With "auto" and a device language the app lacks, a note says so next to the buttons (or as a
+// message where there is no room for one).
+let autoNote = "";
 function fillOperatorLanguage(group, visible) {
-  const codes = languageCodes();
+  const codes = languageCodes(),
+    auto = operatorChoice() === AUTO;
   group.hidden = !visible || codes.length < 2;
-  group.innerHTML = group.hidden ? "" : languageButtons(codes, language().code, "operator-language");
+  group.innerHTML = group.hidden
+    ? ""
+    : languageButtons(codes, auto ? null : language().code, "operator-language") +
+      `<button type="button" class="language-button language-auto" data-operator-language="${AUTO}" aria-pressed="${auto}" aria-label="${th("languages.autoLabel")}" title="${th("languages.autoLabel")}"><svg class="icon" aria-hidden="true"><use href="#i-globe" /></svg><span>${th("languages.auto")}</span></button>`;
+  const note = document.getElementById(`${group.id}-note`);
+  if (note) {
+    note.textContent = auto ? autoNote : "";
+    note.hidden = group.hidden || !auto || !autoNote;
+  }
 }
-function chooseOperatorLanguage(code) {
-  if (!hasLanguage(code)) return;
-  chosenLanguage = code;
+function missingDeviceLanguage() {
+  const tag = (navigator.languages?.length ? navigator.languages : [navigator.language])[0] || "";
+  let name = tag;
+  try {
+    name = new Intl.DisplayNames([language().locale], { type: "language" }).of(tag) || tag;
+  } catch (_) {}
+  return t("languages.autoMissing", { sprache: name });
+}
+function chooseOperatorLanguage(choice) {
+  if (!validChoice(choice)) return;
+  const code = resolveLanguage(choice);
+  chosenLanguage = choice;
   const installing = !$("install-screen").hidden;
   if (installing) {
     const url = new URL(location.href);
-    url.searchParams.set("sprache", code);
+    url.searchParams.set("sprache", choice);
     history.replaceState(history.state, "", url);
   } else
     try {
-      localStorage.setItem(LANGUAGE_KEY, code);
+      localStorage.setItem(LANGUAGE_KEY, choice);
     } catch (_) {}
   if (needsSetup() && customerLanguage !== formStartLanguage()) {
     customerLanguage = formStartLanguage();
     renderShown();
   }
   useLanguage(code);
+  autoNote = choice === AUTO && !deviceLanguage() ? missingDeviceLanguage() : "";
+  if (autoNote && adminOpen) toast(autoNote);
   if (installing) renderInstallScreen();
   if (!$("completion-screen").hidden) completionTexts();
   if ($("admin-pin-dialog")?.open) adminAccess.showTexts();
@@ -1577,8 +1619,8 @@ ${value}</textarea>`
     }${help ? /* HTML */ `<small>${help}</small>` : ""}
   </div>`;
 }
-function languageSelect(id, codes, selected) {
-  return `<select id="${id}">${codes
+function languageSelect(id, codes, selected, auto = false) {
+  return `<select id="${id}">${auto ? `<option value="${AUTO}"${selected === AUTO ? " selected" : ""}>${th("languages.autoOption")}</option>` : ""}${codes
     .map(
       (code) =>
         `<option value="${code}" lang="${code}"${code === selected ? " selected" : ""}>${escapeHtml(translator(code).name)}</option>`,
@@ -1782,7 +1824,7 @@ function deviceSettings() {
     /* HTML */ `<div class="ad-fields">
       <div class="ad-field">
         <label for="operator-language">${th("languages.operator")}</label
-        >${languageSelect("operator-language", languageCodes(), operatorLanguage())}<small
+        >${languageSelect("operator-language", languageCodes(), operatorChoice() === AUTO ? AUTO : operatorLanguage(), true)}<small
           >${th("languages.operatorHelp")}</small
         >
       </div>
@@ -2443,6 +2485,7 @@ function renderInstallScreen() {
     `<button type="button" data-install="background" data-background="${background}" aria-pressed="${installIcon?.background === background}">${th(background === "dark" ? "installPage.dark" : "installPage.light")}</button>`;
   $("install-screen").innerHTML = /* HTML */ `<div class="install-card">
     <div id="install-language" class="language-choice install-language" role="group" aria-label="${th("common.language")}"></div>
+    <p id="install-language-note" class="install-language-note" role="status" hidden></p>
     <h1 id="install-screen-title" tabindex="-1">${th("installPage.title")}</h1>
     <p>${th("installPage.copy")}</p>
     <ol class="install-steps">
@@ -3342,16 +3385,25 @@ function renderShown() {
     $("photo-text").textContent = shown.app.photoText;
   });
 }
-function renderLanguageChoice() {
-  const offered = offeredLanguages(settings),
-    group = $("customer-language");
+// Up to three languages as flag buttons side by side, from four on a list (flag and name).
+const LANGUAGE_BUTTONS_MAX = 3;
+function renderLanguageChoice(offered = offeredLanguages(settings)) {
+  const group = $("customer-language");
   group.hidden = offered.length < 2;
-  group.innerHTML = languageButtons(offered, customerLanguage, "customer-language");
+  group.innerHTML =
+    offered.length > LANGUAGE_BUTTONS_MAX
+      ? `<select class="language-select" id="customer-language-select" aria-label="${th("customer.language")}">${offered
+          .map((code) => {
+            const region = languageRegion(code);
+            return `<option value="${escapeHtml(code)}" lang="${escapeHtml(code)}"${code === customerLanguage ? " selected" : ""}>${region ? flagEmoji(region) + " " : ""}${escapeHtml(languageName(code))}</option>`;
+          })
+          .join("")}</select>`
+      : languageButtons(offered, customerLanguage, "customer-language");
 }
 function languageButtons(codes, current, attribute) {
   return codes
     .map((code) => {
-      const name = escapeHtml(translator(code).name);
+      const name = escapeHtml(languageName(code));
       return `<button type="button" class="language-button" data-${attribute}="${escapeHtml(code)}" lang="${escapeHtml(code)}" aria-pressed="${code === current}" aria-label="${name}" title="${name}">${languageMark(code)}</button>`;
     })
     .join("");
@@ -3378,6 +3430,11 @@ function switchCustomerLanguage(code) {
   updatePriceBalance();
   updateProgress();
 }
+$("customer-language").addEventListener("change", (event) => {
+  if (event.target.id !== "customer-language-select") return;
+  switchCustomerLanguage(event.target.value);
+  $("customer-language-select")?.focus();
+});
 $("customer-language").addEventListener("click", (event) => {
   const button = event.target.closest("[data-customer-language]");
   if (!button) return;
@@ -3663,10 +3720,7 @@ $("admin-app").addEventListener("change", (event) => {
   const el = event.target;
   if (!adminAccess.isUnlocked()) return;
   if (el.id === "operator-language") {
-    try {
-      localStorage.setItem(LANGUAGE_KEY, el.value);
-    } catch (_) {}
-    useLanguage(el.value);
+    chooseOperatorLanguage(el.value);
   } else if (adminDraft && el.id === "locale-studio") {
     adminDraft.locale.studio = el.value;
     if (!adminDraft.locale.customer.includes(el.value)) adminDraft.locale.customer.unshift(el.value);

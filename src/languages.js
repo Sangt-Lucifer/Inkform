@@ -17,8 +17,39 @@ const FLAGS = {
   de: `<svg viewBox="0 0 5 3" aria-hidden="true"><path fill="#000" d="M0 0h5v1H0z"/><path fill="#d00" d="M0 1h5v1H0z"/><path fill="#ffce00" d="M0 2h5v1H0z"/></svg>`,
   en: `<svg viewBox="0 0 60 30" aria-hidden="true"><path fill="#012169" d="M0 0h60v30H0z"/><path stroke="#fff" stroke-width="6" d="M0 0l60 30M60 0L0 30"/><path stroke="#c8102e" stroke-width="2" d="M0 0l60 30M60 0L0 30"/><path stroke="#fff" stroke-width="10" d="M30 0v30M0 15h60"/><path stroke="#c8102e" stroke-width="6" d="M30 0v30M0 15h60"/></svg>`,
 };
+// Other languages show the flag of their country as an emoji (Apple devices draw every country
+// flag): the region in the code ("pt-BR", "sr-Latn-RS") or the country most associated with the
+// language. Languages spoken across many countries (Arabic, Spanish, ...) keep their code unless
+// the code names a region.
+const REGIONS = {
+  en: "GB", de: "DE", fr: "FR", it: "IT", pt: "PT", nl: "NL", pl: "PL", tr: "TR", ru: "RU", uk: "UA",
+  cs: "CZ", sk: "SK", hu: "HU", ro: "RO", bg: "BG", el: "GR", hr: "HR", sr: "RS", sl: "SI", bs: "BA",
+  mk: "MK", sq: "AL", da: "DK", sv: "SE", nb: "NO", nn: "NO", no: "NO", fi: "FI", is: "IS", et: "EE",
+  lv: "LV", lt: "LT", ga: "IE", mt: "MT", ka: "GE", hy: "AM", az: "AZ", kk: "KZ", uz: "UZ", he: "IL",
+  fa: "IR", zh: "CN", ja: "JP", ko: "KR", vi: "VN", th: "TH", id: "ID", ms: "MY", tl: "PH", hi: "IN",
+  bn: "BD", ur: "PK", ne: "NP", si: "LK", km: "KH", lo: "LA", my: "MM", mn: "MN", am: "ET", sw: "KE",
+};
+export function languageRegion(code) {
+  const parts = String(code).split("-");
+  const region = parts.slice(1).find((part) => /^[A-Z]{2}$/i.test(part));
+  return (region ?? REGIONS[parts[0].toLowerCase()] ?? "").toUpperCase() || null;
+}
+export const flagEmoji = (region) => String.fromCodePoint(...[...region].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
 export function languageMark(code) {
-  return FLAGS[code] ?? `<span class="language-code">${String(code).split("-")[0].replace(/[^a-z]/gi, "").slice(0, 3).toUpperCase()}</span>`;
+  if (FLAGS[code]) return FLAGS[code];
+  const region = languageRegion(code);
+  return region
+    ? `<span class="language-flag" aria-hidden="true">${flagEmoji(region)}</span>`
+    : `<span class="language-code">${String(code).split("-")[0].replace(/[^a-z]/gi, "").slice(0, 3).toUpperCase()}</span>`;
+}
+// Name of a language in itself: from its file, otherwise from the browser.
+export function languageName(code) {
+  if (hasLanguage(code)) return translator(code).name;
+  try {
+    return new Intl.DisplayNames([code], { type: "language" }).of(code) || code;
+  } catch (_) {
+    return code;
+  }
 }
 
 export function validCurrency(code) {

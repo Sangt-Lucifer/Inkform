@@ -262,5 +262,49 @@ check(
   await ev(`document.documentElement.lang==='en'&&customerLanguage==='en'&&document.getElementById('customer-headline').textContent===contentIn(settings,'en').app.headline&&settings.locale.studio==='de'`),
 );
 await screenshot("formular-englisch-vor-einrichtung");
+
+// "Automatisch": the device language if the app has it, otherwise English with a note -----------
+const deviceLanguages = (tags) =>
+  `Object.defineProperty(Navigator.prototype,'languages',{configurable:true,get:()=>${JSON.stringify(tags)}});Object.defineProperty(Navigator.prototype,'language',{configurable:true,get:()=>${JSON.stringify(tags[0])}});`;
+await navigate(ORIGIN + "/index.html");
+for (const [tags, expected] of [
+  [["de-AT", "en"], "de"],
+  [["en-US"], "en"],
+]) {
+  await freshDevice(deviceLanguages(tags));
+  await until(`document.getElementById('admin-pin-dialog')?.open`);
+  await ev(`${flag("admin-pin-language", "auto")}.click()`);
+  check(
+    `Automatisch mit Gerätesprache ${tags[0]}: ${expected}, ohne Hinweis, Wahl gespeichert`,
+    await ev(`document.documentElement.lang==='${expected}'&&localStorage.getItem('inkform.language.v1')==='auto'&&${flag("admin-pin-language", "auto")}.getAttribute('aria-pressed')==='true'
+      &&[...document.querySelectorAll('#admin-pin-language [data-operator-language]:not([data-operator-language="auto"])')].every(b=>b.getAttribute('aria-pressed')==='false')&&document.getElementById('admin-pin-language-note').hidden`),
+  );
+}
+const chinese = await cmd("Page.addScriptToEvaluateOnNewDocument", { source: deviceLanguages(["zh-CN"]) });
+await freshDevice();
+await until(`document.getElementById('admin-pin-dialog')?.open`);
+check("Erster PIN-Dialog: Deutsch, Englisch und Automatisch", await ev(`[...document.querySelectorAll('#admin-pin-language button')].map(b=>b.dataset.operatorLanguage).join()==='de,en,auto'`));
+await ev(`${flag("admin-pin-language", "auto")}.click()`);
+check(
+  "Automatisch mit Chinesisch: Englisch, Hinweis „noch nicht übersetzt“ mit dem Namen der Sprache",
+  await ev(`document.documentElement.lang==='en'&&!document.getElementById('admin-pin-language-note').hidden&&document.getElementById('admin-pin-language-note').textContent.startsWith('Chinese')&&localStorage.getItem('inkform.language.v1')==='auto'`),
+);
+await screenshot("automatisch-chinesisch");
+await setPin();
+check("Danach Assistent auf Englisch, Automatisch gedrückt", await ev(`document.documentElement.lang==='en'&&${flag("admin-language", "auto")}.getAttribute('aria-pressed')==='true'`));
+await ev(`adminPage='ipad';renderAdminSection()`);
+check("Seite iPad: „Sprache dieses Geräts“ zeigt Automatisch", (await ev(`document.getElementById('operator-language').value`)) === "auto");
+await ev(`(()=>{const s=document.getElementById('operator-language');s.value='de';s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+check("Dort Deutsch gewählt: Verwaltung deutsch, gespeichert", await ev(`document.documentElement.lang==='de'&&localStorage.getItem('inkform.language.v1')==='de'`));
+await ev(`(()=>{const s=document.getElementById('operator-language');s.value='auto';s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+check("Wieder Automatisch: Englisch mit Meldung", await ev(`document.documentElement.lang==='en'&&localStorage.getItem('inkform.language.v1')==='auto'&&document.getElementById('toast').textContent.startsWith('Chinese')`));
+await ev(`adminPage='setup';renderAdminSection()`);
+await cmd("Page.removeScriptToEvaluateOnNewDocument", { identifier: chinese.identifier });
+const german = await cmd("Page.addScriptToEvaluateOnNewDocument", { source: deviceLanguages(["de-DE"]) });
+await reload();
+await unlockAfterReload();
+check("Automatisch folgt dem Gerät bei jedem Start: jetzt Deutsch", await ev(`document.documentElement.lang==='de'&&localStorage.getItem('inkform.language.v1')==='auto'`));
+await cmd("Page.removeScriptToEvaluateOnNewDocument", { identifier: german.identifier });
+await ev(`adminDraft=JSON.parse(JSON.stringify(settings));finishAdminLeave()`);
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0, JSON.stringify(errors));
 process.exit(0);

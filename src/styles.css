@@ -2041,6 +2041,9 @@ html[data-theme="dark"] .ad-notice.review {
 .ad-field {
   min-width: 0;
 }
+.ad-field select {
+  max-width: 100%;
+}
 .ad-field label {
   display: block;
   font-size: 11px;
@@ -3237,6 +3240,41 @@ html[data-theme="dark"] dialog::backdrop {
   font-size: 14px;
   font-weight: 650;
   letter-spacing: 0.04em;
+}
+.language-button.language-auto {
+  width: auto;
+  gap: 5px;
+  padding: 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.language-button.language-auto .icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
+  box-shadow: none;
+}
+.language-button .language-flag {
+  font-size: 24px;
+  line-height: 1;
+}
+.language-select {
+  height: 44px;
+  max-width: 12rem;
+  min-width: 0;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 16px;
+}
+.install-language-note {
+  color: #f0c36a !important;
+  font-size: 15px !important;
+}
+.install-card .language-button.language-auto {
+  padding: 0 10px;
 }
 .language-button[aria-pressed="true"] {
   border-color: var(--ink);

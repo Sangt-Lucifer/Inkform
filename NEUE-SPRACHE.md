@@ -7,7 +7,7 @@ Eine Sprache besteht aus einer Sprachdatei im Kern (Oberfläche) und den Formula
 `src/sprachen/en.js` nach `src/sprachen/<code>.js` kopieren. `<code>` ist ein Sprachcode wie `fr`, `tr` oder `pl`. Oben in der Datei:
 
 - `name`: Name der Sprache in ihr selbst, z. B. `"Français"`. Vorlesehilfen und der Tooltip des Sprachknopfs im Kundenformular nennen ihn.
-- Flagge: Der Sprachknopf im Kundenformular zeigt eine Flagge aus `FLAGS` in `src/languages.js` (bisher `de` und `en`, als kleines SVG). Ohne Eintrag dort zeigt er das Kürzel der Sprache als Text (nur der Sprachteil, z. B. „FR“ oder „SR“ für `sr-Latn-RS`). Eine Flagge steht für ein Land, nicht für eine Sprache; im Zweifel beim Kürzel bleiben.
+- Flagge: Deutsch und Englisch haben eigene SVG-Flaggen in `FLAGS` in `src/languages.js`. Jede andere Sprache zeigt die Landesflagge als Emoji: aus der Region im Code (`pt-BR`, `sr-Latn-RS`) oder aus `REGIONS` in derselben Datei. Sprachen ohne eindeutiges Land (z. B. Arabisch, Spanisch) zeigen ihr Kürzel als Text, außer der Code nennt eine Region (`es-MX`). Eine Flagge steht für ein Land, nicht für eine Sprache; im Zweifel beim Kürzel bleiben. Im Kundenformular stehen bis zu drei Sprachen als Knöpfe nebeneinander, ab vier als Liste mit Flagge und Name.
 - `locale`: für Datum, Zahlen, Geld und Mehrzahl über `Intl`, z. B. `"fr-FR"`.
 - `dir`: `"ltr"`, bei Arabisch, Hebräisch oder Persisch `"rtl"`.
 - `pdfFont`: derzeit nur `"NotoSans"` (lateinische, griechische und kyrillische Schrift). Für andere Schriften muss zuerst eine passende Schrift mit Lizenz nach `public/vendor/` und in `scripts/fonts.mjs` (`PDF_FONT_NAMES`); das ist eine Änderung am Kern.

@@ -60,16 +60,40 @@ for (const [label, width, height] of [
   check(`${label}: Knöpfe 44 × 44 in einer Reihe, nichts breiter als der Bildschirm`, await fits(), JSON.stringify(await ev(layout)));
   await screenshot(`flaggen-${width}`);
 }
-// More languages than fit beside the logo: the row scrolls sideways instead of pushing the header.
-await ev(`for(const c of ['sr-Latn-RS','qaa'])${group}.insertAdjacentHTML('beforeend','<button type="button" class="language-button">'+languageMark(c)+'</button>')`);
+// Other languages: the country flag as an emoji, from the region in the code or the language;
+// without a clear country the code as text.
 check(
-  "Vier Sprachen auf 320 px: Kopfzeile passt, Kürzel kurz und im Knopf, 14 px",
-  (await fits()) &&
-    (await ev(`(()=>{const c=[...document.querySelectorAll('#customer-language .language-code')];return c.map(x=>x.textContent).join()==='SR,QAA'&&c.every(x=>x.parentElement.scrollWidth<=x.parentElement.clientWidth&&parseFloat(getComputedStyle(x).fontSize)>=14)})()`)),
+  "Flaggen für weitere Sprachen: Emoji nach Region oder Sprache, sonst Kürzel",
+  await ev(`languageMark('fr').includes('\u{1F1EB}\u{1F1F7}')&&languageMark('pt-BR').includes('\u{1F1E7}\u{1F1F7}')&&languageMark('sr-Latn-RS').includes('\u{1F1F7}\u{1F1F8}')
+    &&languageMark('ar').includes('>AR<')&&languageMark('qaa').includes('>QAA<')&&languageName('fr')==='français'`),
+);
+// Three languages still as buttons on the narrowest screen.
+await ev(`renderLanguageChoice(['de','en','fr'])`);
+check(
+  "Drei Sprachen auf 320 px: drei Knöpfe in einer Reihe, Kopfzeile passt",
+  (await fits()) && (await ev(`${group}.querySelectorAll('button').length===3&&!document.getElementById('customer-language-select')&&!!${group}.querySelector('.language-flag')`)),
   JSON.stringify(await ev(layout)),
 );
-await screenshot("flaggen-vier-320");
+await screenshot("flaggen-drei-320");
+// From four on a list with flag and name; choosing switches like a button and keeps the entries.
+await ev(`renderLanguageChoice(['de','en','fr','qaa'])`);
+const list = `document.getElementById('customer-language-select')`;
+check(
+  "Vier Sprachen: Liste statt Knöpfe, mit Flagge und Name, aktuelle Sprache gewählt",
+  await ev(`!!${list}&&${group}.querySelectorAll('button').length===0&&${list}.options.length===4&&${list}.value===customerLanguage
+    &&${list}.options[0].textContent==='\u{1F1E9}\u{1F1EA} Deutsch'&&${list}.getAttribute('aria-label')===t('customer.language')`),
+);
+const listFits = `(()=>{const r=${list}.getBoundingClientRect();return r.height>=44&&r.right<=innerWidth&&document.documentElement.scrollWidth<=innerWidth})()`;
+check("Liste auf 320 px: 44 px hoch, nichts breiter als der Bildschirm", (await fits()) && (await ev(listFits)), JSON.stringify(await ev(layout)));
+await screenshot("flaggen-liste-320");
+await cmd("Emulation.setDeviceMetricsOverride", { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
+check("Liste auf dem iPad quer passt", (await fits()) && (await ev(listFits)));
+await ev(`(()=>{const l=${list};l.value='de';l.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+await until(`document.documentElement.lang==='de'`);
+check("Wahl in der Liste wechselt die Sprache, Eingaben bleiben", await ev(`customerLanguage==='de'&&document.getElementById('firstName').value==='Test'`));
 await ev(`renderLanguageChoice()`);
+// Leave no unsaved entries behind for the next check in this browser.
+await ev(`form.reset();dirty=false`);
 await ev(`setTheme('light',false)`);
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0, JSON.stringify(errors));
 process.exit(0);

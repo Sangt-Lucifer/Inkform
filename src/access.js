@@ -167,7 +167,7 @@ export function createAdminAccess({ storage, onExternalLock, onShow, now = () =>
   dialog.id = "admin-pin-dialog";
   dialog.setAttribute("aria-labelledby", "admin-pin-title");
   dialog.innerHTML = `<div class="dialog-head"><h2 id="admin-pin-title" data-t="completion.unlock"></h2><div class="dialog-head-actions"><div id="admin-pin-language" class="language-choice" role="group" data-t-aria-label="languages.operator" hidden></div><button class="close-button" type="button" id="admin-pin-close" data-t-aria-label="common.closeDialog">×</button></div></div>
-  <form id="admin-pin-form" class="dialog-body" novalidate><p id="admin-pin-copy" class="ad-section-copy"></p><div class="ad-fields">
+  <form id="admin-pin-form" class="dialog-body" novalidate><p id="admin-pin-language-note" class="ad-notice" role="status" hidden></p><p id="admin-pin-copy" class="ad-section-copy"></p><div class="ad-fields">
   <div class="ad-field"><label for="admin-pin" data-t="pin.label"></label><input id="admin-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" required></div>
   <div class="ad-field" id="admin-pin-repeat-field"><label for="admin-pin-repeat" data-t="pin.repeat"></label><input id="admin-pin-repeat" name="repeat" type="password" inputmode="numeric" autocomplete="off" maxlength="12"></div></div>
   <p id="admin-pin-error" class="ad-error" role="alert" hidden></p><div class="dialog-actions"><button class="primary-button" type="submit" id="admin-pin-submit" data-t="pin.unlock"></button></div>
