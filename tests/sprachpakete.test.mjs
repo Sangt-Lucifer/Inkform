@@ -18,6 +18,9 @@ import {
   languageProgress,
   newPack,
   packTextProblem,
+  readTranslationFile,
+  TRANSLATION_KIND,
+  translationFile,
   usePrintableCheck,
   validatePack,
   validatePacks,
@@ -75,7 +78,7 @@ test("a pack being translated may lack texts; what it has is checked", () => {
 
 test("one text: the reason it is refused", () => {
   const de = builtinLanguage("de").texts,
-    plural = Object.keys(de).find((k) => typeof de[k] === "object"),
+    plural = "backup.days",
     placeholder = Object.keys(de).find((k) => typeof de[k] === "string" && /\{anzahl\}/.test(de[k]));
   const forms = ["one", "many", "other"];
   assert.equal(packTextProblem("Nuevo formulario", de["customer.newForm"], forms), null);
@@ -84,7 +87,7 @@ test("one text: the reason it is refused", () => {
   assert.equal(packTextProblem("x".repeat(4001), de["customer.newForm"], forms), "long");
   assert.equal(packTextProblem("sin número", de[placeholder], forms), "placeholders");
   assert.equal(packTextProblem({ one: "{anzahl}", other: "{anzahl}" }, de[plural], forms), "plural");
-  assert.equal(packTextProblem({ one: "{anzahl} x", many: "{anzahl} y", other: "{anzahl} z" }, de[plural], forms) === null, /\{anzahl\}/.test(Object.values(de[plural]).join("")));
+  assert.equal(packTextProblem({ one: "{anzahl} día", many: "{anzahl} días", other: "{anzahl} días" }, de[plural], forms), null);
   assert.equal(packTextProblem("texto", de[plural], forms), "form");
 });
 
@@ -123,6 +126,44 @@ test("form texts, progress and when customers get a language", () => {
     usePrintableCheck(() => true);
     addLanguages({});
   }
+});
+
+test("translation file: every text with German and English, round trip and preview", () => {
+  const pack = { ...newPack("es-MX"), texts: { "customer.newForm": "Nuevo formulario" } };
+  const file = JSON.parse(JSON.stringify(translationFile("es-MX", pack, "Hinweis")));
+  assert.equal(file.kind, TRANSLATION_KIND);
+  assert.equal(file.code, "es-MX");
+  assert.equal(Object.keys(file.texts).length, baseKeys().length);
+  assert.deepEqual(file.texts["customer.newForm"], { de: builtinLanguage("de").texts["customer.newForm"], en: builtinLanguage("en").texts["customer.newForm"], translation: "Nuevo formulario", form: true });
+  assert.equal(file.texts["income.title"].form, undefined);
+  const plural = baseKeys().find((k) => typeof builtinLanguage("de").texts[k] === "object");
+  assert.deepEqual(Object.keys(file.texts[plural].translation), ["one", "many", "other"]);
+
+  const placeholder = baseKeys().find((k) => typeof builtinLanguage("de").texts[k] === "string" && /\{anzahl\}/.test(builtinLanguage("de").texts[k]));
+  file.texts["customer.newForm"].translation = " Formulario nuevo ";
+  file.texts["customer.admin"].translation = "Consola";
+  file.texts[placeholder].translation = "sin número";
+  file.texts["gibt.esNicht"] = { translation: "x" };
+  const r = readTranslationFile(file, "es-MX", pack);
+  assert.deepEqual(r.added.map((x) => x.key), ["customer.admin"]);
+  assert.deepEqual(r.changed.map((x) => [x.key, x.before, x.after]), [["customer.newForm", "Nuevo formulario", "Formulario nuevo"]]);
+  assert.deepEqual(r.refused, [{ key: placeholder, problem: "placeholders" }]);
+  assert.equal(r.unknown, 1);
+  assert.equal(r.isNew, false);
+  assert.deepEqual(r.pack.texts, { "customer.newForm": "Formulario nuevo", "customer.admin": "Consola" });
+  assert.deepEqual(pack.texts, { "customer.newForm": "Nuevo formulario" }, "nichts vorher geändert");
+  assert.equal(readTranslationFile(file, "es-MX", r.pack).same, 2, "noch einmal: alles gleich");
+
+  // A file for a language not on the device yet: added with its name; a pack file needs a target.
+  const fresh = readTranslationFile({ ...file, code: "pt-BR", name: "Português (Brasil)", locale: "pt-BR" }, null, null);
+  assert.deepEqual([fresh.isNew, fresh.code, fresh.pack.name, fresh.pack.locale], [true, "pt-BR", "Português (Brasil)", "pt-BR"]);
+  const packFile = { name: "Español", locale: "es-MX", dir: "ltr", texts: { "customer.newForm": "Otro" } };
+  assert.equal(readTranslationFile(packFile, "es-MX", pack).changed.length, 1);
+  assert.throws(() => readTranslationFile(packFile, null, null), /translationFile\.noCode|keine Sprache/);
+  assert.throws(() => readTranslationFile(file, "fr", null), /translationFile\.otherLanguage|ist für/);
+  assert.throws(() => readTranslationFile({ ...file, code: "en" }, null, null), /eingebaut|builtin/);
+  assert.throws(() => readTranslationFile({ kind: "inkform-studio", texts: {} }, "es-MX", pack), /translationFile\.invalid|keine Übersetzungsdatei/);
+  assert.throws(() => readTranslationFile([], "es-MX", pack), /translationFile\.invalid|keine Übersetzungsdatei/);
 });
 
 test("several packs: each checked, at most the limit", () => {

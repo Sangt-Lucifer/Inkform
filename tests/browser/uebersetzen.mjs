@@ -68,11 +68,54 @@ await write("customer.newForm", "Nuevo formulario");
 await ev(`(()=>{const el=document.getElementById('app-tr-missing');el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
 check("Nur fehlende: übersetzte Texte ausgeblendet", await ev(`translateMissing&&!document.querySelector('[data-app-key="customer.newForm"]')&&!!document.querySelector('[data-app-key="customer.progressLabel"]')`));
 
+// Translation file: download, translate outside, upload with a preview ---------------------------
+let saved = null;
+await ev(`window.__saveFile=saveFile;saveFile=async(f)=>{window.__savedFile=f;return 'download'}`);
+await ev(`document.querySelector('[data-admin-action="translation-download"]').click()`);
+await until(`!!window.__savedFile`);
+saved = await ev(`(async()=>({name:window.__savedFile.name,text:await window.__savedFile.text()}))()`);
+await ev(`saveFile=window.__saveFile`);
+const file = JSON.parse(saved.text);
+check(
+  "Datei zum Übersetzen: Name mit Sprache, jeder Text mit Deutsch, Englisch und Übersetzung",
+  saved.name.endsWith(`_${await ev(`t('file.translation')`)}_es-MX.json`) && file.kind === "inkform-uebersetzung" && file.code === "es-MX"
+    && file.texts["customer.newForm"].translation === "Nuevo formulario" && file.texts["customer.admin"].translation === "" && typeof file.texts["customer.admin"].en === "string",
+);
+file.texts["customer.newForm"].translation = "Formulario nuevo";
+file.texts["customer.admin"].translation = "Consola de administración";
+file.texts["customer.progressLabel"].translation = "sin número";
+const upload = (value, name, target) =>
+  ev(`(()=>{translationTarget=${JSON.stringify(target)};const dt=new DataTransfer();dt.items.add(new File([${JSON.stringify(JSON.stringify(value))}],${JSON.stringify(name)},{type:'application/json'}));const i=document.getElementById('translation-file');i.files=dt.files;i.dispatchEvent(new Event('change'))})()`);
+await upload(file, "uebersetzt.json", "es-MX");
+await until(`!!translationImport&&!!document.querySelector('[data-admin-action="translation-apply"]')`);
+check(
+  "Vorschau: 1 neu, 1 geändert, 1 abgelehnt mit Grund, noch nichts gespeichert",
+  await ev(`translationImport.added.length===1&&translationImport.changed.length===1&&translationImport.refused.length===1
+    &&document.getElementById('admin-section').textContent.includes('{anzahl}')
+    &&JSON.parse(localStorage.getItem(PACKS_KEY))['es-MX'].texts['customer.newForm']==='Nuevo formulario'`),
+);
+await screenshot("uebersetzen-vorschau");
+await ev(`document.querySelector('[data-admin-action="translation-apply"]').click()`);
+await until(`!translationImport`);
+check(
+  "Übernehmen: Texte gespeichert, Bearbeiten und Datei gemischt",
+  await ev(`(()=>{const p=JSON.parse(localStorage.getItem(PACKS_KEY))['es-MX'].texts;return p['customer.newForm']==='Formulario nuevo'&&p['customer.admin']==='Consola de administración'&&!('customer.progressLabel' in p)&&p['pdf.metaConsent']?.many})()`),
+);
+await upload({ ...file, code: "fr" }, "falsch.json", "es-MX");
+await until(`!document.getElementById('toast').hidden&&document.getElementById('toast').textContent.toLowerCase().includes('français')`);
+check("Datei einer anderen Sprache: abgelehnt mit Hinweis", await ev(`!translationImport`));
+await ev(`translateCode=null;renderAdminSection()`);
+await upload({ ...file, code: "pt-BR", name: "Português (Brasil)", locale: "pt-BR" }, "pt.json", null);
+await until(`!!translationImport`);
+check("Neue Sprache aus Datei: Vorschau sagt es an", await ev(`translationImport.isNew&&translationImport.code==='pt-BR'&&!hasLanguage('pt-BR')`));
+await ev(`document.querySelector('[data-admin-action="translation-apply"]').click()`);
+await until(`hasLanguage('pt-BR')`);
+check("Übernommen: Sprache angelegt, Übersetzen offen", await ev(`translateCode==='pt-BR'&&translator('pt-BR').name==='Português (Brasil)'&&t('customer.admin')!==''`));
 await ev(`chooseOperatorLanguage('es-MX')`);
 await until(`document.documentElement.lang==='es-MX'`);
 check(
   "Verwaltung auf es-MX: Übersetztes auf Spanisch, Fehlendes auf Englisch",
-  await ev(`t('customer.newForm')==='Nuevo formulario'&&t('admin.save')===translator('en').t('admin.save')&&t('pdf.metaConsent',{anzahl:2,kb:9})==='2 páginas · A4 · 9 KB · con firma'`),
+  await ev(`t('customer.newForm')==='Formulario nuevo'&&t('admin.save')===translator('en').t('admin.save')&&t('pdf.metaConsent',{anzahl:2,kb:9})==='2 páginas · A4 · 9 KB · con firma'`),
 );
 await screenshot("uebersetzen-spanisch");
 

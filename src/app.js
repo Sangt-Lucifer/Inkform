@@ -28,6 +28,8 @@ import {
   PACKS_MAX,
   PACK_TEXT_MAX,
   baseKeys,
+  readTranslationFile,
+  translationFile,
   formReady,
   isFormKey,
   languageProgress,
@@ -1835,6 +1837,7 @@ const shownName = (code) => {
   }
 };
 function languagesPage() {
+  if (translationImport) return translationImportPage();
   if (translateCode && installedPacks[translateCode]) return appTranslationPage();
   translateCode = null;
   const rows = [...languageCodes().filter(isBuiltinLanguage), ...languageCodes().filter((code) => !isBuiltinLanguage(code))]
@@ -1887,8 +1890,10 @@ function languagesPage() {
           </div>
         </div>
         <div class="ad-actions-row">
-          <button type="button" class="ad-button primary" data-admin-action="language-add">${adminIcon("plus")}${th("appLanguages.add")}</button>
-        </div>`,
+          <button type="button" class="ad-button primary" data-admin-action="language-add">${adminIcon("plus")}${th("appLanguages.add")}</button
+          ><button type="button" class="ad-button" data-admin-action="translation-upload">${adminIcon("upload")}${th("translationFile.upload")}</button>
+        </div>
+        <p class="ad-preview-note">${th("translationFile.uploadCopy")}</p>`,
     )
   );
 }
@@ -1994,7 +1999,10 @@ function appTranslationPage() {
     })
     .join("");
   return (
-    /* HTML */ `<div class="ad-actions-row app-tr-back"><button type="button" class="ad-button" data-admin-action="translate-back">${th("appLanguages.back")}</button></div>` +
+    /* HTML */ `<div class="ad-actions-row app-tr-back"><button type="button" class="ad-button" data-admin-action="translate-back">${th("appLanguages.back")}</button
+      ><button type="button" class="ad-button" data-admin-action="translation-download">${adminIcon("download")}${th("translationFile.download")}</button
+      ><button type="button" class="ad-button" data-admin-action="translation-upload">${adminIcon("upload")}${th("translationFile.upload")}</button></div>
+      <p class="ad-preview-note app-tr-filenote">${th("translationFile.copy")}</p>` +
     adminPanel(
       th("appLanguages.editTitle", { sprache: pack.name }),
       /* HTML */ `<div class="ad-fields">
@@ -2072,6 +2080,118 @@ function renameAppLanguage(input) {
   }
   storePacks({ ...installedPacks, [translateCode]: { ...pack, name } });
   renderAdminSection();
+}
+// Translation file (see translationFile in languages.js): download for one language, upload with a
+// preview of what it changes; nothing is written before "Übernehmen".
+let translationImport = null;
+const translationPicker = document.createElement("input");
+translationPicker.type = "file";
+translationPicker.accept = ".json,application/json";
+translationPicker.hidden = true;
+translationPicker.id = "translation-file";
+document.body.append(translationPicker);
+let translationTarget = null;
+function downloadTranslation() {
+  const code = translateCode,
+    pack = installedPacks[code];
+  const file = new File([JSON.stringify(translationFile(code, pack, t("translationFile.note")), null, 2)], `${fileStamp()}_${t("file.translation")}_${code}.json`, {
+    type: "application/json",
+  });
+  saveFile(file).catch((error) => {
+    if (error?.name !== "AbortError") toast(error.message);
+  });
+}
+translationPicker.addEventListener("change", async () => {
+  const file = translationPicker.files[0];
+  translationPicker.value = "";
+  if (!file) return;
+  try {
+    if (file.size > STUDIO_MAX_BYTES) throw Error(t("import.tooLarge"));
+    let value;
+    try {
+      value = JSON.parse(await file.text());
+    } catch (_) {
+      throw Error(t("import.badJson"));
+    }
+    const named = translationTarget ?? (typeof value?.code === "string" ? value.code : null);
+    const result = readTranslationFile(value, translationTarget, named ? (installedPacks[named] ?? null) : null);
+    if (result.isNew && Object.keys(installedPacks).length >= PACKS_MAX) throw Error(t("pack.tooMany", { anzahl: PACKS_MAX }));
+    translationImport = { ...result, file: file.name };
+  } catch (error) {
+    toast(t("translationFile.failed", { fehler: error.message }));
+    return;
+  }
+  renderAdminSection();
+  window.scrollTo(0, 0);
+});
+function chooseTranslationFile(target) {
+  translationTarget = target;
+  translationPicker.click();
+}
+const shortText = (value) => {
+  const text = typeof value === "string" ? value : Object.values(value ?? {}).join(" / ");
+  return text.length > 140 ? text.slice(0, 139) + "…" : text;
+};
+function translationImportPage() {
+  const r = translationImport,
+    name = r.pack.name,
+    reasons = {
+      empty: "appLanguages.problem.empty",
+      form: "appLanguages.problem.form",
+      long: "appLanguages.problem.long",
+      markup: "appLanguages.problem.markup",
+      placeholders: "appLanguages.problem.placeholders",
+      plural: "appLanguages.problem.plural",
+    },
+    base = builtinLanguage(BASE_LANGUAGE).texts,
+    count = r.added.length + r.changed.length;
+  const list = (items, render) =>
+    items.length
+      ? `<ul class="tr-import-list">${items.slice(0, 30).map(render).join("")}${items.length > 30 ? `<li>${th("translationFile.more", { anzahl: items.length - 30 })}</li>` : ""}</ul>`
+      : "";
+  const changed = list(
+    r.changed,
+    ({ key, before, after }) =>
+      `<li><code>${key}</code><span class="tr-import-before" lang="${r.code}">${escapeHtml(shortText(before))}</span><span lang="${r.code}">${escapeHtml(shortText(after))}</span></li>`,
+  );
+  const refused = list(r.refused, ({ key, problem }) => {
+    const placeholders = [...new Set(JSON.stringify(base[key]).match(/\{\w+\}/g) ?? [])].join(" ");
+    return `<li><code>${key}</code><span>${th(reasons[problem], { platzhalter: placeholders || "–", max: PACK_TEXT_MAX })}</span></li>`;
+  });
+  return adminPanel(
+    th("translationFile.previewTitle", { sprache: name }),
+    /* HTML */ `<p class="ad-section-copy">${th(r.isNew ? "translationFile.previewNew" : "translationFile.previewCopy", { datei: r.file, sprache: name })}</p>
+      <dl class="tr-import-stats">
+        <div><dt>${th("translationFile.added")}</dt><dd>${r.added.length}</dd></div>
+        <div><dt>${th("translationFile.changed")}</dt><dd>${r.changed.length}</dd></div>
+        <div><dt>${th("translationFile.same")}</dt><dd>${r.same}</dd></div>
+        <div${r.refused.length ? ' class="refused"' : ""}><dt>${th("translationFile.refused")}</dt><dd>${r.refused.length}</dd></div>
+      </dl>
+      ${r.unknown ? `<p class="ad-preview-note">${th("translationFile.unknown", { anzahl: r.unknown })}</p>` : ""}
+      ${changed ? `<h3 class="tr-import-heading">${th("translationFile.changedTitle")}</h3>${changed}` : ""}
+      ${refused ? `<div class="ad-notice review"><p><b>${th("translationFile.refusedTitle")}</b></p>${refused}</div>` : ""}
+      <p class="ad-preview-note">${th("translationFile.emptyKept")}</p>
+      <div class="ad-actions-row">
+        <button type="button" class="ad-button primary" data-admin-action="translation-apply" ${count || r.isNew ? "" : "disabled"}>${adminIcon("check")}${th("translationFile.apply", { anzahl: count })}</button
+        ><button type="button" class="ad-button" data-admin-action="translation-cancel">${th("common.cancel")}</button>
+      </div>`,
+  );
+}
+function applyTranslationImport() {
+  const r = translationImport,
+    count = r.added.length + r.changed.length;
+  try {
+    storePacks({ ...installedPacks, [r.code]: validatePack(r.code, r.pack) });
+  } catch (error) {
+    toast(t("appLanguages.failed", { fehler: error.message }));
+    return;
+  }
+  translationImport = null;
+  translateCode = r.code;
+  translateGroup = null;
+  renderAdminSection();
+  window.scrollTo(0, 0);
+  toast(t("translationFile.applied", { anzahl: count, sprache: r.pack.name }));
 }
 function adminPanel(title, content, note = "") {
   return /* HTML */ `<section class="ad-panel">
@@ -4204,6 +4324,7 @@ $("admin-app").addEventListener("click", (event) => {
     // The sidebar and the tabs are drawn anew: keep the focus on the same entry, else on the heading.
     const area = button.closest("#admin-nav") ? "#admin-nav" : button.closest(".ad-tabs") ? ".ad-tabs" : null;
     adminPage = needsSetup() ? "setup" : button.dataset.adminPage;
+    translationImport = null;
     renderAdminSection();
     window.scrollTo(0, 0);
     (area && document.querySelector(`${area} [data-admin-page="${button.dataset.adminPage}"]`) || $("admin-page-title")).focus({ preventScroll: true });
@@ -4270,6 +4391,19 @@ $("admin-app").addEventListener("click", (event) => {
   switch (button.dataset.adminAction) {
     case "language-add":
       addAppLanguage();
+      break;
+    case "translation-download":
+      downloadTranslation();
+      break;
+    case "translation-upload":
+      chooseTranslationFile(translateCode && installedPacks[translateCode] && !translationImport ? translateCode : null);
+      break;
+    case "translation-apply":
+      applyTranslationImport();
+      break;
+    case "translation-cancel":
+      translationImport = null;
+      renderAdminSection();
       break;
     case "translate-back":
       translateCode = null;

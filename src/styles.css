@@ -3504,3 +3504,53 @@ html[data-theme="dark"] .language-button svg {
 .app-tr.missing textarea {
   border-style: dashed;
 }
+.app-tr-filenote {
+  margin: -6px 0 14px;
+}
+.tr-import-heading {
+  margin: 18px 0 8px;
+  font-size: 13px;
+}
+.tr-import-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+.tr-import-list li {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.tr-import-list code {
+  font-size: 11px;
+}
+.tr-import-before {
+  color: var(--ad-muted);
+  text-decoration: line-through;
+}
+.tr-import-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.tr-import-stats div {
+  padding: 10px 12px;
+  border: 1px solid var(--ad-line);
+  border-radius: 10px;
+}
+.tr-import-stats dt {
+  font-size: 11px;
+  color: var(--ad-muted);
+}
+.tr-import-stats dd {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 650;
+}
+.tr-import-stats .refused dd {
+  color: #c46977;
+}

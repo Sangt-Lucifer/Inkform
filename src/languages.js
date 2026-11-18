@@ -397,3 +397,73 @@ export function formReady(code) {
   const p = languageProgress(code);
   return p.form === p.formTotal && !p.unprintable.length;
 }
+
+// Translation file: the texts of one language to translate outside the app, each with the German
+// and English text as reference. Read back, it is checked text by text like the editor does; empty
+// translations leave the device's texts as they are, so file and editor can take turns.
+export const TRANSLATION_KIND = "inkform-uebersetzung";
+export function translationFile(code, pack, note) {
+  const base = builtinLanguage(BASE_LANGUAGE).texts,
+    english = builtinLanguage("en")?.texts ?? {},
+    forms = pluralForms(pack.locale),
+    texts = {};
+  for (const key of baseKeys()) {
+    const own = pack.texts[key],
+      translation = typeof base[key] === "string" ? (own ?? "") : Object.fromEntries(forms.map((f) => [f, own?.[f] ?? ""]));
+    texts[key] = { de: base[key], ...(english[key] !== undefined && { en: english[key] }), translation, ...(isFormKey(key) && { form: true }) };
+  }
+  return { kind: TRANSLATION_KIND, schemaVersion: 1, note, code, name: pack.name, locale: pack.locale, dir: pack.dir, texts };
+}
+const cleanText = (value) => (typeof value === "string" ? value.normalize("NFC").trim() : value);
+// What a file would change in a language: target is the language it is loaded into (null: the one
+// the file names), existing its pack on this device (null: a new language). Takes the file format
+// above or a language pack file ({ name, locale, dir, texts }, e.g. sprachen/fr.json).
+export function readTranslationFile(value, target, existing) {
+  const fail = (key, vars) => {
+    throw Error(t(key, vars));
+  };
+  if (!value || typeof value !== "object" || Array.isArray(value) || !value.texts || typeof value.texts !== "object" || Array.isArray(value.texts))
+    fail("translationFile.invalid");
+  const own = value.kind === TRANSLATION_KIND;
+  if (own && value.schemaVersion !== 1) fail("translationFile.invalid");
+  if (value.kind !== undefined && !own) fail("translationFile.invalid");
+  const named = typeof value.code === "string" ? value.code : null,
+    code = target ?? named;
+  if (!code) fail("translationFile.noCode");
+  if (target && named && named !== target) fail("translationFile.otherLanguage", { sprache: languageName(named) });
+  if (!PACK_CODE.test(code) || isBuiltinLanguage(code)) fail("translationFile.builtin", { sprache: languageName(code) });
+  let pack = existing;
+  if (!pack) {
+    pack = newPack(code);
+    if (typeof value.name === "string" && value.name.trim() && value.name.length <= 80) pack.name = value.name.trim();
+    if (["ltr", "rtl"].includes(value.dir)) pack.dir = value.dir;
+  }
+  const base = builtinLanguage(BASE_LANGUAGE).texts,
+    forms = pluralForms(pack.locale),
+    texts = { ...pack.texts },
+    result = { code, isNew: !existing, added: [], changed: [], same: 0, refused: [], unknown: 0 };
+  for (const [key, entry] of Object.entries(value.texts)) {
+    if (!Object.hasOwn(base, key)) {
+      result.unknown++;
+      continue;
+    }
+    let text = own ? entry?.translation : entry;
+    if (text && typeof text === "object" && !Array.isArray(text)) {
+      text = Object.fromEntries(Object.entries(text).map(([f, v]) => [f, cleanText(v)]));
+      if (Object.values(text).every((v) => !v)) continue;
+    } else {
+      text = cleanText(text);
+      if (!text) continue;
+    }
+    const problem = packTextProblem(text, base[key], forms);
+    if (problem) {
+      result.refused.push({ key, problem });
+      continue;
+    }
+    if (JSON.stringify(texts[key]) === JSON.stringify(text)) result.same++;
+    else (Object.hasOwn(texts, key) ? result.changed : result.added).push({ key, before: texts[key], after: text });
+    texts[key] = typeof text === "string" ? text : { ...text };
+  }
+  result.pack = { ...pack, texts };
+  return result;
+}
