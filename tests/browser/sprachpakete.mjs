@@ -85,7 +85,7 @@ try {
   await offline(false);
 
   // A damaged stored pack is skipped, never shown half -----------------------------------------
-  await ev(`(()=>{const p=JSON.parse(localStorage.getItem('inkform.sprachpakete.v1'));delete p['${PSEUDO}'].texts['pin.setupTitle'];localStorage.setItem('inkform.sprachpakete.v1',JSON.stringify(p))})()`);
+  await ev(`(()=>{const p=JSON.parse(localStorage.getItem('inkform.sprachpakete.v1'));p['${PSEUDO}'].texts['pin.setupTitle']='<img src=x>';localStorage.setItem('inkform.sprachpakete.v1',JSON.stringify(p))})()`);
   await offline(true);
   await reload();
   await until(`typeof adminAccess!=='undefined' && document.getElementById('admin-pin-dialog')?.open`);

@@ -24,6 +24,8 @@ export function addLanguages(packs) {
 }
 export const isBuiltinLanguage = (code) => Object.hasOwn(BUILTIN, code ?? "");
 export const builtinLanguage = (code) => BUILTIN[code];
+// The texts a language has of its own (a pack may still lack some).
+export const languageTexts = (code) => (hasLanguage(code) ? LANGUAGES[code].texts : null);
 // ISO 4217 code for money() and the placeholders {waehrung} (code) and {waehrungszeichen} (symbol).
 export function setCurrency(code) {
   currency = code;
@@ -56,15 +58,18 @@ export function translator(code) {
   const base = LANGUAGES[BASE_LANGUAGE] ?? { texts: {}, locale: "de-DE", dir: "ltr" };
   const own = hasLanguage(code) ? code : BASE_LANGUAGE;
   const lang = LANGUAGES[own] ?? base;
+  // A text a pack does not have yet comes in English, else German.
+  const fallback = isBuiltinLanguage(own) ? base : (LANGUAGES.en ?? base);
   const locale = lang.locale;
   const plurals = new Intl.PluralRules(locale);
   function template(key, vars) {
-    let text = lang.texts[key] ?? base.texts[key];
+    let text = lang.texts[key] ?? fallback.texts[key] ?? base.texts[key];
     if (text === undefined) {
       console.error(`Text fehlt: ${key}`);
       return key;
     }
-    if (typeof text === "object") text = text[plurals.select(Number(vars.anzahl))] ?? text.other;
+    if (typeof text === "object")
+      text = Object.hasOwn(lang.texts, key) ? (text[plurals.select(Number(vars.anzahl))] ?? text.other) : (text[new Intl.PluralRules(fallback.locale).select(Number(vars.anzahl))] ?? text.other);
     return text;
   }
   const symbol = () =>

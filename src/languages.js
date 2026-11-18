@@ -2,7 +2,7 @@
 // app starts in (studio), the languages customers may choose and the currency. Texts of the form
 // in other languages live in settings.translations; a language is offered to customers only when
 // every text the form shows exists in it, never with German as a stand-in.
-import { BASE_LANGUAGE, builtinLanguage, hasLanguage, isBuiltinLanguage, t, translator } from "./i18n.js";
+import { BASE_LANGUAGE, builtinLanguage, hasLanguage, isBuiltinLanguage, languageTexts, t, translator } from "./i18n.js";
 
 export const TRANSLATED = {
   app: ["documentTitle", "eyebrow", "headline", "description", "photoText", "photoDeniedText", "signatureText", "privacyTemplate"],
@@ -256,11 +256,12 @@ function filledIn(settings, code) {
 }
 
 // Every text of the form exists in this language, stale or not.
-export const hasAllTexts = (settings, code) => code === settings.locale.content || !!filledIn(settings, code);
+export const hasAllTexts = (settings, code) => formReady(code) && (code === settings.locale.content || !!filledIn(settings, code));
 export const staleCount = (settings, code) => settings.translations?.[code]?.stale?.length ?? 0;
 
 // The settings as the form shows them in one language, or null if a text is missing or stale there.
 export function contentIn(settings, code) {
+  if (!formReady(code)) return null;
   if (code === settings.locale.content) return settings;
   return staleCount(settings, code) ? null : filledIn(settings, code);
 }
@@ -271,17 +272,53 @@ export const offeredLanguages = (settings) => [
   ...new Set([startLanguage(settings), ...settings.locale.customer.filter((code) => contentIn(settings, code))]),
 ];
 
-// Language packs: a language that is not built in, loaded from the app's own site (sprachen/) or
-// from a backup, and kept on the device. A pack has the shape of a language file and must pass the
-// same rules as the built-in ones: every key of the base language, the same placeholders, the
-// plural forms of its locale, no markup but <b>, <strong> and <code>.
+// Language packs: a language that is not built in, loaded from the app's own site (sprachen/),
+// added and translated in the admin area, or taken from a backup, and kept on the device. A pack
+// has the shape of a language file; every text in it passes the same rules as the built-in ones:
+// only keys of the base language, the same placeholders, the plural forms of its locale, no markup
+// but <b>, <strong> and <code>. Texts may be missing while a language is being translated: the
+// admin area then shows them in English, and customers get the language only once every text of
+// the form (formKeys) exists in it.
 export const PACK_CODE = /^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2})?$/;
 export const PACKS_MAX = 30;
-const PACK_TEXT_MAX = 4000;
+export const PACK_TEXT_MAX = 4000;
 const PLURAL_FORMS = ["zero", "one", "two", "few", "many", "other"];
 const packForms = (value) => (typeof value === "string" ? [value] : Object.values(value));
 const packPlaceholders = (value) =>
   [...new Set(packForms(value).flatMap((text) => [...String(text).matchAll(/\{(\w+)\}/g)].map((m) => m[0])))].sort().join(" ");
+export const pluralForms = (locale) => new Intl.PluralRules(locale).resolvedOptions().pluralCategories;
+
+// Texts the customer sees: the form, its messages, the thank-you screen and the consent PDF.
+const FORM_PREFIXES = ["common", "completion", "consent", "customer", "health", "offline", "pdf", "personal", "price", "reset", "save", "share", "side", "signature", "size", "status", "tattoo", "theme", "validate"];
+const FORM_KEYS = new Set([
+  "export.button", "export.fillAll", "export.format", "export.title", "file.consent", "meta.customerTitle", "meta.customerTitleBare",
+  "meta.description", "meta.title", "privacy.missingStudio", "settingsLocked.customerCopy", "settingsLocked.customerTitle",
+]);
+export const isFormKey = (key) => FORM_KEYS.has(key) || FORM_PREFIXES.includes(key.split(".")[0]);
+// Texts that can end up in the consent PDF, which only prints what its font has.
+const PDF_PREFIXES = ["common", "health", "pdf", "personal", "tattoo"];
+const inPdf = (key) => key === "file.consent" || PDF_PREFIXES.includes(key.split(".")[0]);
+export const baseKeys = () => Object.keys(builtinLanguage(BASE_LANGUAGE)?.texts ?? {});
+export const formKeys = () => baseKeys().filter(isFormKey);
+
+// Why one text of a pack is not usable, or null: model is the base text, categories the plural
+// forms of the pack's locale.
+export function packTextProblem(own, model, categories) {
+  if (typeof model === "string") {
+    if (typeof own !== "string") return "form";
+  } else {
+    if (!own || typeof own !== "object" || Array.isArray(own)) return "form";
+    const forms = Object.keys(own);
+    if (forms.some((f) => !PLURAL_FORMS.includes(f) || typeof own[f] !== "string") || categories.some((f) => !forms.includes(f))) return "plural";
+  }
+  for (const text of packForms(own)) {
+    if (!text.trim()) return "empty";
+    if (text.length > PACK_TEXT_MAX) return "long";
+    if (/[<>]/.test(text.replace(/<\/?(?:b|strong|code)>/g, ""))) return "markup";
+  }
+  if (packPlaceholders(own) !== packPlaceholders(model)) return "placeholders";
+  return null;
+}
 export function validatePack(code, value) {
   const fail = () => {
     throw Error(t("pack.invalid", { sprache: String(code).slice(0, 20) }));
@@ -294,29 +331,15 @@ export function validatePack(code, value) {
   let categories;
   try {
     if (typeof locale !== "string" || Intl.getCanonicalLocales(locale)[0] !== locale) fail();
-    categories = new Intl.PluralRules(locale).resolvedOptions().pluralCategories;
+    categories = pluralForms(locale);
   } catch (_) {
     fail();
   }
   if (!["ltr", "rtl"].includes(dir) || pdfFont !== base.pdfFont) fail();
   if (!texts || typeof texts !== "object" || Array.isArray(texts)) fail();
-  const keys = Object.keys(base.texts);
-  if (Object.keys(texts).length !== keys.length) fail();
   const clean = {};
-  for (const key of keys) {
-    const own = texts[key],
-      model = base.texts[key];
-    if (!Object.hasOwn(texts, key)) fail();
-    if (typeof model === "string") {
-      if (typeof own !== "string") fail();
-    } else {
-      if (!own || typeof own !== "object" || Array.isArray(own)) fail();
-      const forms = Object.keys(own);
-      if (forms.some((f) => !PLURAL_FORMS.includes(f) || typeof own[f] !== "string") || categories.some((f) => !forms.includes(f))) fail();
-    }
-    for (const text of packForms(own))
-      if (!text.trim() || text.length > PACK_TEXT_MAX || /[<>]/.test(text.replace(/<\/?(?:b|strong|code)>/g, ""))) fail();
-    if (packPlaceholders(own) !== packPlaceholders(model)) fail();
+  for (const [key, own] of Object.entries(texts)) {
+    if (!Object.hasOwn(base.texts, key) || packTextProblem(own, base.texts[key], categories)) fail();
     clean[key] = typeof own === "string" ? own : { ...own };
   }
   return { name: name.trim(), locale, dir, pdfFont, texts: clean };
@@ -327,4 +350,50 @@ export function validatePacks(value) {
   const entries = Object.entries(value);
   if (entries.length > PACKS_MAX) throw Error(t("pack.tooMany", { anzahl: PACKS_MAX }));
   return Object.fromEntries(entries.map(([code, pack]) => [code, validatePack(code, pack)]));
+}
+
+// A new, still empty pack for a language the studio translates itself.
+export function newPack(code) {
+  const locale = Intl.getCanonicalLocales(code)[0];
+  const script = (() => {
+    try {
+      return new Intl.Locale(locale).maximize().script;
+    } catch (_) {
+      return "";
+    }
+  })();
+  return {
+    name: languageName(locale).replace(/^./, (ch) => ch.toLocaleUpperCase(locale)).slice(0, 80),
+    locale,
+    dir: ["Arab", "Hebr", "Thaa", "Syrc", "Nkoo", "Adlm"].includes(script) ? "rtl" : "ltr",
+    pdfFont: builtinLanguage(BASE_LANGUAGE).pdfFont,
+    texts: {},
+  };
+}
+// Can the PDF font print a text? The app sets the check; without one (tests) every text can.
+let printable = () => true;
+export const usePrintableCheck = (check) => (printable = check);
+// How far a language is: texts of the form and of the admin area that exist in it, and the texts
+// for the PDF its font cannot print.
+export function languageProgress(code) {
+  const keys = baseKeys(),
+    builtin = isBuiltinLanguage(code),
+    texts = builtin ? builtinLanguage(code).texts : (languageTexts(code) ?? {});
+  const has = (key) => builtin || Object.hasOwn(texts, key);
+  const form = keys.filter(isFormKey),
+    admin = keys.filter((key) => !isFormKey(key));
+  const unprintable = builtin ? [] : form.filter((key) => inPdf(key) && has(key) && !packForms(texts[key]).every((text) => printable(text)));
+  return {
+    form: form.filter(has).length,
+    formTotal: form.length,
+    admin: admin.filter(has).length,
+    adminTotal: admin.length,
+    unprintable,
+  };
+}
+// Customers get a language once every text of the form exists in it and the PDF can print it.
+export function formReady(code) {
+  if (isBuiltinLanguage(code)) return true;
+  const p = languageProgress(code);
+  return p.form === p.formTotal && !p.unprintable.length;
 }

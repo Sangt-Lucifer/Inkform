@@ -2,8 +2,9 @@
 
 Eine Sprache besteht aus einer Sprachdatei im Kern (Oberfläche) und den Formulartexten des Studios (Begrüßung, Gesundheitsfragen, Einwilligungen, Datenschutz). Deutsch bleibt die Grundsprache. Angeboten wird eine Sprache Kunden erst, wenn alle Formulartexte in ihr vorliegen, keiner veraltet ist und der Inhaber sie ankreuzt.
 
-Zwei Wege:
+Drei Wege:
 
+- **In der App** (Verwaltung → Gerät → „Sprachen“): Der Inhaber wählt Sprache und auf Wunsch das Land für die Flagge und übersetzt die Texte direkt in der App. Jede Eingabe wird wie ein Paket geprüft (Platzhalter, Mehrzahlformen, Auszeichnung) und sofort auf dem Gerät gespeichert; die Sprache wandert mit den Studio-Einstellungen und der Gesamtsicherung. Pflicht sind nur die rund 250 Texte des Formulars, seiner Meldungen und des PDFs (`isFormKey` in `src/languages.js`); fehlende Texte der Verwaltung erscheinen auf Englisch. Kunden bekommen die Sprache erst, wenn alle Formulartexte da sind und die PDF-Schrift die Texte fürs PDF drucken kann. Geladene Pakete lassen sich dort genauso nachbessern. Kein Eingriff in den Kern.
 - **Eingebaut** (`src/sprachen/<code>.js`): Die Sprache ist in jeder Installation sofort da, auch auf der Installationsseite und im ersten PIN-Dialog als Auswahl. Macht die App größer und braucht ein Update der App.
 - **Als Sprachpaket** (`sprachpakete/<code>.js`): gleiche Datei, gleiche Regeln, aber nicht eingebaut. Die App lädt das Paket von ihrer eigenen Seite, sobald ein Gerät in dieser Sprache „Automatisch“ wählt, und behält es offline. Ein neues Paket braucht kein App-Update. Für alle Sprachen außer Deutsch und Englisch ist das der vorgesehene Weg.
 

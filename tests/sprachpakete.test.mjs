@@ -7,8 +7,21 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createFullBackup, createStudioSettings, readFullBackup, readStudioSettings } from "../src/backup.js";
-import { builtinLanguage } from "../src/i18n.js";
-import { PACKS_MAX, validatePack, validatePacks } from "../src/languages.js";
+import { addLanguages, builtinLanguage, translator } from "../src/i18n.js";
+import {
+  PACKS_MAX,
+  baseKeys,
+  formKeys,
+  formReady,
+  hasAllTexts,
+  isFormKey,
+  languageProgress,
+  newPack,
+  packTextProblem,
+  usePrintableCheck,
+  validatePack,
+  validatePacks,
+} from "../src/languages.js";
 import { buildProfile, readLanguages, readPacks } from "../scripts/build.mjs";
 import { loadLanguages } from "../scripts/sprachen.mjs";
 import { PSEUDO, pseudoLanguageSource, writePseudoPack } from "./lib/pseudo.mjs";
@@ -37,7 +50,6 @@ test("a pack that breaks a rule is refused as a whole", () => {
   const plural = Object.keys(pack.texts).find((k) => typeof pack.texts[k] === "object");
   refuse("en", () => {}); // built in: never replaced by a pack
   refuse("Klingonisch", () => {});
-  refuse(PSEUDO, (v) => delete v.texts[firstPlain]);
   refuse(PSEUDO, (v) => (v.texts["gibt.esNicht"] = "x"));
   refuse(PSEUDO, (v) => (v.texts[withPlaceholder] = "ohne Platzhalter"));
   refuse(PSEUDO, (v) => (v.texts[firstPlain] = "<img src=x onerror=alert(1)>"));
@@ -51,6 +63,66 @@ test("a pack that breaks a rule is refused as a whole", () => {
   refuse(PSEUDO, (v) => (v.name = ""));
   refuse(PSEUDO, (v) => (v.texts = []));
   assert.throws(() => validatePack(PSEUDO, null), /Sprachpaket/);
+});
+
+test("a pack being translated may lack texts; what it has is checked", () => {
+  const value = copy(),
+    keys = Object.keys(value.texts);
+  for (const key of keys.slice(1)) delete value.texts[key];
+  assert.deepEqual(Object.keys(validatePack(PSEUDO, value).texts), keys.slice(0, 1));
+  assert.deepEqual(validatePack(PSEUDO, { ...value, texts: {} }).texts, {});
+});
+
+test("one text: the reason it is refused", () => {
+  const de = builtinLanguage("de").texts,
+    plural = Object.keys(de).find((k) => typeof de[k] === "object"),
+    placeholder = Object.keys(de).find((k) => typeof de[k] === "string" && /\{anzahl\}/.test(de[k]));
+  const forms = ["one", "many", "other"];
+  assert.equal(packTextProblem("Nuevo formulario", de["customer.newForm"], forms), null);
+  assert.equal(packTextProblem("<b>ok</b> sí", de["customer.newForm"], forms), null);
+  assert.equal(packTextProblem("<i>no</i>", de["customer.newForm"], forms), "markup");
+  assert.equal(packTextProblem("x".repeat(4001), de["customer.newForm"], forms), "long");
+  assert.equal(packTextProblem("sin número", de[placeholder], forms), "placeholders");
+  assert.equal(packTextProblem({ one: "{anzahl}", other: "{anzahl}" }, de[plural], forms), "plural");
+  assert.equal(packTextProblem({ one: "{anzahl} x", many: "{anzahl} y", other: "{anzahl} z" }, de[plural], forms) === null, /\{anzahl\}/.test(Object.values(de[plural]).join("")));
+  assert.equal(packTextProblem("texto", de[plural], forms), "form");
+});
+
+test("form texts, progress and when customers get a language", () => {
+  const all = baseKeys(),
+    form = formKeys();
+  assert.ok(form.length > 200 && form.length < all.length / 2, `${form.length} von ${all.length}`);
+  for (const key of ["personal.firstName", "pdf.headerLabel", "validate.signature", "export.button", "meta.customerTitle"]) assert.ok(isFormKey(key), key);
+  for (const key of ["income.title", "backup.create", "appLanguages.add", "export.save"]) assert.ok(!isFormKey(key), key);
+  const pack = newPack("es-MX");
+  assert.deepEqual([pack.locale, pack.dir, pack.texts], ["es-MX", "ltr", {}]);
+  assert.match(pack.name, /^Español/);
+  assert.equal(newPack("ar").dir, "rtl");
+  const en = builtinLanguage("en").texts,
+    texts = {};
+  for (const key of form) texts[key] = typeof en[key] === "string" ? en[key] : { one: en[key].one, many: en[key].other, other: en[key].other };
+  addLanguages({ "es-MX": { ...pack, texts: { "customer.newForm": "Nuevo formulario" } } });
+  try {
+    assert.deepEqual(
+      { ...languageProgress("es-MX"), unprintable: undefined },
+      { form: 1, formTotal: form.length, admin: 0, adminTotal: all.length - form.length, unprintable: undefined },
+    );
+    assert.equal(formReady("es-MX"), false);
+    const settings = { locale: { content: "de", studio: "de", customer: ["de"] }, translations: {} };
+    assert.equal(hasAllTexts(settings, "es-MX"), false);
+    const es = translator("es-MX");
+    assert.equal(es.t("customer.newForm"), "Nuevo formulario");
+    assert.equal(es.t("income.title"), translator("en").t("income.title"), "Fehlendes auf Englisch");
+    addLanguages({ "es-MX": { ...pack, texts } });
+    assert.equal(formReady("es-MX"), true);
+    usePrintableCheck((text) => !/[\u4e00-\u9fff]/.test(text));
+    addLanguages({ "es-MX": { ...pack, texts: { ...texts, "pdf.headerLabel": "纹身", "customer.newForm": "新" } } });
+    assert.deepEqual(languageProgress("es-MX").unprintable, ["pdf.headerLabel"], "nur Texte fürs PDF zählen");
+    assert.equal(formReady("es-MX"), false);
+  } finally {
+    usePrintableCheck(() => true);
+    addLanguages({});
+  }
 });
 
 test("several packs: each checked, at most the limit", () => {
@@ -83,7 +155,7 @@ test("older files have no packs; a damaged pack refuses the whole file", () => {
   delete old.languages;
   assert.equal(readStudioSettings(old, (s) => s).languages, undefined);
   const broken = asJson(createStudioSettings({ ...part, packs: { [PSEUDO]: pack } }));
-  delete broken.languages[PSEUDO].texts[Object.keys(pack.texts)[0]];
+  broken.languages[PSEUDO].texts[Object.keys(pack.texts)[0]] = "<i>kaputt</i>";
   assert.throws(() => readStudioSettings(broken, (s) => s), /Sprachpaket/);
   assert.throws(() => readStudioSettings({ ...broken, languages: "x" }, (s) => s), /Sprachpaket/);
 });

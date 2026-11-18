@@ -21,9 +21,9 @@ await ev(`openAdminAuthorized('overview')`);
 
 const nav = () => ev(`[...document.getElementById('admin-nav').children].map(e=>(e.matches('.ad-nav-group')?'# ':'')+e.textContent.trim()).join(' | ')`);
 check(
-  "Seitenleiste: Übersicht, dann Alltag, Formular, Daten, Gerät mit acht Einträgen",
+  "Seitenleiste: Übersicht, dann Alltag, Formular, Daten, Gerät mit neun Einträgen",
   (await nav()) ===
-    "Übersicht | # Alltag | Einnahmen | Export | # Formular | Studio & Kontakt | Texte | # Daten | Sichern & Wiederherstellen | Aufbewahren & Löschen | # Gerät | iPad & Einstellungen",
+    "Übersicht | # Alltag | Einnahmen | Export | # Formular | Studio & Kontakt | Texte | # Daten | Sichern & Wiederherstellen | Aufbewahren & Löschen | # Gerät | iPad & Einstellungen | Sprachen",
 );
 check("Keine Seite „Darstellung“ mehr", await ev(`!('appearance' in ADMIN_PAGES)`));
 

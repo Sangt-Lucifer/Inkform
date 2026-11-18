@@ -3425,3 +3425,82 @@ html[data-theme="dark"] .language-button svg {
   font-family: ui-monospace, monospace;
   word-break: break-word;
 }
+/* Page "Sprachen": the languages of the app and the editor for their texts. */
+.app-lang-list {
+  display: grid;
+  gap: 10px;
+}
+.app-lang-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--ad-line);
+  border-radius: 10px;
+}
+.app-lang-mark {
+  display: inline-flex;
+  flex: none;
+  width: 34px;
+  justify-content: center;
+}
+.app-lang-mark svg {
+  width: 30px;
+  height: 20px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 12%);
+}
+.app-lang-mark .language-flag {
+  font-size: 26px;
+  line-height: 1;
+}
+.app-lang-mark .language-code {
+  font-size: 12px;
+  font-weight: 700;
+}
+.app-lang-text {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.app-lang-text small {
+  color: var(--ad-muted);
+}
+.app-lang-row .ad-actions-row {
+  margin: 0;
+}
+.app-tr-back {
+  margin-bottom: 14px;
+}
+.app-tr code {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.app-tr-source {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgb(127 127 127 / 8%);
+}
+.app-tr-source p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.app-tr-source p[lang="en"] {
+  margin-top: 4px;
+  color: var(--ad-muted);
+}
+.app-tr-form {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ad-muted);
+}
+.app-tr.missing textarea {
+  border-style: dashed;
+}

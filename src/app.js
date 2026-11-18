@@ -1,6 +1,9 @@
 import {
+  BASE_LANGUAGE,
   LANGUAGE_KEY,
   addLanguages,
+  builtinLanguage,
+  isBuiltinLanguage,
   applyTexts,
   hasLanguage,
   language,
@@ -22,6 +25,16 @@ import {
   languageMark,
   languageName,
   PACK_CODE,
+  PACKS_MAX,
+  PACK_TEXT_MAX,
+  baseKeys,
+  formReady,
+  isFormKey,
+  languageProgress,
+  newPack,
+  packTextProblem,
+  pluralForms,
+  usePrintableCheck,
   validatePack,
   validatePacks,
   languageRegion,
@@ -113,6 +126,7 @@ function storedPacks() {
 }
 let installedPacks = storedPacks();
 addLanguages(installedPacks);
+usePrintableCheck((text) => !unsupportedPdfChars(text).length);
 // store false: only for this page (the Safari tab of the install page stores nothing).
 function installPacks(packs, store = true) {
   const next = { ...installedPacks, ...packs };
@@ -1642,6 +1656,12 @@ const ADMIN_PAGES = {
     title: "admin.page.privacy.title",
     description: "admin.page.privacy.description",
   },
+  languages: {
+    label: "admin.page.languages.label",
+    icon: "globe",
+    title: "admin.page.languages.title",
+    description: "admin.page.languages.description",
+  },
   ipad: {
     label: "admin.page.ipad.label",
     icon: "tablet",
@@ -1656,7 +1676,7 @@ const ADMIN_NAV = [
   ["admin.group.daily", ["income", "export"]],
   ["admin.group.form", ["studio", "texts"]],
   ["admin.group.data", ["backup", "retention"]],
-  ["admin.group.device", ["ipad"]],
+  ["admin.group.device", ["ipad", "languages"]],
 ];
 let adminDraft = null,
   adminPage = "overview",
@@ -1768,6 +1788,290 @@ function languagePanel() {
         ${adminField("locale.currency", t("languages.currency"), { max: 3, help: th("languages.currencyHelp") })}${notes}
       </div>`,
   );
+}
+// Languages of the app texts (page "Sprachen"): built in, loaded as a pack, or added here and
+// translated by the studio itself. Packs are saved at once, like logo and icon, not with the draft.
+let translateCode = null,
+  translateGroup = null,
+  translateMissing = false;
+// Languages offered for adding: the ones with a flag plus other widely written ones.
+const ADD_LANGUAGES = [
+  ...new Set([
+    "en", "de", "fr", "it", "pt", "nl", "pl", "tr", "ru", "uk", "cs", "sk", "hu", "ro", "bg", "el", "hr", "sr", "sl", "bs",
+    "mk", "sq", "da", "sv", "nb", "fi", "is", "et", "lv", "lt", "ga", "mt", "ka", "hy", "az", "kk", "uz", "he", "fa", "zh",
+    "ja", "ko", "vi", "th", "id", "ms", "tl", "hi", "bn", "ur", "ne", "si", "km", "lo", "my", "mn", "am", "sw", "es", "ar",
+    "ca", "eu", "gl", "cy", "lb", "af", "zu", "xh", "ta", "te", "mr", "gu", "kn", "ml", "pa", "ps", "ku", "so", "ha", "yo",
+    "ig", "be", "tg", "ky", "tk", "eo", "fy", "gd", "br", "co", "rm",
+  ]),
+];
+let regionCodes = null;
+function regionList() {
+  if (regionCodes) return regionCodes;
+  const names = new Intl.DisplayNames([language().locale], { type: "region", fallback: "none" }),
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    list = [];
+  for (const a of letters)
+    for (const b of letters) {
+      const code = a + b;
+      if (["EU", "EZ", "UN", "QO", "ZZ"].includes(code)) continue;
+      let name;
+      try {
+        name = names.of(code);
+      } catch (_) {}
+      if (name && name !== code) list.push([code, name]);
+    }
+  return (regionCodes = list.sort((x, y) => x[1].localeCompare(y[1], language().locale)));
+}
+function storePacks(next) {
+  localStorage.setItem(PACKS_KEY, JSON.stringify(next));
+  installedPacks = next;
+  addLanguages(installedPacks);
+}
+const shownName = (code) => {
+  try {
+    return new Intl.DisplayNames([language().locale], { type: "language" }).of(code) || code;
+  } catch (_) {
+    return code;
+  }
+};
+function languagesPage() {
+  if (translateCode && installedPacks[translateCode]) return appTranslationPage();
+  translateCode = null;
+  const rows = [...languageCodes().filter(isBuiltinLanguage), ...languageCodes().filter((code) => !isBuiltinLanguage(code))]
+    .map((code) => {
+      const p = languageProgress(code),
+        builtin = isBuiltinLanguage(code),
+        state = builtin
+          ? th("appLanguages.builtin")
+          : th("appLanguages.progress", { form: p.form, formTotal: p.formTotal, admin: p.admin, adminTotal: p.adminTotal }) +
+            (formReady(code) ? ` · ${th("appLanguages.ready")}` : "") +
+            (p.unprintable.length ? ` · ${th("appLanguages.unprintable")}` : "");
+      return /* HTML */ `<div class="app-lang-row">
+        <span class="app-lang-mark">${languageMark(code)}</span>
+        <div class="app-lang-text"><strong lang="${code}">${escapeHtml(translator(code).name)}</strong><small>${state}</small></div>
+        ${
+          builtin
+            ? ""
+            : /* HTML */ `<div class="ad-actions-row">
+                <button type="button" class="ad-button primary" data-translate-app="${code}">${adminIcon("pen")}${th("appLanguages.translate")}</button
+                ><button type="button" class="ad-button" data-remove-language="${code}">${adminIcon("trash")}${th("appLanguages.remove")}</button>
+              </div>`
+        }
+      </div>`;
+    })
+    .join("");
+  const options = ADD_LANGUAGES.map((code) => [code, shownName(code)])
+    .sort((a, b) => a[1].localeCompare(b[1], language().locale))
+    .map(([code, name]) => {
+      const region = languageRegion(code),
+        own = languageName(code);
+      return `<option value="${code}">${region ? flagEmoji(region) + " " : ""}${escapeHtml(name)}${own && own !== name ? ` · ${escapeHtml(own)}` : ""}</option>`;
+    })
+    .join("");
+  const regions = regionList()
+    .map(([code, name]) => `<option value="${code}">${flagEmoji(code)} ${escapeHtml(name)}</option>`)
+    .join("");
+  return (
+    adminPanel(th("appLanguages.listTitle"), `<p class="ad-section-copy">${th("appLanguages.listCopy")}</p><div class="app-lang-list">${rows}</div>`) +
+    adminPanel(
+      th("appLanguages.addTitle"),
+      /* HTML */ `<p class="ad-section-copy">${th("appLanguages.addCopy")}</p>
+        <div class="ad-fields">
+          <div class="ad-field">
+            <label for="add-language">${th("appLanguages.language")}</label><select id="add-language">${options}</select>
+          </div>
+          <div class="ad-field">
+            <label for="add-region">${th("appLanguages.region")}</label
+            ><select id="add-region"><option value="">${th("appLanguages.regionAuto")}</option>${regions}</select
+            ><small>${th("appLanguages.regionHelp")}</small>
+          </div>
+        </div>
+        <div class="ad-actions-row">
+          <button type="button" class="ad-button primary" data-admin-action="language-add">${adminIcon("plus")}${th("appLanguages.add")}</button>
+        </div>`,
+    )
+  );
+}
+function addAppLanguage() {
+  const lang = $("add-language").value,
+    region = $("add-region").value,
+    code = region && region !== languageRegion(lang) ? `${lang}-${region}` : lang;
+  if (hasLanguage(code)) {
+    toast(t("appLanguages.exists", { sprache: translator(code).name }));
+    return;
+  }
+  try {
+    if (Object.keys(installedPacks).length >= PACKS_MAX) throw Error(t("pack.tooMany", { anzahl: PACKS_MAX }));
+    storePacks({ ...installedPacks, [code]: validatePack(code, newPack(code)) });
+  } catch (error) {
+    toast(t("appLanguages.failed", { fehler: error.message }));
+    return;
+  }
+  translateCode = code;
+  translateGroup = null;
+  translateMissing = false;
+  renderAdminSection();
+  window.scrollTo(0, 0);
+  toast(t("appLanguages.added", { sprache: translator(code).name }));
+}
+async function removeAppLanguage(code) {
+  const name = translator(code).name;
+  if (code === settings.locale.content) {
+    toast(t("appLanguages.contentLanguage"));
+    return;
+  }
+  if (!(await askConfirm({ title: t("appLanguages.removeTitle", { sprache: name }), text: t("appLanguages.removeCopy"), confirm: t("appLanguages.remove") })))
+    return;
+  const next = { ...installedPacks };
+  delete next[code];
+  try {
+    storePacks(next);
+  } catch (error) {
+    toast(t("appLanguages.failed", { fehler: error.message }));
+    return;
+  }
+  if (translateCode === code) translateCode = null;
+  if (editLanguage === code) editLanguage = null;
+  if (operatorChoice() === code || language().code === code) chooseOperatorLanguage(hasLanguage("en") ? "en" : BASE_LANGUAGE);
+  else renderAdminSection();
+  renderLanguageChoice();
+  toast(t("appLanguages.removed", { sprache: name }));
+}
+// The keys of the app grouped by their first part, the texts of the form first.
+function translateGroups() {
+  const groups = new Map();
+  for (const key of baseKeys()) {
+    const id = `${isFormKey(key) ? "f" : "a"}:${key.split(".")[0]}`;
+    if (!groups.has(id)) groups.set(id, []);
+    groups.get(id).push(key);
+  }
+  return [...groups].sort((x, y) => (x[0][0] === y[0][0] ? 0 : x[0][0] === "f" ? -1 : 1));
+}
+const sourceText = (value) => (typeof value === "string" ? value : Object.entries(value).map(([form, text]) => `${form}: ${text}`).join("\n"));
+const appTextId = (key, form) => `app-tr-${key.replaceAll(".", "-")}${form ? "-" + form : ""}`;
+function translateProgress(code) {
+  const p = languageProgress(code),
+    name = translator(code).name;
+  let note = "";
+  if (p.unprintable.length) note = `<div class="ad-notice review">${th("appLanguages.unprintableNote")}</div>`;
+  else if (p.form === p.formTotal) note = `<div class="ad-notice">${th("appLanguages.readyNote", { sprache: name })}</div>`;
+  return `<p><strong>${th("appLanguages.progress", { form: p.form, formTotal: p.formTotal, admin: p.admin, adminTotal: p.adminTotal })}</strong></p>${note}`;
+}
+function appTranslationPage() {
+  const code = translateCode,
+    pack = installedPacks[code],
+    groups = translateGroups(),
+    has = (key) => Object.hasOwn(pack.texts, key);
+  if (!groups.some(([id]) => id === translateGroup)) translateGroup = (groups.find(([, keys]) => keys.some((k) => !has(k))) ?? groups[0])[0];
+  const keys = groups.find(([id]) => id === translateGroup)[1],
+    shown = translateMissing ? keys.filter((k) => !has(k)) : keys,
+    base = builtinLanguage(BASE_LANGUAGE).texts,
+    english = builtinLanguage("en")?.texts ?? {},
+    forms = pluralForms(pack.locale),
+    form = translateGroup.startsWith("f:");
+  const options = groups
+    .map(([id, list]) => {
+      const done = list.filter(has).length;
+      return `<option value="${id}"${id === translateGroup ? " selected" : ""}>${th(id.startsWith("f:") ? "appLanguages.formGroup" : "appLanguages.adminGroup")} · ${id.slice(2)} (${done}/${list.length})</option>`;
+    })
+    .join("");
+  const rows = shown
+    .map((key) => {
+      const model = base[key],
+        own = pack.texts[key],
+        inputs = (typeof model === "string" ? [null] : forms)
+          .map((plural) => {
+            const value = plural ? (own?.[plural] ?? "") : (own ?? "");
+            return `${plural ? `<label class="app-tr-form" for="${appTextId(key, plural)}">${th("appLanguages.pluralForm", { form: plural })}</label>` : ""}<textarea id="${appTextId(key, plural)}" data-app-text="${key}" data-app-form="${plural ?? ""}" lang="${code}" dir="${pack.dir}" rows="${Math.min(8, Math.max(2, Math.ceil(sourceText(model).length / 70)))}">${escapeHtml(value)}</textarea>`;
+          })
+          .join("");
+      return /* HTML */ `<div class="ad-field full app-tr${has(key) ? "" : " missing"}" data-app-key="${key}">
+        <label for="${appTextId(key, typeof model === "string" ? null : forms[0])}"><code>${key}</code></label>
+        <div class="app-tr-source"><p lang="de">${escapeHtml(sourceText(model))}</p>${english[key] ? `<p lang="en">${escapeHtml(sourceText(english[key]))}</p>` : ""}</div>
+        ${inputs}
+        <p class="ad-field-error" role="alert" hidden></p>
+      </div>`;
+    })
+    .join("");
+  return (
+    /* HTML */ `<div class="ad-actions-row app-tr-back"><button type="button" class="ad-button" data-admin-action="translate-back">${th("appLanguages.back")}</button></div>` +
+    adminPanel(
+      th("appLanguages.editTitle", { sprache: pack.name }),
+      /* HTML */ `<div class="ad-fields">
+          <div class="ad-field">
+            <label for="app-tr-name">${th("appLanguages.name")}</label
+            ><input id="app-tr-name" type="text" maxlength="80" lang="${code}" dir="${pack.dir}" value="${escapeHtml(pack.name)}" />
+          </div>
+        </div>
+        <div id="app-tr-progress">${translateProgress(code)}</div>`,
+    ) +
+    adminPanel(
+      th("appLanguages.texts"),
+      /* HTML */ `<div class="ad-fields">
+          <div class="ad-field">
+            <label for="app-tr-group">${th("appLanguages.group")}</label><select id="app-tr-group">${options}</select>
+          </div>
+          <label class="income-check"><input type="checkbox" id="app-tr-missing" ${translateMissing ? "checked" : ""} /><span>${th("appLanguages.onlyMissing")}</span></label>
+        </div>
+        <p class="ad-section-copy">${th(form ? "appLanguages.formHelp" : "appLanguages.adminHelp")}</p>
+        ${typeof base[keys[0]] === "string" && !keys.some((k) => typeof base[k] !== "string") ? "" : `<p class="ad-preview-note">${th("appLanguages.pluralHelp")}</p>`}
+        <div class="ad-fields">${rows || `<p class="ad-section-copy">${th("appLanguages.allDone")}</p>`}</div>`,
+    )
+  );
+}
+// One text written in the editor: checked like a pack text, saved at once; empty removes it.
+function saveAppText(key) {
+  const code = translateCode,
+    pack = installedPacks[code],
+    box = document.querySelector(`[data-app-key="${CSS.escape(key)}"]`),
+    model = builtinLanguage(BASE_LANGUAGE).texts[key],
+    error = box.querySelector(".ad-field-error");
+  const fields = [...box.querySelectorAll("textarea[data-app-text]")],
+    values = fields.map((el) => [el.dataset.appForm, el.value.normalize("NFC").trim()]);
+  let value;
+  if (values.every(([, v]) => !v)) value = undefined;
+  else value = typeof model === "string" ? values[0][1] : Object.fromEntries(values);
+  const problem = value === undefined ? null : packTextProblem(value, model, pluralForms(pack.locale));
+  error.hidden = !problem;
+  fields.forEach((el) => el.toggleAttribute("aria-invalid", !!problem));
+  if (problem) {
+    const placeholders = [...new Set(sourceText(model).match(/\{\w+\}/g) ?? [])].join(" ");
+    const message = {
+      empty: "appLanguages.problem.empty",
+      form: "appLanguages.problem.form",
+      long: "appLanguages.problem.long",
+      markup: "appLanguages.problem.markup",
+      placeholders: "appLanguages.problem.placeholders",
+      plural: "appLanguages.problem.plural",
+    }[problem];
+    error.textContent = t(message, { platzhalter: placeholders || "–", max: PACK_TEXT_MAX });
+    return;
+  }
+  const texts = { ...pack.texts };
+  if (value === undefined) delete texts[key];
+  else texts[key] = value;
+  try {
+    storePacks({ ...installedPacks, [code]: { ...pack, texts } });
+  } catch (err) {
+    error.hidden = false;
+    error.textContent = t("appLanguages.failed", { fehler: err.message });
+    return;
+  }
+  box.classList.toggle("missing", value === undefined);
+  $("app-tr-progress").innerHTML = translateProgress(code);
+  const option = $("app-tr-group").selectedOptions[0],
+    list = translateGroups().find(([id]) => id === translateGroup)[1];
+  option.textContent = option.textContent.replace(/\(\d+\/\d+\)$/, `(${list.filter((k) => Object.hasOwn(texts, k)).length}/${list.length})`);
+}
+function renameAppLanguage(input) {
+  const pack = installedPacks[translateCode],
+    name = input.value.normalize("NFC").trim();
+  if (!name || name.length > 80) {
+    input.value = pack.name;
+    return;
+  }
+  storePacks({ ...installedPacks, [translateCode]: { ...pack, name } });
+  renderAdminSection();
 }
 function adminPanel(title, content, note = "") {
   return /* HTML */ `<section class="ad-panel">
@@ -3000,6 +3304,8 @@ function renderAdminSection() {
   let content = "";
   if (editLanguage && TEXT_PAGES.includes(adminPage)) {
     content = translationPage();
+  } else if (adminPage === "languages") {
+    content = languagesPage();
   } else if (adminPage === "income") {
     content = `<div id="income-content">${incomeFeature.view()}</div>`;
   } else if (adminPage === "setup" && setupWay !== "new") {
@@ -3364,7 +3670,7 @@ function updateAdminChrome() {
   const changed = adminChanged(),
     setup = adminPage === "setup",
     finishing = setup && setupWay === "new";
-  $("admin-savebar").hidden = !!settingsBroken || (setup && !finishing) || ((adminPage === "income" || adminPage === "retention") && !changed);
+  $("admin-savebar").hidden = !!settingsBroken || (setup && !finishing) || (["income", "retention", "languages"].includes(adminPage) && !changed);
   $("admin-savebar").classList.toggle("unsaved", changed || finishing);
   $("admin-discard").hidden = $("admin-save").hidden = finishing;
   $("admin-setup-finish").hidden = !finishing;
@@ -3806,6 +4112,18 @@ $("admin-app").addEventListener("change", (event) => {
   if (!adminAccess.isUnlocked()) return;
   if (el.id === "operator-language") {
     chooseOperatorLanguage(el.value);
+  } else if (el.dataset.appText && translateCode) {
+    saveAppText(el.dataset.appText);
+    return;
+  } else if (el.id === "app-tr-name" && translateCode) {
+    renameAppLanguage(el);
+    return;
+  } else if (el.id === "app-tr-group" || el.id === "app-tr-missing") {
+    if (el.id === "app-tr-group") translateGroup = el.value;
+    else translateMissing = el.checked;
+    renderAdminSection();
+    $(el.id)?.focus();
+    return;
   } else if (adminDraft && el.id === "locale-studio") {
     adminDraft.locale.studio = el.value;
     if (!adminDraft.locale.customer.includes(el.value)) adminDraft.locale.customer.unshift(el.value);
@@ -3891,6 +4209,14 @@ $("admin-app").addEventListener("click", (event) => {
     (area && document.querySelector(`${area} [data-admin-page="${button.dataset.adminPage}"]`) || $("admin-page-title")).focus({ preventScroll: true });
   }
   if (button.dataset.setTheme) setTheme(button.dataset.setTheme);
+  if (button.dataset.translateApp) {
+    translateCode = button.dataset.translateApp;
+    translateGroup = null;
+    translateMissing = false;
+    renderAdminSection();
+    window.scrollTo(0, 0);
+  }
+  if (button.dataset.removeLanguage) removeAppLanguage(button.dataset.removeLanguage);
   if (button.dataset.editLanguage) {
     editLanguage = button.dataset.editLanguage === adminDraft.locale.content ? null : button.dataset.editLanguage;
     renderAdminSection();
@@ -3942,6 +4268,14 @@ $("admin-app").addEventListener("click", (event) => {
     }
   }
   switch (button.dataset.adminAction) {
+    case "language-add":
+      addAppLanguage();
+      break;
+    case "translate-back":
+      translateCode = null;
+      renderAdminSection();
+      window.scrollTo(0, 0);
+      break;
     case "setup-finish":
       finishSetup();
       break;
