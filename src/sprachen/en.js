@@ -148,6 +148,7 @@ export default {
     "backup.unsaved": "There are unsaved changes. Please save or discard them below first: the full backup only holds the saved state.",
     "common.cancel": "Cancel",
     "common.closeDialog": "Close dialogue",
+    "common.language": "Language",
     "common.inlineReview": "Have legally reviewed before use",
     "common.no": "No",
     "common.notGiven": "Not given",

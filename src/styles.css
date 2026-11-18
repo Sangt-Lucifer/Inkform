@@ -2981,6 +2981,9 @@ html[data-theme="dark"] dialog::backdrop {
   color: #fff;
   font-size: 16px;
 }
+.install-card .language-button {
+  padding: 0;
+}
 .install-card .install-primary {
   background: #fff;
   border-color: #fff;
@@ -3188,6 +3191,19 @@ html[data-theme="dark"] dialog::backdrop {
 }
 .top-actions .theme-button {
   flex: none;
+}
+.dialog-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.install-language {
+  justify-content: flex-end;
+  margin: -3px -3px 12px;
+}
+.ad-top-actions .language-choice {
+  flex: 0 1 auto;
 }
 .language-choice::-webkit-scrollbar {
   display: none;

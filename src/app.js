@@ -90,8 +90,19 @@ const OWNER_GUIDE_PAGES = Number("__OWNER_GUIDE_PAGES__");
 // Neutral edition without a studio: setup assistant, sample data, no owner guide.
 const BLANK_EDITION = "__BLANK_EDITION__" === "true";
 const THEME_KEY = "inkform.theme.v1";
+// A language chosen on the install page goes along in the address (?sprache=en): the home screen
+// app added from there has its own storage and starts setup in it until one is saved.
+const START_LANGUAGE = (() => {
+  try {
+    const code = new URL(location.href).searchParams.get("sprache");
+    return hasLanguage(code) ? code : null;
+  } catch (_) {
+    return null;
+  }
+})();
+let chosenLanguage = null;
 try {
-  setLanguage(localStorage.getItem(LANGUAGE_KEY));
+  setLanguage(localStorage.getItem(LANGUAGE_KEY) ?? START_LANGUAGE);
 } catch (_) {}
 function applyLanguage() {
   document.documentElement.lang = language().code;
@@ -108,8 +119,50 @@ function operatorLanguage() {
     const code = localStorage.getItem(LANGUAGE_KEY);
     if (hasLanguage(code)) return code;
   } catch (_) {}
-  return settings.locale.studio;
+  return chosenLanguage ?? START_LANGUAGE ?? settings.locale.studio;
 }
+// Flag buttons for the admin language, offered while setting up: on the install page, in the
+// first PIN dialog and in the assistant. The install page (a Safari tab) stores nothing and
+// passes the choice on in the address; everywhere else it is saved on this device.
+function fillOperatorLanguage(group, visible) {
+  const codes = languageCodes();
+  group.hidden = !visible || codes.length < 2;
+  group.innerHTML = group.hidden ? "" : languageButtons(codes, language().code, "operator-language");
+}
+function chooseOperatorLanguage(code) {
+  if (!hasLanguage(code)) return;
+  chosenLanguage = code;
+  const installing = !$("install-screen").hidden;
+  if (installing) {
+    const url = new URL(location.href);
+    url.searchParams.set("sprache", code);
+    history.replaceState(history.state, "", url);
+  } else
+    try {
+      localStorage.setItem(LANGUAGE_KEY, code);
+    } catch (_) {}
+  useLanguage(code);
+  if (installing) renderInstallScreen();
+  if (!$("completion-screen").hidden) completionTexts();
+  if ($("admin-pin-dialog")?.open) adminAccess.showTexts();
+  if (adminOpen) {
+    if (adminPage === "setup" && setupWay === "new") setupStudioLanguage(code);
+    renderAdminSection();
+  }
+}
+// A new studio starts in the language it is set up in (still changeable in the assistant).
+function setupStudioLanguage(code) {
+  if (!adminDraft || adminDraft.locale.studio === code || !hasAllTexts(adminDraft, code)) return;
+  adminDraft.locale.studio = code;
+  if (!adminDraft.locale.customer.includes(code)) adminDraft.locale.customer.unshift(code);
+}
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-operator-language]");
+  if (!button) return;
+  const code = button.dataset.operatorLanguage;
+  chooseOperatorLanguage(code);
+  [...document.querySelectorAll(`[data-operator-language="${code}"]`)].find((el) => el.offsetParent)?.focus();
+});
 // Switches the interface language; texts the app sets itself are written again afterwards.
 function useLanguage(code) {
   setLanguage(code);
@@ -2380,6 +2433,7 @@ function renderInstallScreen() {
   const choice = (background) =>
     `<button type="button" data-install="background" data-background="${background}" aria-pressed="${installIcon?.background === background}">${th(background === "dark" ? "installPage.dark" : "installPage.light")}</button>`;
   $("install-screen").innerHTML = /* HTML */ `<div class="install-card">
+    <div id="install-language" class="language-choice install-language" role="group" aria-label="${th("common.language")}"></div>
     <h1 id="install-screen-title" tabindex="-1">${th("installPage.title")}</h1>
     <p>${th("installPage.copy")}</p>
     <ol class="install-steps">
@@ -2401,6 +2455,7 @@ function renderInstallScreen() {
     <p class="install-note">${th("installPage.note")}</p>
     <button type="button" class="install-skip" data-install="skip">${th("installPage.skip")}</button>
   </div>`;
+  fillOperatorLanguage($("install-language"), true);
 }
 async function useInstallIcon(turn, bytes, file = null, background = "light") {
   const src = await touchIcon(bytes);
@@ -2474,6 +2529,7 @@ $("install-screen").addEventListener("click", (event) => {
 // Whether the install page is shown; the PIN is asked for only once it is left.
 function offerInstall() {
   if (!INSTALL_FIRST || adminAccess.configured() || sessionStorage.getItem("inkform.installSkipped")) return false;
+  useLanguage(operatorLanguage());
   renderInstallScreen();
   $("install-screen").hidden = false;
   $("customer-app").inert = true;
@@ -2481,6 +2537,7 @@ function offerInstall() {
   return true;
 }
 function firstStart() {
+  useLanguage(operatorLanguage());
   showCompletion(true);
   openAdmin("overview");
 }
@@ -2786,6 +2843,7 @@ function renderAdminSection() {
   $("admin-page-title").textContent = t(page.title);
   $("admin-page-description").textContent = t(page.description);
   $("admin-breadcrumb").textContent = t(page.label);
+  fillOperatorLanguage($("admin-language"), adminPage === "setup");
   $("admin-error").hidden = true;
   const navButton = (target, icon, label, current) =>
     /* HTML */ `<button type="button" data-admin-page="${target}" ${current ? 'aria-current="page"' : ""}>
@@ -3279,10 +3337,13 @@ function renderLanguageChoice() {
   const offered = offeredLanguages(settings),
     group = $("customer-language");
   group.hidden = offered.length < 2;
-  group.innerHTML = offered
+  group.innerHTML = languageButtons(offered, customerLanguage, "customer-language");
+}
+function languageButtons(codes, current, attribute) {
+  return codes
     .map((code) => {
       const name = escapeHtml(translator(code).name);
-      return `<button type="button" class="language-button" data-customer-language="${escapeHtml(code)}" lang="${escapeHtml(code)}" aria-pressed="${code === customerLanguage}" aria-label="${name}" title="${name}">${languageMark(code)}</button>`;
+      return `<button type="button" class="language-button" data-${attribute}="${escapeHtml(code)}" lang="${escapeHtml(code)}" aria-pressed="${code === current}" aria-label="${name}" title="${name}">${languageMark(code)}</button>`;
     })
     .join("");
 }
@@ -3399,6 +3460,13 @@ function finishAdminLeave() {
   resizeCanvas();
   $("studio-open").focus({ preventScroll: true });
 }
+let completionSetup = false;
+function completionTexts() {
+  const setup = completionSetup;
+  $("completion-title").textContent = t(setup ? "completion.setupTitle" : "completion.title");
+  $("completion-copy").textContent = t(setup ? "completion.setupCopy" : "completion.copy");
+  $("completion-unlock").textContent = t(setup ? "completion.setupUnlock" : "completion.unlock");
+}
 function showCompletion(setup = false) {
   document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
   if (adminOpen) useLanguage(customerLanguage);
@@ -3411,9 +3479,8 @@ function showCompletion(setup = false) {
   $("customer-app").hidden = true;
   $("admin-app").hidden = true;
   $("completion-screen").hidden = false;
-  $("completion-title").textContent = t(setup ? "completion.setupTitle" : "completion.title");
-  $("completion-copy").textContent = t(setup ? "completion.setupCopy" : "completion.copy");
-  $("completion-unlock").textContent = t(setup ? "completion.setupUnlock" : "completion.unlock");
+  completionSetup = setup;
+  completionTexts();
   if (!setup)
     try {
       sessionStorage.setItem("inkform.completion", "true");
@@ -3742,7 +3809,7 @@ $("admin-app").addEventListener("click", (event) => {
       if (!setupWay) {
         adminDraft = clone(settings);
         setupYears = null;
-      }
+      } else setupStudioLanguage(language().code);
       renderAdminSection();
       break;
     case "setup-file":
@@ -3878,6 +3945,7 @@ window.addEventListener("hashchange", () => {
   }
 });
 adminAccess = createAdminAccess({
+  onShow: (group, configured) => fillOperatorLanguage(group, !configured),
   storage: {
     getItem: (key) => localStorage.getItem(key),
     setItem: (key, value) => localStorage.setItem(key, value),

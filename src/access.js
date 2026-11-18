@@ -155,7 +155,8 @@ export function createAdminPinStore(storage) {
     },
   };
 }
-export function createAdminAccess({ storage, onExternalLock, now = () => Date.now() }) {
+// onShow(group, configured) fills the language buttons in the dialog head whenever its texts are set.
+export function createAdminAccess({ storage, onExternalLock, onShow, now = () => Date.now() }) {
   const pins = createAdminPinStore(storage),
     lockout = createPinLockout(storage, now);
   let unlocked = false,
@@ -165,7 +166,7 @@ export function createAdminAccess({ storage, onExternalLock, now = () => Date.no
   const dialog = document.createElement("dialog");
   dialog.id = "admin-pin-dialog";
   dialog.setAttribute("aria-labelledby", "admin-pin-title");
-  dialog.innerHTML = `<div class="dialog-head"><h2 id="admin-pin-title" data-t="completion.unlock"></h2><button class="close-button" type="button" id="admin-pin-close" data-t-aria-label="common.closeDialog">×</button></div>
+  dialog.innerHTML = `<div class="dialog-head"><h2 id="admin-pin-title" data-t="completion.unlock"></h2><div class="dialog-head-actions"><div id="admin-pin-language" class="language-choice" role="group" data-t-aria-label="languages.operator" hidden></div><button class="close-button" type="button" id="admin-pin-close" data-t-aria-label="common.closeDialog">×</button></div></div>
   <form id="admin-pin-form" class="dialog-body" novalidate><p id="admin-pin-copy" class="ad-section-copy"></p><div class="ad-fields">
   <div class="ad-field"><label for="admin-pin" data-t="pin.label"></label><input id="admin-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" required></div>
   <div class="ad-field" id="admin-pin-repeat-field"><label for="admin-pin-repeat" data-t="pin.repeat"></label><input id="admin-pin-repeat" name="repeat" type="password" inputmode="numeric" autocomplete="off" maxlength="12"></div></div>
@@ -243,18 +244,24 @@ export function createAdminAccess({ storage, onExternalLock, now = () => Date.no
     epoch++;
     form.reset();
     errorNode.hidden = true;
+    showTexts();
+    if (!dialog.open) dialog.showModal();
+    form.elements.pin.focus();
+  }
+  // Also called after a language change while the dialog is open; typed digits stay.
+  function showTexts() {
+    applyTexts(dialog);
     try {
       const configured = pins.configured();
       dialog.querySelector("#admin-pin-title").textContent = t(configured ? "completion.unlock" : "pin.setupTitle");
       dialog.querySelector("#admin-pin-copy").textContent = t(configured ? "pin.copy" : "pin.setupCopy");
       dialog.querySelector("#admin-pin-repeat-field").hidden = configured;
       dialog.querySelector("#admin-pin-submit").textContent = t(configured ? "pin.unlock" : "pin.save");
+      onShow?.(dialog.querySelector("#admin-pin-language"), configured);
     } catch (error) {
       errorNode.textContent = error.message;
       errorNode.hidden = false;
     }
-    if (!dialog.open) dialog.showModal();
-    form.elements.pin.focus();
   }
   function lock() {
     unlocked = false;
@@ -278,5 +285,5 @@ export function createAdminAccess({ storage, onExternalLock, now = () => Date.no
     lockout.fail();
     throw Error(t(lockout.remainingMs() ? "pin.wrongLocked" : "pin.wrongCurrent"));
   }
-  return { request, lock, changePin, isUnlocked: () => unlocked, configured: pins.configured };
+  return { request, lock, changePin, showTexts, isUnlocked: () => unlocked, configured: pins.configured };
 }

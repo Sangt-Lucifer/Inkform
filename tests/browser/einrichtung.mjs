@@ -50,6 +50,7 @@ for (const [id, value] of [
   await type(id, value);
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
 await until(`adminPage==='overview'`);
+check("Nach der Einrichtung keine Flaggen in der Kopfzeile", await ev(`document.getElementById('admin-language').hidden`));
 await ev(`openAdminAuthorized('studio')`);
 await pickImage("logo-file", "g.fillStyle='#284';g.fillRect(20,20,260,160)");
 await until(`!!ownLogo`);
@@ -188,11 +189,48 @@ check(
   (await touch()) === firstPicture && (await ev(`document.querySelector('[data-install="background"][data-background="light"]').getAttribute('aria-pressed')==='true'`)),
 );
 await ev(`squareIcon=window.__square`);
+const flag = (group, code) => `document.querySelector('#${group} [data-operator-language="${code}"]')`;
+check("Installationsseite: Flaggen für Deutsch und Englisch, Deutsch gewählt", await ev(`${flag("install-language", "de")}.getAttribute('aria-pressed')==='true'&&${flag("install-language", "en")}.getAttribute('aria-pressed')==='false'`));
+await ev(`${flag("install-language", "en")}.click()`);
+await until(`document.documentElement.lang==='en'`);
+check(
+  "Englisch gewählt: Seite auf Englisch, Symbol bleibt, Wahl nur in der Adresse, nichts gespeichert",
+  await ev(`location.search==='?sprache=en'&&document.getElementById('install-screen-title').textContent===t('installPage.title')&&${flag("install-language", "en")}.getAttribute('aria-pressed')==='true'
+    &&document.activeElement===${flag("install-language", "en")}&&localStorage.getItem('inkform.language.v1')===null&&!!document.querySelector('.install-preview img')`),
+);
+await screenshot("installieren-englisch");
 await ev(`document.querySelector('[data-install="skip"]').click()`);
 await until(`document.getElementById('admin-pin-dialog')?.open`);
 check("Im Safari-Tab weiter: Seite weg, PIN wie gewohnt", await ev(`document.getElementById('install-screen').hidden&&!document.getElementById('customer-app').inert`));
+check("PIN-Dialog in der gewählten Sprache", await ev(`document.getElementById('admin-pin-title').textContent===t('pin.setupTitle')&&document.documentElement.lang==='en'`));
 await cmd("Page.removeScriptToEvaluateOnNewDocument", { identifier: safari.identifier });
+// The home screen app opens the address the tab had, with the language chosen there.
 await freshDevice();
 check("Ohne Safari auf dem iPad (z. B. Mac, Home-Bildschirm-App): keine Installationsseite", await ev(`document.getElementById('install-screen').hidden`));
+await until(`document.getElementById('admin-pin-dialog')?.open`);
+check(
+  "Home-Bildschirm-App mit ?sprache=en: erster PIN-Dialog auf Englisch, Flaggen oben",
+  await ev(`document.documentElement.lang==='en'&&document.getElementById('admin-pin-title').textContent===t('pin.setupTitle')&&!document.getElementById('admin-pin-language').hidden
+    &&${flag("admin-pin-language", "en")}.getAttribute('aria-pressed')==='true'&&document.getElementById('completion-title').textContent===t('completion.setupTitle')`),
+);
+await ev(`document.getElementById('admin-pin').value='12';${flag("admin-pin-language", "de")}.click()`);
+await until(`document.documentElement.lang==='de'`);
+check(
+  "Im PIN-Dialog auf Deutsch: Texte und Hintergrund deutsch, Eingabe bleibt, Wahl gespeichert",
+  await ev(`document.getElementById('admin-pin-title').textContent==='PIN bei der ersten Einrichtung festlegen'&&document.getElementById('admin-pin').value==='12'&&localStorage.getItem('inkform.language.v1')==='de'
+    &&document.getElementById('completion-title').textContent===t('completion.setupTitle')&&document.activeElement===${flag("admin-pin-language", "de")}`),
+);
+await ev(`${flag("admin-pin-language", "en")}.click()`);
+await setPin();
+check("Assistent auf Englisch, Flaggen oben in der Kopfzeile", await ev(`document.documentElement.lang==='en'&&!document.getElementById('admin-language').hidden&&${flag("admin-language", "en")}.getAttribute('aria-pressed')==='true'`));
+await ev(`document.querySelector('[data-admin-action="setup-new"]').click()`);
+await until(`!!document.getElementById('admin-studio-name')`);
+check("Neu einrichten auf Englisch: Studiosprache Englisch", await ev(`document.getElementById('locale-studio').value==='en'&&adminDraft.locale.customer.includes('en')`));
+await screenshot("einrichtung-englisch");
+await ev(`${flag("admin-language", "de")}.click()`);
+await until(`document.documentElement.lang==='de'`);
+check("Zurück auf Deutsch: Assistent und Studiosprache deutsch", await ev(`document.getElementById('locale-studio').value==='de'&&document.getElementById('admin-page-title').textContent===t('admin.page.setup.title')`));
+// Leave nothing unsaved behind for the next check in this browser.
+await ev(`adminDraft=JSON.parse(JSON.stringify(settings));finishAdminLeave()`);
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0, JSON.stringify(errors));
 process.exit(0);

@@ -149,6 +149,7 @@ export default {
     "backup.unsaved": "Es gibt ungespeicherte Änderungen. Bitte unten zuerst speichern oder verwerfen: Die Gesamtsicherung enthält nur den gespeicherten Stand.",
     "common.cancel": "Abbrechen",
     "common.closeDialog": "Dialog schließen",
+    "common.language": "Sprache",
     "common.inlineReview": "Vor Einsatz rechtlich prüfen",
     "common.no": "Nein",
     "common.notGiven": "Nicht angegeben",

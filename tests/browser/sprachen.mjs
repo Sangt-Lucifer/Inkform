@@ -58,8 +58,10 @@ const fits = async (name) => {
   return !wide.page && !wide.elements.length;
 };
 
-check("Gerätesprache gilt nicht für das Kundenformular", await ev(`document.documentElement.lang === 'de'`));
+// The first start is the owner's: PIN dialog and the screen behind it in the device language.
 await until(`document.getElementById('admin-pin-dialog')?.open`);
+check("Gerätesprache gilt nicht für das Kundenformular", await ev(`customerLanguage === 'de' && document.getElementById('customer-headline').textContent === settings.app.headline`));
+check("Erster PIN-Dialog in der Gerätesprache", await ev(`document.documentElement.lang === '${PSEUDO}' && document.getElementById('admin-pin-title').textContent.includes('[')`));
 await ev(`document.getElementById('admin-pin').value='839274';document.getElementById('admin-pin-repeat').value='839274';document.getElementById('admin-pin-form').requestSubmit()`);
 await until(`adminAccess.isUnlocked() && adminOpen`);
 check("Verwaltung in der Gerätesprache: lang und dir", await ev(`document.documentElement.lang === '${PSEUDO}' && document.documentElement.dir === 'rtl'`));
