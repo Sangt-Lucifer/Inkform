@@ -230,7 +230,15 @@ await screenshot("einrichtung-englisch");
 await ev(`${flag("admin-language", "de")}.click()`);
 await until(`document.documentElement.lang==='de'`);
 check("Zurück auf Deutsch: Assistent und Studiosprache deutsch", await ev(`document.getElementById('locale-studio').value==='de'&&document.getElementById('admin-page-title').textContent===t('admin.page.setup.title')`));
+await ev(`${flag("admin-language", "en")}.click()`);
+await until(`document.documentElement.lang==='en'`);
 // Leave nothing unsaved behind for the next check in this browser.
 await ev(`adminDraft=JSON.parse(JSON.stringify(settings));finishAdminLeave()`);
+await until(`!document.getElementById('customer-app').hidden`);
+check(
+  "„Zum Formular“ vor Abschluss der Einrichtung: Formular in der gewählten Sprache",
+  await ev(`document.documentElement.lang==='en'&&customerLanguage==='en'&&document.getElementById('customer-headline').textContent===contentIn(settings,'en').app.headline&&settings.locale.studio==='de'`),
+);
+await screenshot("formular-englisch-vor-einrichtung");
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0, JSON.stringify(errors));
 process.exit(0);

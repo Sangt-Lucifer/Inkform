@@ -141,6 +141,10 @@ function chooseOperatorLanguage(code) {
     try {
       localStorage.setItem(LANGUAGE_KEY, code);
     } catch (_) {}
+  if (needsSetup() && customerLanguage !== formStartLanguage()) {
+    customerLanguage = formStartLanguage();
+    renderShown();
+  }
   useLanguage(code);
   if (installing) renderInstallScreen();
   if (!$("completion-screen").hidden) completionTexts();
@@ -149,6 +153,11 @@ function chooseOperatorLanguage(code) {
     if (adminPage === "setup" && setupWay === "new") setupStudioLanguage(code);
     renderAdminSection();
   }
+}
+// Until the neutral edition is set up, its form follows the language chosen for the setup.
+function formStartLanguage() {
+  const code = operatorLanguage();
+  return needsSetup() && contentIn(settings, code) ? code : startLanguage(settings);
 }
 // A new studio starts in the language it is set up in (still changeable in the assistant).
 function setupStudioLanguage(code) {
@@ -828,8 +837,8 @@ function resetCustomerForm() {
   }
   consentIncomeId = incomeId();
   form.reset();
-  if (customerLanguage !== startLanguage(settings)) {
-    customerLanguage = startLanguage(settings);
+  if (customerLanguage !== formStartLanguage()) {
+    customerLanguage = formStartLanguage();
     useLanguage(customerLanguage);
     renderShown();
   }
@@ -3283,7 +3292,7 @@ function applySettings(next, { initial = false } = {}) {
   }
   settings = next;
   setCurrency(next.locale.currency);
-  if (!customerLanguage || !offeredLanguages(next).includes(customerLanguage)) customerLanguage = startLanguage(next);
+  if (!customerLanguage || ![...offeredLanguages(next), formStartLanguage()].includes(customerLanguage)) customerLanguage = formStartLanguage();
   const previousShown = shown ?? previous;
   renderShown();
   if (initial || !dirty || $("artist").value === previous.app.defaultArtist)
