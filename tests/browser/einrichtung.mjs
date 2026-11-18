@@ -220,6 +220,28 @@ check(
   await ev(`document.getElementById('admin-pin-title').textContent==='PIN bei der ersten Einrichtung festlegen'&&document.getElementById('admin-pin').value==='12'&&localStorage.getItem('inkform.language.v1')==='de'
     &&document.getElementById('completion-title').textContent===t('completion.setupTitle')&&document.activeElement===${flag("admin-pin-language", "de")}`),
 );
+const keyIn = async (id, key, shift = false) => {
+  await ev(`document.getElementById('${id}').focus()`);
+  const code = key === "Enter" ? 13 : 9;
+  for (const type of ["rawKeyDown", "keyUp"])
+    await cmd("Input.dispatchKeyEvent", { type, key, code: key, windowsVirtualKeyCode: code, modifiers: shift ? 8 : 0, ...(key === "Enter" && type === "rawKeyDown" ? { text: "\r" } : {}) });
+  return ev(`document.activeElement.id`);
+};
+check(
+  "Erste PIN: Tab und Enter springen ins Wiederholungsfeld, Umschalt+Tab zurück, nichts abgeschickt",
+  (await keyIn("admin-pin", "Tab")) === "admin-pin-repeat" && (await keyIn("admin-pin", "Enter")) === "admin-pin-repeat" && (await keyIn("admin-pin-repeat", "Tab", true)) === "admin-pin" &&
+    (await ev(`document.getElementById('admin-pin-dialog').open&&!adminAccess.configured()`)),
+);
+check(
+  "Flaggen im PIN-Dialog auf 320 px ganz sichtbar",
+  await (async () => {
+    await cmd("Emulation.setDeviceMetricsOverride", { width: 320, height: 640, deviceScaleFactor: 1, mobile: true });
+    const ok = await ev(`[...document.querySelectorAll('#admin-pin-language button')].every(b=>{const r=b.getBoundingClientRect(),g=b.parentElement.getBoundingClientRect();return r.width>=44&&r.left>=g.left-1&&r.right<=g.right+1&&r.right<=innerWidth})`);
+    await screenshot("pin-dialog-320");
+    await cmd("Emulation.setDeviceMetricsOverride", { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
+    return ok;
+  })(),
+);
 await ev(`${flag("admin-pin-language", "en")}.click()`);
 await setPin();
 check("Assistent auf Englisch, Flaggen oben in der Kopfzeile", await ev(`document.documentElement.lang==='en'&&!document.getElementById('admin-language').hidden&&${flag("admin-language", "en")}.getAttribute('aria-pressed')==='true'`));

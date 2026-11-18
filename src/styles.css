@@ -937,6 +937,7 @@ dialog::backdrop {
   border-bottom: 1px solid var(--line);
 }
 .dialog-head h2 {
+  min-width: 0;
   font-size: 19px;
   letter-spacing: -0.5px;
   font-weight: 650;
@@ -3194,9 +3195,9 @@ html[data-theme="dark"] dialog::backdrop {
 }
 .dialog-head-actions {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 10px;
-  min-width: 0;
 }
 .install-language {
   justify-content: flex-end;

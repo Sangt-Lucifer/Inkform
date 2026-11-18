@@ -192,6 +192,20 @@ export function createAdminAccess({ storage, onExternalLock, onShow, now = () =>
       errorNode.textContent = t("pin.digitsOnly");
       errorNode.hidden = false;
     });
+  // First setup: Tab and Enter in the PIN field go on to the repeat field in every browser,
+  // Shift+Tab goes back; with a PIN already set, Enter unlocks as before.
+  form.elements.pin.addEventListener("keydown", (event) => {
+    const repeat = form.elements.repeat;
+    if (repeat.closest("[hidden]") || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing) return;
+    if (event.key !== "Tab" && event.key !== "Enter") return;
+    event.preventDefault();
+    repeat.focus();
+  });
+  form.elements.repeat.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab" || !event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+    event.preventDefault();
+    form.elements.pin.focus();
+  });
   dialog.addEventListener("cancel", (event) => {
     event.preventDefault();
     close();
