@@ -21,6 +21,13 @@ check(
   await ev(`!!document.querySelector('#admin-nav [data-admin-page="languages"][aria-current="page"]')
     &&document.querySelectorAll('.app-lang-row').length===languageCodes().length&&!document.querySelector('[data-remove-language="de"],[data-remove-language="en"]')`),
 );
+check(
+  "Oben: Sprache der Verwaltung, Studiosprache und Sprachen für Kunden",
+  await ev(`!!document.getElementById('operator-language')&&!!document.querySelector('#admin-section [data-locale-customer="en"]')&&!document.querySelector('#admin-section fieldset [data-admin-page="languages"]')`),
+);
+await ev(`(()=>{const b=document.querySelector('#admin-section [data-locale-customer="en"]');b.click()})()`);
+check("Kundensprache umschalten: Speichern-Leiste erscheint", await ev(`adminChanged()&&!document.getElementById('admin-savebar').hidden`));
+await ev(`adminDraft=JSON.parse(JSON.stringify(settings));renderAdminSection()`);
 const set = (id, value) => ev(`(()=>{const el=document.getElementById('${id}');el.value=${JSON.stringify(value)};el.dispatchEvent(new Event('change',{bubbles:true}))})()`);
 await set("add-language", "es");
 await set("add-region", "MX");

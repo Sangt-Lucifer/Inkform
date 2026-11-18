@@ -1740,10 +1740,12 @@ function studioLanguageField() {
   </div>`;
 }
 // The languages customers may switch to; in the assistant only when there is a choice.
-function customerLanguageField(setup = false) {
+// The built-in languages first, then the packs.
+const orderedLanguages = () => [...languageCodes().filter(isBuiltinLanguage), ...languageCodes().filter((code) => !isBuiltinLanguage(code))];
+function customerLanguageField(setup = false, more = !setup) {
   const locale = adminDraft.locale;
   if (setup && languageCodes().filter((code) => hasAllTexts(adminDraft, code)).length < 2) return "";
-  const boxes = languageCodes()
+  const boxes = orderedLanguages()
     .map((code) => {
       const complete = hasAllTexts(adminDraft, code),
         stale = staleCount(adminDraft, code),
@@ -1769,7 +1771,7 @@ function customerLanguageField(setup = false) {
   return /* HTML */ `<fieldset class="ad-field full">
     <legend>${th("languages.customer")}</legend>
     ${boxes}<small>${th("languages.customerHelp")}</small>${
-      setup
+      !more
         ? ""
         : `<div class="ad-actions-row"><button type="button" class="ad-button" data-admin-page="languages">${adminIcon("globe")}${th("appLanguages.more")}</button></div>`
     }
@@ -1869,7 +1871,7 @@ function languagesPage() {
   if (translationImport) return translationImportPage();
   if (translateCode && installedPacks[translateCode]) return appTranslationPage();
   translateCode = null;
-  const rows = [...languageCodes().filter(isBuiltinLanguage), ...languageCodes().filter((code) => !isBuiltinLanguage(code))]
+  const rows = orderedLanguages()
     .map((code) => {
       const p = languageProgress(code),
         builtin = isBuiltinLanguage(code),
@@ -1904,6 +1906,18 @@ function languagesPage() {
     .map(([code, name]) => `<option value="${code}">${flagEmoji(code)} ${escapeHtml(name)}</option>`)
     .join("");
   return (
+    adminPanel(
+      th("appLanguages.settingsTitle"),
+      /* HTML */ `<div class="ad-fields">
+        <div class="ad-field">
+          <label for="operator-language">${th("languages.operator")}</label
+          >${languageSelect("operator-language", languageCodes(), operatorChoice() === AUTO ? AUTO : operatorLanguage(), true)}<small
+            >${th("languages.operatorHelp")}</small
+          >
+        </div>
+        ${studioLanguageField()}${customerLanguageField(false, false)}
+      </div>`,
+    ) +
     adminPanel(th("appLanguages.listTitle"), `<p class="ad-section-copy">${th("appLanguages.listCopy")}</p><div class="app-lang-list">${rows}</div>`) +
     adminPanel(
       th("appLanguages.addTitle"),
