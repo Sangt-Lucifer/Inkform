@@ -86,7 +86,7 @@ for (const [label, width, height] of viewports) {
   await screenshot(`sprachen-admin-${width}`);
 }
 // The profile's English draft: complete, so it can be ticked, but not offered until the owner does.
-await ev(`openAdminAuthorized('studio')`);
+await ev(`openAdminAuthorized('languages')`);
 check(
   "Englischer Entwurf: wählbar, nicht angeboten, als ungeprüft gekennzeichnet",
   await ev(`(() => {
@@ -240,8 +240,8 @@ await ev(`(() => {
   adminDraft = s;
   saveAdmin();
 })()`);
-await ev(`openAdminAuthorized('studio')`);
-check("Studio-Seite: Kundensprache wählbar", await ev(`!document.querySelector('[data-locale-customer="${PSEUDO}"]').disabled && document.querySelector('[data-locale-customer="${PSEUDO}"]').checked`));
+await ev(`openAdminAuthorized('languages')`);
+check("Seite Sprachen: Kundensprache wählbar", await ev(`!document.querySelector('[data-locale-customer="${PSEUDO}"]').disabled && document.querySelector('[data-locale-customer="${PSEUDO}"]').checked`));
 await ev(`finishAdminLeave()`);
 await until(`!document.getElementById('customer-app').hidden`);
 check("Nach der Verwaltung wieder Studiosprache", await ev(`document.documentElement.lang === 'de'`));

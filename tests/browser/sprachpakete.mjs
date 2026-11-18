@@ -68,7 +68,7 @@ try {
   await ev(`(()=>{for(const id of ['admin-pin','admin-pin-repeat'])document.getElementById(id).value='839274';document.getElementById('admin-pin-form').requestSubmit()})()`);
   await until(`adminAccess.isUnlocked() && adminOpen`);
   check("Assistent in der Paketsprache", await ev(`document.documentElement.lang==='${PSEUDO}'&&document.getElementById('admin-page-title').textContent.includes('[')`));
-  await ev(`adminPage='ipad';renderAdminSection()`);
+  await ev(`adminPage='languages';renderAdminSection()`);
   check("„Sprache dieses Geräts“ bietet das Paket an", await ev(`[...document.getElementById('operator-language').options].some(o=>o.value==='${PSEUDO}')`));
   await ev(`adminPage='setup';renderAdminSection()`);
   check("Kundenformular bleibt ohne Formulartexte in der Paketsprache bei der Studiosprache", await ev(`customerLanguage==='de'`));

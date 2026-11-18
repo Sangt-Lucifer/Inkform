@@ -1676,9 +1676,9 @@ const ADMIN_PAGES = {
 const ADMIN_NAV = [
   ["", ["setup", "overview"]],
   ["admin.group.daily", ["income", "export"]],
-  ["admin.group.form", ["studio", "texts"]],
+  ["admin.group.form", ["studio", "texts", "languages"]],
   ["admin.group.data", ["backup", "retention"]],
-  ["admin.group.device", ["ipad", "languages"]],
+  ["admin.group.device", ["ipad"]],
 ];
 let adminDraft = null,
   adminPage = "overview",
@@ -1742,7 +1742,7 @@ function studioLanguageField() {
 // The languages customers may switch to; in the assistant only when there is a choice.
 // The built-in languages first, then the packs.
 const orderedLanguages = () => [...languageCodes().filter(isBuiltinLanguage), ...languageCodes().filter((code) => !isBuiltinLanguage(code))];
-function customerLanguageField(setup = false, more = !setup) {
+function customerLanguageField(setup = false) {
   const locale = adminDraft.locale;
   if (setup && languageCodes().filter((code) => hasAllTexts(adminDraft, code)).length < 2) return "";
   const boxes = orderedLanguages()
@@ -1770,11 +1770,7 @@ function customerLanguageField(setup = false, more = !setup) {
     .join("");
   return /* HTML */ `<fieldset class="ad-field full">
     <legend>${th("languages.customer")}</legend>
-    ${boxes}<small>${th("languages.customerHelp")}</small>${
-      !more
-        ? ""
-        : `<div class="ad-actions-row"><button type="button" class="ad-button" data-admin-page="languages">${adminIcon("globe")}${th("appLanguages.more")}</button></div>`
-    }
+    ${boxes}<small>${th("languages.customerHelp")}</small>
   </fieldset>`;
 }
 function languagePanel() {
@@ -1842,30 +1838,11 @@ const shownName = (code) => {
     return code;
   }
 };
-// The own languages in short, with the ways to add, translate and upload: where the language of the
-// device is chosen and where the customer languages are ticked.
-function languageTools() {
-  const packs = languageCodes().filter((code) => !isBuiltinLanguage(code));
-  const rows = packs
-    .map((code) => {
-      const p = languageProgress(code);
-      return /* HTML */ `<div class="app-lang-row">
-        <span class="app-lang-mark">${languageMark(code)}</span>
-        <div class="app-lang-text"><strong lang="${code}">${escapeHtml(translator(code).name)}</strong><small
-          >${th("appLanguages.progress", { form: p.form, formTotal: p.formTotal, admin: p.admin, adminTotal: p.adminTotal })}${formReady(code) ? ` · ${th("appLanguages.ready")}` : ""}</small
-        ></div>
-        <button type="button" class="ad-button" data-translate-app="${code}">${adminIcon("pen")}${th("appLanguages.translate")}</button>
-      </div>`;
-    })
-    .join("");
-  return /* HTML */ `<div class="app-lang-tools">
-    ${rows ? `<div class="app-lang-list">${rows}</div>` : ""}
-    <div class="ad-actions-row">
-      <button type="button" class="ad-button" data-admin-page="languages">${adminIcon("plus")}${th("appLanguages.addTitle")}</button
-      ><button type="button" class="ad-button" data-admin-action="translation-upload">${adminIcon("upload")}${th("translationFile.upload")}</button>
-    </div>
-    <small class="ad-preview-note">${th("appLanguages.toolsHelp")}</small>
-  </div>`;
+// Where the language settings were before: one line pointing to the page "Sprachen".
+function languagesHint() {
+  return `<div class="ad-notice">${th("appLanguages.moved", {
+    link: markup(`<button class="text-button" type="button" data-admin-page="languages" style="color:var(--ad-blue);min-height:30px">${th("admin.page.languages.label")} ${adminIcon("arrow")}</button>`),
+  })}</div>`;
 }
 function languagesPage() {
   if (translationImport) return translationImportPage();
@@ -1883,14 +1860,15 @@ function languagesPage() {
       return /* HTML */ `<div class="app-lang-row">
         <span class="app-lang-mark">${languageMark(code)}</span>
         <div class="app-lang-text"><strong lang="${code}">${escapeHtml(translator(code).name)}</strong><small>${state}</small></div>
-        ${
+        <div class="ad-actions-row">${
           builtin
             ? ""
-            : /* HTML */ `<div class="ad-actions-row">
-                <button type="button" class="ad-button primary" data-translate-app="${code}">${adminIcon("pen")}${th("appLanguages.translate")}</button
-                ><button type="button" class="ad-button" data-remove-language="${code}">${adminIcon("trash")}${th("appLanguages.remove")}</button>
-              </div>`
-        }
+            : `<button type="button" class="ad-button primary" data-translate-app="${code}">${adminIcon("pen")}${th("appLanguages.translate")}</button>`
+        }${
+          code === adminDraft.locale.content
+            ? ""
+            : `<button type="button" class="ad-button" data-edit-texts="${code}">${adminIcon("doc")}${th("appLanguages.studioTexts")}</button>`
+        }${builtin ? "" : `<button type="button" class="ad-button" data-remove-language="${code}">${adminIcon("trash")}${th("appLanguages.remove")}</button>`}</div>
       </div>`;
     })
     .join("");
@@ -1907,7 +1885,7 @@ function languagesPage() {
     .join("");
   return (
     adminPanel(
-      th("appLanguages.settingsTitle"),
+      th("languages.operatorTitle"),
       /* HTML */ `<div class="ad-fields">
         <div class="ad-field">
           <label for="operator-language">${th("languages.operator")}</label
@@ -1915,9 +1893,9 @@ function languagesPage() {
             >${th("languages.operatorHelp")}</small
           >
         </div>
-        ${studioLanguageField()}${customerLanguageField(false, false)}
       </div>`,
     ) +
+    languagePanel() +
     adminPanel(th("appLanguages.listTitle"), `<p class="ad-section-copy">${th("appLanguages.listCopy")}</p><div class="app-lang-list">${rows}</div>`) +
     adminPanel(
       th("appLanguages.addTitle"),
@@ -2354,20 +2332,6 @@ function backupState() {
   return { age: last ? daysBetween(last) : null, today: !!last && localDate(new Date(last)) === localDate(), days };
 }
 let preparedBackup = null;
-// Language of this device and the own languages, at the top of "iPad & Einstellungen".
-function languageDevicePanel() {
-  return adminPanel(
-    th("languages.operatorTitle"),
-    /* HTML */ `<div class="ad-fields">
-      <div class="ad-field">
-        <label for="operator-language">${th("languages.operator")}</label
-        >${languageSelect("operator-language", languageCodes(), operatorChoice() === AUTO ? AUTO : operatorLanguage(), true)}<small
-          >${th("languages.operatorHelp")}</small
-        >
-      </div>
-    </div>${languageTools()}`,
-  );
-}
 // "iPad & Einstellungen": settings of this device, the PIN and the original template.
 function deviceSettings() {
   return `${adminPanel(
@@ -3609,7 +3573,7 @@ function renderAdminSection() {
       </div>
       ${adminPreview()}
     </div>`;
-    content += languagePanel();
+    content += languagesHint();
   } else if (adminPage === "content") {
     content = /* HTML */ `<div class="ad-columns">
       <div>
@@ -3743,7 +3707,7 @@ function renderAdminSection() {
       standalone =
         !!navigator.standalone || window.matchMedia("(display-mode: standalone)").matches;
     content =
-      languageDevicePanel() +
+      languagesHint() +
       adminPanel(
         th("ipad.check"),
         /* HTML */ `<div class="ipad-checks">
@@ -4410,6 +4374,12 @@ $("admin-app").addEventListener("click", (event) => {
     window.scrollTo(0, 0);
   }
   if (button.dataset.removeLanguage) removeAppLanguage(button.dataset.removeLanguage);
+  if (button.dataset.editTexts) {
+    editLanguage = button.dataset.editTexts;
+    adminPage = "content";
+    renderAdminSection();
+    window.scrollTo(0, 0);
+  }
   if (button.dataset.editLanguage) {
     editLanguage = button.dataset.editLanguage === adminDraft.locale.content ? null : button.dataset.editLanguage;
     renderAdminSection();

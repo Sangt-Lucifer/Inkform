@@ -294,8 +294,8 @@ check(
 await screenshot("automatisch-chinesisch");
 await setPin();
 check("Danach Assistent auf Englisch, Automatisch gedrückt", await ev(`document.documentElement.lang==='en'&&${flag("admin-language", "auto")}.getAttribute('aria-pressed')==='true'`));
-await ev(`adminPage='ipad';renderAdminSection()`);
-check("Seite iPad: „Sprache dieses Geräts“ zeigt Automatisch", (await ev(`document.getElementById('operator-language').value`)) === "auto");
+await ev(`adminPage='languages';renderAdminSection()`);
+check("Seite Sprachen: „Sprache dieses Geräts“ zeigt Automatisch", (await ev(`document.getElementById('operator-language').value`)) === "auto");
 await ev(`(()=>{const s=document.getElementById('operator-language');s.value='de';s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
 check("Dort Deutsch gewählt: Verwaltung deutsch, gespeichert", await ev(`document.documentElement.lang==='de'&&localStorage.getItem('inkform.language.v1')==='de'`));
 await ev(`(()=>{const s=document.getElementById('operator-language');s.value='auto';s.dispatchEvent(new Event('change',{bubbles:true}))})()`);

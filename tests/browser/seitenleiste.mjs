@@ -23,7 +23,7 @@ const nav = () => ev(`[...document.getElementById('admin-nav').children].map(e=>
 check(
   "Seitenleiste: Übersicht, dann Alltag, Formular, Daten, Gerät mit neun Einträgen",
   (await nav()) ===
-    "Übersicht | # Alltag | Einnahmen | Export | # Formular | Studio & Kontakt | Texte | # Daten | Sichern & Wiederherstellen | Aufbewahren & Löschen | # Gerät | iPad & Einstellungen | Sprachen",
+    "Übersicht | # Alltag | Einnahmen | Export | # Formular | Studio & Kontakt | Texte | Sprachen | # Daten | Sichern & Wiederherstellen | Aufbewahren & Löschen | # Gerät | iPad & Einstellungen",
 );
 check("Keine Seite „Darstellung“ mehr", await ev(`!('appearance' in ADMIN_PAGES)`));
 
@@ -48,8 +48,8 @@ check("Andere Seiten ohne Reiter", await ev(`openAdminAuthorized('studio');!docu
 // Device ----------------------------------------------------------------------------------------
 await ev(`openAdminAuthorized('ipad')`);
 check(
-  "„iPad & Einstellungen“: Ablage-Test, Farbschema, Sprache dieses Geräts, PIN ändern, Standardvorlage",
-  await ev(`['[data-set-theme="dark"]','#operator-language','#pin-change-form','[data-admin-action="defaults"]'].every(q=>document.querySelector('#admin-section '+q))&&document.getElementById('admin-section').textContent.includes(t('ipad.check'))`),
+  "„iPad & Einstellungen“: Ablage-Test, Farbschema, PIN ändern, Standardvorlage, Verweis auf Sprachen",
+  await ev(`['[data-set-theme="dark"]','.ad-notice [data-admin-page="languages"]','#pin-change-form','[data-admin-action="defaults"]'].every(q=>document.querySelector('#admin-section '+q))&&document.getElementById('admin-section').textContent.includes(t('ipad.check'))`),
 );
 
 // iPad formats: no sideways scrolling, the last entry reachable ----------------------------------

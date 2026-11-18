@@ -17,13 +17,13 @@ await ev(`openAdmin('languages')`);
 await until(`adminPage==='languages'&&document.getElementById('add-language')`);
 
 check(
-  "Seite in der Leiste unter Gerät, eingebaute Sprachen ohne Knöpfe",
+  "Seite in der Leiste unter Formular, eingebaute Sprachen ohne Knöpfe",
   await ev(`!!document.querySelector('#admin-nav [data-admin-page="languages"][aria-current="page"]')
     &&document.querySelectorAll('.app-lang-row').length===languageCodes().length&&!document.querySelector('[data-remove-language="de"],[data-remove-language="en"]')`),
 );
 check(
   "Oben: Sprache der Verwaltung, Studiosprache und Sprachen für Kunden",
-  await ev(`!!document.getElementById('operator-language')&&!!document.querySelector('#admin-section [data-locale-customer="en"]')&&!document.querySelector('#admin-section fieldset [data-admin-page="languages"]')`),
+  await ev(`!!document.getElementById('operator-language')&&!!document.querySelector('#admin-section [data-locale-customer="en"]')`),
 );
 await ev(`(()=>{const b=document.querySelector('#admin-section [data-locale-customer="en"]');b.click()})()`);
 check("Kundensprache umschalten: Speichern-Leiste erscheint", await ev(`adminChanged()&&!document.getElementById('admin-savebar').hidden`));
@@ -147,26 +147,28 @@ check(
   "Entfernen nach Rückfrage: weg aus Gerät und Speicher, Verwaltung zurück auf Englisch",
   question.includes("Español") && (await ev(`!JSON.parse(localStorage.getItem(PACKS_KEY))['es-MX']&&language().code==='en'&&!document.querySelector('[data-remove-language="es-MX"]')`)),
 );
-// Also where the device language is chosen: iPad & Settings -------------------------------------
+// One place for languages: iPad & Settings and Studio & Contact only point to it -----------------
 await ev(`chooseOperatorLanguage('de');translateCode=null;openAdmin('ipad')`);
-await until(`adminPage==='ipad'&&!!document.querySelector('.app-lang-tools')`);
-check(
-  "iPad & Einstellungen: eigene Sprachen mit Stand, Hinzufügen und Datei-Upload neben der Sprachauswahl",
-  await ev(`(()=>{const tools=document.querySelector('.app-lang-tools');return !!document.getElementById('operator-language')&&!!tools.querySelector('[data-translate-app="pt-BR"]')&&!!tools.querySelector('[data-admin-page="languages"]')&&!!tools.querySelector('[data-admin-action="translation-upload"]')})()`),
-);
-await screenshot("uebersetzen-ipad");
-await ev(`document.querySelector('.app-lang-tools [data-translate-app="pt-BR"]').click()`);
-await until(`adminPage==='languages'&&translateCode==='pt-BR'&&!!document.getElementById('app-tr-name')`);
-check("„Übersetzen“ dort öffnet die Sprache zum Übersetzen", true);
-await ev(`openAdmin('ipad')`);
 await until(`adminPage==='ipad'`);
+check(
+  "iPad & Einstellungen und Studio & Kontakt: keine Sprachfelder, nur der Verweis auf Sprachen",
+  await ev(`!document.getElementById('operator-language')&&!document.querySelector('[data-locale-customer]')&&!!document.querySelector('#admin-section .ad-notice [data-admin-page="languages"]')`)
+    && (await ev(`(openAdmin('studio'),!document.getElementById('operator-language')&&!document.querySelector('[data-locale-customer],#admin-locale-currency')&&!!document.querySelector('#admin-section .ad-notice [data-admin-page="languages"]'))`)),
+);
+await ev(`document.querySelector('#admin-section .ad-notice [data-admin-page="languages"]').click()`);
+await until(`adminPage==='languages'`);
+check(
+  "Seite Sprachen: Gerätesprache, Studiosprache, Kundensprachen und Währung an einem Ort",
+  await ev(`!!document.getElementById('operator-language')&&!!document.querySelector('[data-locale-customer="en"]')&&!!document.getElementById('admin-locale-currency')`),
+);
+await ev(`document.querySelector('[data-edit-texts="en"]').click()`);
+check("„Studio-Texte übersetzen“ öffnet die Texte in dieser Sprache", await ev(`adminPage==='content'&&editLanguage==='en'&&!!document.querySelector('[data-translation-field]')`));
+await ev(`editLanguage=null;openAdmin('languages')`);
 await upload({ ...file, code: "pt-BR", name: "Português (Brasil)", locale: "pt-BR" }, "pt2.json", null);
 await until(`adminPage==='languages'&&!!translationImport`);
-check("Datei-Upload von dort: Vorschau auf der Seite Sprachen", await ev(`translationImport.code==='pt-BR'&&!translationImport.isNew`));
+check("Datei-Upload aus der Liste: Vorschau", await ev(`translationImport.code==='pt-BR'&&!translationImport.isNew`));
 await ev(`document.querySelector('[data-admin-action="translation-cancel"]').click()`);
-await ev(`openAdmin('studio')`);
-await until(`adminPage==='studio'`);
-check("Sprachen für Kunden: Verweis auf weitere Sprachen", await ev(`!!document.querySelector('fieldset [data-admin-page="languages"]')`));
+await screenshot("uebersetzen-ein-ort");
 await ev(`chooseOperatorLanguage('de');storePacks({});adminDraft=JSON.parse(JSON.stringify(settings));finishAdminLeave()`);
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0, JSON.stringify(errors));
 process.exit(0);
