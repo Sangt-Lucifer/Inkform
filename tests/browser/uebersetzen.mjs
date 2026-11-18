@@ -140,6 +140,26 @@ check(
   "Entfernen nach Rückfrage: weg aus Gerät und Speicher, Verwaltung zurück auf Englisch",
   question.includes("Español") && (await ev(`!JSON.parse(localStorage.getItem(PACKS_KEY))['es-MX']&&language().code==='en'&&!document.querySelector('[data-remove-language="es-MX"]')`)),
 );
+// Also where the device language is chosen: iPad & Settings -------------------------------------
+await ev(`chooseOperatorLanguage('de');translateCode=null;openAdmin('ipad')`);
+await until(`adminPage==='ipad'&&!!document.querySelector('.app-lang-tools')`);
+check(
+  "iPad & Einstellungen: eigene Sprachen mit Stand, Hinzufügen und Datei-Upload neben der Sprachauswahl",
+  await ev(`(()=>{const tools=document.querySelector('.app-lang-tools');return !!document.getElementById('operator-language')&&!!tools.querySelector('[data-translate-app="pt-BR"]')&&!!tools.querySelector('[data-admin-page="languages"]')&&!!tools.querySelector('[data-admin-action="translation-upload"]')})()`),
+);
+await screenshot("uebersetzen-ipad");
+await ev(`document.querySelector('.app-lang-tools [data-translate-app="pt-BR"]').click()`);
+await until(`adminPage==='languages'&&translateCode==='pt-BR'&&!!document.getElementById('app-tr-name')`);
+check("„Übersetzen“ dort öffnet die Sprache zum Übersetzen", true);
+await ev(`openAdmin('ipad')`);
+await until(`adminPage==='ipad'`);
+await upload({ ...file, code: "pt-BR", name: "Português (Brasil)", locale: "pt-BR" }, "pt2.json", null);
+await until(`adminPage==='languages'&&!!translationImport`);
+check("Datei-Upload von dort: Vorschau auf der Seite Sprachen", await ev(`translationImport.code==='pt-BR'&&!translationImport.isNew`));
+await ev(`document.querySelector('[data-admin-action="translation-cancel"]').click()`);
+await ev(`openAdmin('studio')`);
+await until(`adminPage==='studio'`);
+check("Sprachen für Kunden: Verweis auf weitere Sprachen", await ev(`!!document.querySelector('fieldset [data-admin-page="languages"]')`));
 await ev(`chooseOperatorLanguage('de');storePacks({});adminDraft=JSON.parse(JSON.stringify(settings));finishAdminLeave()`);
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0, JSON.stringify(errors));
 process.exit(0);

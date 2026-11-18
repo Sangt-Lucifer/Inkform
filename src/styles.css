@@ -3563,3 +3563,14 @@ html[data-theme="dark"] .language-button svg {
   display: block;
   margin-top: 6px;
 }
+.app-lang-tools {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+.app-lang-tools .ad-actions-row {
+  margin: 0;
+}
+fieldset .ad-actions-row {
+  margin-top: 10px;
+}

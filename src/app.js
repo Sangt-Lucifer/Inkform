@@ -1768,7 +1768,11 @@ function customerLanguageField(setup = false) {
     .join("");
   return /* HTML */ `<fieldset class="ad-field full">
     <legend>${th("languages.customer")}</legend>
-    ${boxes}<small>${th("languages.customerHelp")}</small>
+    ${boxes}<small>${th("languages.customerHelp")}</small>${
+      setup
+        ? ""
+        : `<div class="ad-actions-row"><button type="button" class="ad-button" data-admin-page="languages">${adminIcon("globe")}${th("appLanguages.more")}</button></div>`
+    }
   </fieldset>`;
 }
 function languagePanel() {
@@ -1836,6 +1840,31 @@ const shownName = (code) => {
     return code;
   }
 };
+// The own languages in short, with the ways to add, translate and upload: where the language of the
+// device is chosen and where the customer languages are ticked.
+function languageTools() {
+  const packs = languageCodes().filter((code) => !isBuiltinLanguage(code));
+  const rows = packs
+    .map((code) => {
+      const p = languageProgress(code);
+      return /* HTML */ `<div class="app-lang-row">
+        <span class="app-lang-mark">${languageMark(code)}</span>
+        <div class="app-lang-text"><strong lang="${code}">${escapeHtml(translator(code).name)}</strong><small
+          >${th("appLanguages.progress", { form: p.form, formTotal: p.formTotal, admin: p.admin, adminTotal: p.adminTotal })}${formReady(code) ? ` · ${th("appLanguages.ready")}` : ""}</small
+        ></div>
+        <button type="button" class="ad-button" data-translate-app="${code}">${adminIcon("pen")}${th("appLanguages.translate")}</button>
+      </div>`;
+    })
+    .join("");
+  return /* HTML */ `<div class="app-lang-tools">
+    ${rows ? `<div class="app-lang-list">${rows}</div>` : ""}
+    <div class="ad-actions-row">
+      <button type="button" class="ad-button" data-admin-page="languages">${adminIcon("plus")}${th("appLanguages.addTitle")}</button
+      ><button type="button" class="ad-button" data-admin-action="translation-upload">${adminIcon("upload")}${th("translationFile.upload")}</button>
+    </div>
+    <small class="ad-preview-note">${th("appLanguages.toolsHelp")}</small>
+  </div>`;
+}
 function languagesPage() {
   if (translationImport) return translationImportPage();
   if (translateCode && installedPacks[translateCode]) return appTranslationPage();
@@ -2117,6 +2146,7 @@ translationPicker.addEventListener("change", async () => {
     const result = readTranslationFile(value, translationTarget, named ? (installedPacks[named] ?? null) : null);
     if (result.isNew && Object.keys(installedPacks).length >= PACKS_MAX) throw Error(t("pack.tooMany", { anzahl: PACKS_MAX }));
     translationImport = { ...result, file: file.name };
+    adminPage = "languages";
   } catch (error) {
     toast(t("translationFile.failed", { fehler: error.message }));
     return;
@@ -2310,6 +2340,20 @@ function backupState() {
   return { age: last ? daysBetween(last) : null, today: !!last && localDate(new Date(last)) === localDate(), days };
 }
 let preparedBackup = null;
+// Language of this device and the own languages, at the top of "iPad & Einstellungen".
+function languageDevicePanel() {
+  return adminPanel(
+    th("languages.operatorTitle"),
+    /* HTML */ `<div class="ad-fields">
+      <div class="ad-field">
+        <label for="operator-language">${th("languages.operator")}</label
+        >${languageSelect("operator-language", languageCodes(), operatorChoice() === AUTO ? AUTO : operatorLanguage(), true)}<small
+          >${th("languages.operatorHelp")}</small
+        >
+      </div>
+    </div>${languageTools()}`,
+  );
+}
 // "iPad & Einstellungen": settings of this device, the PIN and the original template.
 function deviceSettings() {
   return `${adminPanel(
@@ -2324,16 +2368,6 @@ function deviceSettings() {
           ><small>${th("appearance.darkNote")}</small>
         </button>
       </div>`,
-  )}${adminPanel(
-    th("languages.operatorTitle"),
-    /* HTML */ `<div class="ad-fields">
-      <div class="ad-field">
-        <label for="operator-language">${th("languages.operator")}</label
-        >${languageSelect("operator-language", languageCodes(), operatorChoice() === AUTO ? AUTO : operatorLanguage(), true)}<small
-          >${th("languages.operatorHelp")}</small
-        >
-      </div>
-    </div>`,
   )}${pinPanel()}${adminPanel(
     th("appearance.defaults"),
     /* HTML */ `<div class="ad-reset-row">
@@ -3695,6 +3729,7 @@ function renderAdminSection() {
       standalone =
         !!navigator.standalone || window.matchMedia("(display-mode: standalone)").matches;
     content =
+      languageDevicePanel() +
       adminPanel(
         th("ipad.check"),
         /* HTML */ `<div class="ipad-checks">
@@ -4352,6 +4387,8 @@ $("admin-app").addEventListener("click", (event) => {
   }
   if (button.dataset.setTheme) setTheme(button.dataset.setTheme);
   if (button.dataset.translateApp) {
+    adminPage = "languages";
+    translationImport = null;
     translateCode = button.dataset.translateApp;
     translateGroup = null;
     translateMissing = false;
@@ -4417,7 +4454,7 @@ $("admin-app").addEventListener("click", (event) => {
       downloadTranslation();
       break;
     case "translation-upload":
-      chooseTranslationFile(translateCode && installedPacks[translateCode] && !translationImport ? translateCode : null);
+      chooseTranslationFile(adminPage === "languages" && translateCode && installedPacks[translateCode] && !translationImport ? translateCode : null);
       break;
     case "translation-apply":
       applyTranslationImport();
