@@ -63,15 +63,18 @@ check("Assistent bietet App-Symbol und den Weg zurück zur Auswahl", await ev(`a
 await ev(`openAdminAuthorized('export')`);
 check("Vor der Einrichtung führt jede Admin-Seite zum Assistenten", await ev(`adminPage==='setup'`));
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
-check("Ohne Angaben: klare Meldung, nichts gespeichert", await ev(`!document.getElementById('admin-error').hidden&&document.getElementById('admin-error').textContent.startsWith('Bitte noch ausfüllen: ')&&!localStorage.getItem(SETTINGS_KEY)`));
+check("Ohne Angaben: klare Meldung, nichts gespeichert", await ev(`!document.getElementById('admin-error').hidden&&document.getElementById('admin-error').textContent.startsWith('Bitte noch prüfen.')&&!localStorage.getItem(SETTINGS_KEY)`));
 const marked = `['name','contact','address','location'].filter(k=>document.getElementById('admin-studio-'+k).getAttribute('aria-invalid')==='true'&&document.getElementById('admin-studio-'+k).parentElement.querySelector('.setup-required'))`;
 check(
-  "Fehlende Pflichtfelder rot markiert, in der Meldung genannt, Fokus auf dem ersten",
-  await ev(`${marked}.length===4&&document.activeElement.id==='admin-studio-name'&&document.getElementById('admin-error').textContent.includes(t('studioPage.location'))`),
+  "Fehlende Pflichtfelder rot markiert, in der Meldung als Sprung-Knöpfe genannt, Fokus auf dem ersten",
+  await ev(`${marked}.length===4&&document.activeElement.id==='admin-studio-name'&&[...document.querySelectorAll('#admin-error [data-jump-field]')].map(b=>b.dataset.jumpField).join()==='admin-studio-name,admin-studio-contact,admin-studio-address,admin-studio-location'&&document.getElementById('admin-error').textContent.includes(t('studioPage.location'))`),
 );
+await ev(`document.querySelector('#admin-error [data-jump-field="admin-studio-location"]').click()`);
+check("Knopf in der Meldung springt zum Feld", await ev(`document.activeElement.id==='admin-studio-location'`));
+check("Meldung bleibt beim Scrollen sichtbar", await ev(`getComputedStyle(document.getElementById('admin-error')).position==='sticky'`));
 await screenshot("blanko-pflichtfelder");
 await type("admin-studio-name", "Atelier Probe · Kim Test");
-check("Eingetragen: Markierung weg, die anderen bleiben", await ev(`${marked}.join()==='contact,address,location'`));
+check("Eingetragen: Markierung und Knopf weg, die anderen bleiben", await ev(`${marked}.join()==='contact,address,location'&&!document.querySelector('#admin-error [data-jump-field="admin-studio-name"]')&&!document.getElementById('admin-error').hidden`));
 check(
   "Unten nur „Einrichtung abschließen“, kein Speichern in Teilen",
   await ev(`(()=>{const v=id=>{const e=document.getElementById(id);return !e.hidden&&e.getBoundingClientRect().width>0};return v('admin-savebar')&&v('admin-setup-finish')&&!v('admin-save')&&!v('admin-discard')&&document.getElementById('admin-save-state').textContent==='Einrichtung noch nicht abgeschlossen'&&document.querySelectorAll('#admin-section [data-admin-action="setup-finish"]').length===0})()`),
@@ -94,14 +97,18 @@ check("Neu gezeichneter Assistent behält eingetippte Fristen", await ev(`docume
 await ev(`document.querySelector('[data-admin-action="sample-remove"]').click()`);
 await until(`!!document.querySelector('[data-admin-action="sample-load"]') && incomeRecords().length===0`);
 for (const [id, value] of [
-  ["admin-studio-contact", "kontakt@atelier-probe.example"],
+  ["admin-studio-contact", "kontakt-ohne-at"],
   ["admin-studio-address", "Probeweg 2, 54321 Teststadt"],
   ["admin-studio-location", "Teststadt"],
 ])
   await type(id, value);
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
-check("Alle Pflichtfelder da: keine Markierung mehr", await ev(`!document.querySelector('#admin-section [aria-invalid="true"]:not(#setup-pdf-years):not(#setup-income-years), #admin-section .setup-required')`));
-check("Ungültige Frist: Meldung, Einrichtung und Fristen nicht gespeichert", await ev(`!document.getElementById('admin-error').hidden&&adminPage==='setup'&&needsSetup()&&!localStorage.getItem(RETENTION_KEY)`));
+const flagged = `[...document.querySelectorAll('#admin-section [aria-invalid="true"]')].map(e=>e.id).join()`;
+check("Falsche E-Mail und falsche Frist: am Feld markiert, Sprung-Knöpfe, Fokus auf der E-Mail", await ev(`${flagged}==='admin-studio-contact,setup-pdf-years'&&document.getElementById('admin-studio-contact').parentElement.querySelector('.setup-required').textContent===t('setup.invalidEmail')&&document.getElementById('setup-pdf-years').parentElement.querySelector('.setup-required').textContent===t('setup.invalidYears')&&document.querySelectorAll('#admin-error [data-jump-field]').length===2&&document.activeElement.id==='admin-studio-contact'`));
+check("Ungültige Angaben: Einrichtung und Fristen nicht gespeichert", await ev(`!document.getElementById('admin-error').hidden&&adminPage==='setup'&&needsSetup()&&!localStorage.getItem(RETENTION_KEY)`));
+await screenshot("blanko-falsche-angaben");
+await type("admin-studio-contact", "kontakt@atelier-probe.example");
+check("Pflichtfelder richtig: nur die Frist bleibt markiert", await ev(`${flagged}==='setup-pdf-years'`));
 for (const [id, value] of [
   ["admin-studio-name", "Atelier Probe · Kim Test"],
   ["admin-studio-contact", "kontakt@atelier-probe.example"],

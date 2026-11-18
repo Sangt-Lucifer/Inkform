@@ -331,6 +331,7 @@ function inLanguage(code, run) {
     setLanguage(before);
   }
 }
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function validateSettings(input, packs) {
   if (packs) {
     addLanguages({ ...installedPacks, ...packs });
@@ -372,7 +373,7 @@ function validateSettings(input, packs) {
       ),
     ]),
   );
-  if (studio.contact && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studio.contact))
+  if (studio.contact && !EMAIL_PATTERN.test(studio.contact))
     throw new Error(t("settings.contactEmail"));
   const maxLengths = {
     brand: 24,
@@ -3183,26 +3184,49 @@ function setupYearsShown() {
 function saveCurrent() {
   return adminPage === "setup" && setupWay === "new" ? finishSetup() : saveAdmin();
 }
-// Missing required fields are marked where they are, named in the message, and the first gets the
-// focus; a mark goes as soon as the field has text.
-function showMissingFields(missing) {
-  const inputs = missing.map((key) => $(`admin-studio-${key}`)).filter(Boolean);
-  const names = inputs.map((input) => document.querySelector(`label[for="${input.id}"]`)?.firstChild?.textContent.trim() ?? "");
-  configError(t("setup.missing", { felder: names.filter(Boolean).join(", ") }));
-  for (const input of inputs) {
+// Problems in the assistant are shown at each field: missing, a wrong e-mail address, a deadline that
+// is not whole years. The message on top names every field as a button that jumps there, and the
+// first one gets the focus; a mark goes as soon as the field is typed in.
+function jumpToField(input) {
+  input.scrollIntoView({ block: "center", behavior: "instant" });
+  input.focus({ preventScroll: true });
+}
+function showFieldProblems(problems) {
+  const found = problems.map(({ id, message }) => ({ input: $(id), message })).filter(({ input }) => input);
+  for (const { input, message } of found) {
     input.setAttribute("aria-invalid", "true");
-    if (!input.parentElement.querySelector(".setup-required"))
-      input.insertAdjacentHTML("afterend", `<small class="ad-field-error setup-required">${th("setup.required")}</small>`);
+    input.parentElement.querySelector(".setup-required")?.remove();
+    input.insertAdjacentHTML("afterend", `<small class="ad-field-error setup-required">${escapeHtml(message)}</small>`);
   }
-  if (inputs[0]) {
-    inputs[0].scrollIntoView({ block: "center", behavior: "instant" });
-    inputs[0].focus({ preventScroll: true });
+  const name = (input) => document.querySelector(`label[for="${input.id}"]`)?.firstChild?.textContent.trim() || input.id;
+  const box = $("admin-error");
+  box.innerHTML = `<span>${th("setup.problems")}</span><span class="setup-jumps">${found
+    .map(({ input }) => `<button class="ad-button" type="button" data-jump-field="${input.id}">${escapeHtml(name(input))}</button>`)
+    .join("")}</span>`;
+  box.hidden = false;
+  if (found[0]) jumpToField(found[0].input);
+}
+function setupProblems() {
+  const problems = SETUP_FIELDS.filter((key) => !adminDraft.studio[key].trim()).map((key) => ({
+    id: `admin-studio-${key}`,
+    message: t("setup.required"),
+  }));
+  const contact = adminDraft.studio.contact.trim();
+  if (contact && !EMAIL_PATTERN.test(contact)) problems.push({ id: "admin-studio-contact", message: t("setup.invalidEmail") });
+  const years = setupYearsShown();
+  for (const [key, id] of [["pdfYears", "setup-pdf-years"], ["incomeYears", "setup-income-years"]]) {
+    try {
+      validateRetention({ [key]: years[key] });
+    } catch (_) {
+      problems.push({ id, message: t("setup.invalidYears") });
+    }
   }
+  return problems;
 }
 function finishSetup() {
-  const missing = SETUP_FIELDS.filter((key) => !adminDraft.studio[key].trim());
-  if (missing.length) {
-    showMissingFields(missing);
+  const problems = setupProblems();
+  if (problems.length) {
+    showFieldProblems(problems);
     return false;
   }
   let years;
@@ -4288,6 +4312,12 @@ $("admin-app").addEventListener("change", (event) => {
   updateAdminChrome();
 });
 $("admin-app").addEventListener("input", (event) => {
+  if (event.target.getAttribute("aria-invalid") === "true" && event.target.parentElement.querySelector(".setup-required")) {
+    event.target.removeAttribute("aria-invalid");
+    event.target.parentElement.querySelector(".setup-required").remove();
+    document.querySelector(`#admin-error [data-jump-field="${event.target.id}"]`)?.remove();
+    if (!document.querySelector("#admin-error [data-jump-field]")) $("admin-error").hidden = true;
+  }
   if (["setup-pdf-years", "setup-income-years"].includes(event.target.id))
     setupYears = { pdfYears: $("setup-pdf-years").value, incomeYears: $("setup-income-years").value };
   const translated = event.target.dataset.translationField;
@@ -4333,10 +4363,6 @@ $("admin-app").addEventListener("input", (event) => {
   let target = adminDraft;
   for (const key of keys) target = target[key];
   target[last] = event.target.type === "checkbox" ? event.target.checked : event.target.value;
-  if (event.target.getAttribute("aria-invalid") === "true" && event.target.value.trim()) {
-    event.target.removeAttribute("aria-invalid");
-    event.target.parentElement.querySelector(".setup-required")?.remove();
-  }
   const editor = event.target.closest(".ad-editor");
   if (editor && last === "title")
     editor.querySelector(".ad-editor-name").textContent = event.target.value;
@@ -4349,11 +4375,12 @@ $("admin-app").addEventListener("input", (event) => {
             event.target.value || (last === "defaultArtist" ? t("preview.artist") : "")),
       );
   updateAdminChrome();
-  $("admin-error").hidden = true;
+  if (!document.querySelector("#admin-error [data-jump-field]")) $("admin-error").hidden = true;
 });
 $("admin-app").addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
+  if (button.dataset.jumpField && $(button.dataset.jumpField)) return jumpToField($(button.dataset.jumpField));
   if (button.dataset.adminPage) {
     // The sidebar and the tabs are drawn anew: keep the focus on the same entry, else on the heading.
     const area = button.closest("#admin-nav") ? "#admin-nav" : button.closest(".ad-tabs") ? ".ad-tabs" : null;

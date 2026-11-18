@@ -3563,6 +3563,22 @@ html[data-theme="dark"] .language-button svg {
   display: block;
   margin-top: 6px;
 }
+/* With jump buttons the message stays in view while scrolling to the fields. */
+.ad-error:has(.setup-jumps) {
+  position: sticky;
+  top: calc(12px + env(safe-area-inset-top));
+  z-index: 5;
+  background: linear-gradient(#b8323518, #b8323518), var(--ad-bg);
+}
+.setup-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.setup-jumps .ad-button {
+  border-color: #cc6464;
+}
 .app-lang-tools {
   display: grid;
   gap: 12px;
