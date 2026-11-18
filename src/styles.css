@@ -3554,3 +3554,12 @@ html[data-theme="dark"] .language-button svg {
 .tr-import-stats .refused dd {
   color: #c46977;
 }
+.ad-field input[aria-invalid="true"],
+.ad-field textarea[aria-invalid="true"] {
+  box-shadow: 0 0 0 1px #cc6464;
+  background-color: rgb(204 100 100 / 8%);
+}
+.ad-field .setup-required {
+  display: block;
+  margin-top: 6px;
+}

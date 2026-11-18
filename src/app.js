@@ -3171,9 +3171,26 @@ function setupYearsShown() {
 function saveCurrent() {
   return adminPage === "setup" && setupWay === "new" ? finishSetup() : saveAdmin();
 }
+// Missing required fields are marked where they are, named in the message, and the first gets the
+// focus; a mark goes as soon as the field has text.
+function showMissingFields(missing) {
+  const inputs = missing.map((key) => $(`admin-studio-${key}`)).filter(Boolean);
+  const names = inputs.map((input) => document.querySelector(`label[for="${input.id}"]`)?.firstChild?.textContent.trim() ?? "");
+  configError(t("setup.missing", { felder: names.filter(Boolean).join(", ") }));
+  for (const input of inputs) {
+    input.setAttribute("aria-invalid", "true");
+    if (!input.parentElement.querySelector(".setup-required"))
+      input.insertAdjacentHTML("afterend", `<small class="ad-field-error setup-required">${th("setup.required")}</small>`);
+  }
+  if (inputs[0]) {
+    inputs[0].scrollIntoView({ block: "center", behavior: "instant" });
+    inputs[0].focus({ preventScroll: true });
+  }
+}
 function finishSetup() {
-  if (SETUP_FIELDS.some((key) => !adminDraft.studio[key].trim())) {
-    configError(t("setup.missing"));
+  const missing = SETUP_FIELDS.filter((key) => !adminDraft.studio[key].trim());
+  if (missing.length) {
+    showMissingFields(missing);
     return false;
   }
   let years;
@@ -4303,6 +4320,10 @@ $("admin-app").addEventListener("input", (event) => {
   let target = adminDraft;
   for (const key of keys) target = target[key];
   target[last] = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+  if (event.target.getAttribute("aria-invalid") === "true" && event.target.value.trim()) {
+    event.target.removeAttribute("aria-invalid");
+    event.target.parentElement.querySelector(".setup-required")?.remove();
+  }
   const editor = event.target.closest(".ad-editor");
   if (editor && last === "title")
     editor.querySelector(".ad-editor-name").textContent = event.target.value;

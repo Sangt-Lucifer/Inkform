@@ -63,8 +63,15 @@ check("Assistent bietet App-Symbol und den Weg zurück zur Auswahl", await ev(`a
 await ev(`openAdminAuthorized('export')`);
 check("Vor der Einrichtung führt jede Admin-Seite zum Assistenten", await ev(`adminPage==='setup'`));
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
-check("Ohne Angaben: klare Meldung, nichts gespeichert", await ev(`!document.getElementById('admin-error').hidden&&document.getElementById('admin-error').textContent.includes('Bitte Studio')&&!localStorage.getItem(SETTINGS_KEY)`));
+check("Ohne Angaben: klare Meldung, nichts gespeichert", await ev(`!document.getElementById('admin-error').hidden&&document.getElementById('admin-error').textContent.startsWith('Bitte noch ausfüllen: ')&&!localStorage.getItem(SETTINGS_KEY)`));
+const marked = `['name','contact','address','location'].filter(k=>document.getElementById('admin-studio-'+k).getAttribute('aria-invalid')==='true'&&document.getElementById('admin-studio-'+k).parentElement.querySelector('.setup-required'))`;
+check(
+  "Fehlende Pflichtfelder rot markiert, in der Meldung genannt, Fokus auf dem ersten",
+  await ev(`${marked}.length===4&&document.activeElement.id==='admin-studio-name'&&document.getElementById('admin-error').textContent.includes(t('studioPage.location'))`),
+);
+await screenshot("blanko-pflichtfelder");
 await type("admin-studio-name", "Atelier Probe · Kim Test");
+check("Eingetragen: Markierung weg, die anderen bleiben", await ev(`${marked}.join()==='contact,address,location'`));
 check(
   "Unten nur „Einrichtung abschließen“, kein Speichern in Teilen",
   await ev(`(()=>{const v=id=>{const e=document.getElementById(id);return !e.hidden&&e.getBoundingClientRect().width>0};return v('admin-savebar')&&v('admin-setup-finish')&&!v('admin-save')&&!v('admin-discard')&&document.getElementById('admin-save-state').textContent==='Einrichtung noch nicht abgeschlossen'&&document.querySelectorAll('#admin-section [data-admin-action="setup-finish"]').length===0})()`),
@@ -93,6 +100,7 @@ for (const [id, value] of [
 ])
   await type(id, value);
 await ev(`document.querySelector('[data-admin-action="setup-finish"]').click()`);
+check("Alle Pflichtfelder da: keine Markierung mehr", await ev(`!document.querySelector('#admin-section [aria-invalid="true"]:not(#setup-pdf-years):not(#setup-income-years), #admin-section .setup-required')`));
 check("Ungültige Frist: Meldung, Einrichtung und Fristen nicht gespeichert", await ev(`!document.getElementById('admin-error').hidden&&adminPage==='setup'&&needsSetup()&&!localStorage.getItem(RETENTION_KEY)`));
 for (const [id, value] of [
   ["admin-studio-name", "Atelier Probe · Kim Test"],
