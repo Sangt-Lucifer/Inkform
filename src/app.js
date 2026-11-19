@@ -2650,13 +2650,14 @@ async function applyChosenFile(file) {
 async function restoreBackup(value) {
   const data = readFullBackup(value, validateSettings),
     removals = () => applyRemovals(data, readRemovedIds(localStorage), incomeFeature.list(), localDate()),
-    { skipped } = removals();
+    { skipped, protected: kept } = removals();
   await checkReadable(data.logo, "backup.invalidLogo");
   await checkReadable(data.icon, "backup.invalidIcon");
   const replace = await askConfirm({
     title: t("restore.question", { datum: timeFormat(new Date(data.createdAt)) }),
     text: [
       t("restore.contents", { eintraege: data.records.length, pdfs: data.pdfs.length }) +
+        (kept ? " " + t("restore.protected", { anzahl: kept }) : "") +
         (skipped ? " " + t("restore.skipped", { anzahl: skipped }) : ""),
       customisationLines(data).join("\n"),
       t("restore.replaces", { eintraege: incomeFeature.list().length }),

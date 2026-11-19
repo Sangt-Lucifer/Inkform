@@ -11,7 +11,7 @@
 // version 4 the language packs installed on the device (languages: { code: pack }).
 import { t } from "./i18n.js";
 import { validateIncomeBackup } from "./income.js";
-import { validateRetention } from "./retention.js";
+import { ANONYMIZED, validateRetention } from "./retention.js";
 import { exportable, validateExportLog, validateRemovedIds } from "./export.js";
 import { checkIcon, checkLogo } from "./logo.js";
 import { validatePacks } from "./languages.js";
@@ -159,16 +159,41 @@ function readImage(value, check, invalid) {
 
 // What a restore writes. Deleted from the app is whatever either list names or either side marks;
 // those entries keep (or get) the "PDF nicht mehr in der App" mark and their PDFs are left out.
-// Throws before anything is written if the merged list is too long.
+// Protection marks on this device win over an older backup, per consent id: an anonymized entry
+// keeps its name and PDF file name removed, a PDF marked as deleted is not imported again. The
+// amounts, date and artist of the imported entry stay. Throws before anything is written if the
+// merged list is too long.
 export function applyRemovals(data, deviceRemoved, deviceRecords, today) {
   const marked = new Map(deviceRecords.filter((r) => r.pdfRemovedAt).map((r) => [r.id, r.pdfRemovedAt])),
+    device = new Map(deviceRecords.map((r) => [r.id, r])),
     removed = new Set(
       validateRemovedIds([...new Set([...deviceRemoved, ...data.removed, ...marked.keys(), ...data.records.filter((r) => r.pdfRemovedAt).map((r) => r.id)])]),
     );
+  let protectedCount = 0;
+  const records = data.records.map((imported) => {
+    let r = removed.has(imported.id) && !imported.pdfRemovedAt ? { ...imported, pdfRemovedAt: marked.get(imported.id) ?? today } : imported;
+    const own = device.get(r.id);
+    if (!own) return r;
+    const anonymize = own.anonymizedAt && !r.anonymizedAt,
+      deleted = own.pdfDeletedAt && !r.pdfDeletedAt;
+    if (!anonymize && !deleted) return r;
+    protectedCount++;
+    r = { ...r };
+    if (deleted) r.pdfDeletedAt = own.pdfDeletedAt;
+    if (anonymize) {
+      delete r.pdfMissing;
+      Object.assign(r, { customer: ANONYMIZED, source: "", anonymizedAt: own.anonymizedAt });
+    }
+    if (own.updatedAt > r.updatedAt) r.updatedAt = own.updatedAt;
+    return r;
+  });
+  // No PDF comes back for an entry whose copy was removed, whose PDF was deleted or that was anonymized.
+  const blocked = new Set([...removed, ...records.filter((r) => r.pdfDeletedAt || r.anonymizedAt).map((r) => r.id)]);
   return {
     removed,
-    records: data.records.map((r) => (removed.has(r.id) && !r.pdfRemovedAt ? { ...r, pdfRemovedAt: marked.get(r.id) ?? today } : r)),
-    pdfs: data.pdfs.filter((p) => !removed.has(p.id)),
-    skipped: data.pdfs.filter((p) => removed.has(p.id)).length,
+    records,
+    protected: protectedCount,
+    pdfs: data.pdfs.filter((p) => !blocked.has(p.id)),
+    skipped: data.pdfs.filter((p) => blocked.has(p.id)).length,
   };
 }

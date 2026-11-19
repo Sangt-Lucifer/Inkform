@@ -277,6 +277,40 @@ check(
   await ev(`(async()=>{const id=sessionStorage.getItem('probe.gone');const keys=await createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys();return !!id&&!keys.some(k=>String(k).startsWith(id))&&!!incomeRecords().find(r=>r.id===id).pdfRemovedAt&&readRemovedIds(localStorage).has(id)&&keys.length===1})()`),
 );
 
+// An older backup on the same device keeps this device's PDF deletion and anonymization --------
+const protectedRestore = async (label) => {
+  await ev(`openAdmin('backup')`);
+  await until(`document.getElementById('admin-pin-dialog').open || adminAccess.isUnlocked()`);
+  await ev(`adminAccess.isUnlocked()||unlockAdmin()`);
+  await until(`adminAccess.isUnlocked() && !!document.getElementById('backup-file')`);
+  await ev(`window.__again=${JSON.stringify(json)};window.__question='';askWith((m)=>{window.__question=m;sessionStorage.setItem('probe.question',m);return true})`);
+  await restore(`window.__again`);
+  await until(`typeof adminAccess!=='undefined' && !window.__again && document.readyState==='complete' && document.getElementById('toast').textContent.includes('Sicherung wiederhergestellt')`);
+  await ev(HELPERS);
+  return ev(`sessionStorage.getItem('probe.question')`);
+};
+const keep = await ev(`incomeRecords().find(r=>!r.pdfRemovedAt)`);
+check("Ausgangslage: ein Eintrag mit PDF-Kopie in der App", !!keep && (await archived()) === 1);
+// 1. Only the PDF is marked as deleted on this device.
+await ev(`(()=>{const v=JSON.parse(localStorage.getItem(INCOME_KEY));v.records=v.records.map(r=>r.id==='${keep.id}'?{...r,pdfDeletedAt:localDate()}:r);localStorage.setItem(INCOME_KEY,JSON.stringify(v))})();exportFeature.sync()`);
+await until(`createIndexedDbFiles(indexedDB, ARCHIVE_DB).keys().then(k=>k.length===0)`);
+let asked = await protectedRestore();
+check("Rückfrage nennt geschützten Eintrag und übersprungene PDFs", asked.includes("1 Eintrag ist auf diesem Gerät schon anonymisiert oder sein PDF als gelöscht markiert") && asked.includes("2 PDFs aus der Sicherung werden nicht übernommen"));
+check(
+  "Nur PDF-gelöscht: Markierung bleibt, Name bleibt, kein PDF zurück",
+  (await ev(`(()=>{const r=incomeRecords().find(r=>r.id==='${keep.id}');return r.pdfDeletedAt===localDate()&&r.customer===${JSON.stringify(keep.customer)}&&r.totalCents===${keep.totalCents}})()`)) && (await archived()) === 0,
+);
+// 2. Then anonymized on this device; the same older backup is restored again.
+await ev(`(()=>{const v=JSON.parse(localStorage.getItem(INCOME_KEY));v.records=v.records.map(r=>r.id==='${keep.id}'?anonymizeRecord(r,localDate()):r);localStorage.setItem(INCOME_KEY,JSON.stringify(v))})()`);
+asked = await protectedRestore();
+check(
+  "Anonymisiert + PDF gelöscht: Name und Dateiname bleiben entfernt, Beträge erhalten, kein PDF",
+  (await ev(`(()=>{const r=incomeRecords().find(r=>r.id==='${keep.id}');return r.customer==='anonymisiert'&&r.source===''&&!!r.anonymizedAt&&!!r.pdfDeletedAt&&r.totalCents===${keep.totalCents}&&r.date===${JSON.stringify(keep.date)}})()`)) &&
+    (await archived()) === 0,
+);
+check("Altes PDF fehlt auch im ZIP-Export", await ev(`exportFeature.pdfs().then(p=>p.length===0)`));
+check("Bereits gelöschte In-App-Kopie bleibt gelöscht", await ev(`incomeRecords().filter(r=>r.pdfRemovedAt).length===1`));
+
 check("Keine Netzwerkzugriffe außer der lokalen Vorschau", requests.every((u) => !/^https?:/.test(u) || u.startsWith(ORIGIN)));
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0);
 process.exit(0);

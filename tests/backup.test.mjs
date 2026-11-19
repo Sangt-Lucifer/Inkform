@@ -138,3 +138,30 @@ test("restore: overlapping lists are counted after merging", () => {
   data.removed = ids;
   assert.equal(applyRemovals(data, new Set(ids), [], "2026-05-01").removed.size, 60000);
 });
+
+test("restore keeps this device's anonymization and PDF deletion, per id, with the backup's amounts", () => {
+  const data = readFullBackup(backup({ records: [row("a", "2026-03-01", { totalCents: 45000 }), row("b", "2026-03-02", { pdfMissing: true }), row("c", "2026-03-03")], pdfs: [{ id: "a", bytes: pdf("a") }, { id: "c", bytes: pdf("c") }] }), validateSettings);
+  const device = [
+    { ...row("a", "2026-03-01", { totalCents: 1 }), customer: "anonymisiert", source: "", anonymizedAt: "2026-04-20", pdfDeletedAt: "2026-04-15", updatedAt: "2026-04-20T00:00:00.000Z" },
+    { ...row("c", "2026-03-03"), pdfDeletedAt: "2026-04-16" },
+  ];
+  const result = applyRemovals(data, new Set(), device, "2026-05-01");
+  const a = result.records.find((r) => r.id === "a"),
+    c = result.records.find((r) => r.id === "c");
+  assert.deepEqual([a.customer, a.source, a.anonymizedAt, a.pdfDeletedAt, a.totalCents], ["anonymisiert", "", "2026-04-20", "2026-04-15", 45000]);
+  assert.deepEqual([c.customer, c.pdfDeletedAt, "anonymizedAt" in c], ["Vornamec Nachnamec", "2026-04-16", false]);
+  assert.equal(result.records.find((r) => r.id === "b").pdfMissing, true, "untouched entries stay as in the backup");
+  assert.deepEqual([result.protected, result.pdfs.length, result.skipped], [2, 0, 2]);
+  assert.equal(result.removed.size, 0, "a deleted PDF is not a removed in-app copy");
+});
+
+test("restore: an older backup format without marks is protected the same way", () => {
+  const value = backup();
+  value.schemaVersion = 1;
+  delete value.logo;
+  delete value.pdfRemoved;
+  const data = readFullBackup(value, validateSettings);
+  const result = applyRemovals(data, new Set(), [{ ...row("a", "2026-03-01"), customer: "anonymisiert", source: "", anonymizedAt: "2026-04-20", pdfDeletedAt: "2026-04-15" }], "2026-05-01");
+  assert.equal(result.records.find((r) => r.id === "a").customer, "anonymisiert");
+  assert.deepEqual([result.pdfs.length, result.skipped, result.protected], [0, 1, 1]);
+});
