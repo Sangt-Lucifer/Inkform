@@ -253,7 +253,9 @@ test("months not yet exported: only completed months with PDFs on this device", 
     { from: "2026-02-01", to: "2026-02-27", type: "all", at: "x" },
     { from: "2026-03-01", to: "2026-03-31", type: "consents", at: "x" },
   ];
-  assert.deepEqual(unexportedMonths(records, archived, log, "2026-04-10"), ["2026-01", "2026-02"]);
+  // Feb 1–27 held the PDF of 10 Feb (counted per consent now); an income-only ZIP holds none.
+  assert.deepEqual(unexportedMonths(records, archived, log, "2026-04-10"), ["2026-01"]);
+  assert.deepEqual(unexportedMonths([...records, row("late", "2026-02-28")], new Set([...archived, "late"]), log, "2026-04-10"), ["2026-01", "2026-02"]);
   assert.deepEqual(unexportedMonths(records, archived, [{ from: "2025-12-01", to: "2026-12-31", type: "all", at: "x" }], "2026-04-10"), []);
   assert.deepEqual(unexportedMonths(records, archived, [], "2027-01-01").at(-1), "2026-04");
 });
@@ -371,4 +373,33 @@ test("hasCopy reads the store itself, not the last sync", async () => {
   archive.map.set("a", new Blob(["%PDF"]));
   assert.equal(await exporter.hasCopy("a"), true);
   assert.deepEqual([...exporter.copies()], [], "this window has not synced yet");
+});
+
+test("months not yet exported: per consent, from the ids of the saved ZIP", () => {
+  const records = [row("a", "2026-03-05", { updatedAt: "2026-04-01T10:00:00.000Z" }), row("b", "2026-03-20", { updatedAt: "2026-04-01T10:00:00.000Z" })];
+  const archived = new Set(["a", "b"]);
+  const withIds = [{ from: "2026-03-01", to: "2026-03-31", type: "all", at: "2026-04-02T10:00:00.000Z", ids: ["a", "b"] }];
+  assert.deepEqual(unexportedMonths(records, archived, withIds, "2026-04-10"), []);
+  // A consent dated back into March after the export: March is reported again.
+  const later = [...records, row("c", "2026-03-10", { updatedAt: "2026-04-05T10:00:00.000Z" })];
+  assert.deepEqual(unexportedMonths(later, new Set([...archived, "c"]), withIds, "2026-04-10"), ["2026-03"]);
+  // Exported again with it: gone.
+  const again = [...withIds, { ...withIds[0], at: "2026-04-06T10:00:00.000Z", ids: ["a", "b", "c"] }];
+  assert.deepEqual(unexportedMonths(later, new Set([...archived, "c"]), again, "2026-04-10"), []);
+  // A ZIP that did not hold the PDF (e.g. its copy was missing) does not count for it.
+  assert.deepEqual(unexportedMonths(records, archived, [{ ...withIds[0], ids: ["a"] }], "2026-04-10"), ["2026-03"]);
+  // Income only: holds no consent, also with ids.
+  assert.deepEqual(unexportedMonths(records, archived, [{ ...withIds[0], type: "income", ids: [] }], "2026-04-10"), ["2026-03"]);
+  // Older log without ids: counts for consents changed before the ZIP, not for one added later.
+  const legacy = [{ from: "2026-03-01", to: "2026-03-31", type: "all", at: "2026-04-02T10:00:00.000Z" }];
+  assert.deepEqual(unexportedMonths(records, archived, legacy, "2026-04-10"), []);
+  assert.deepEqual(unexportedMonths(later, new Set([...archived, "c"]), legacy, "2026-04-10"), ["2026-03"]);
+});
+
+test("export log: ids are optional and checked; older logs stay readable", () => {
+  const entry = { from: "2026-03-01", to: "2026-03-31", type: "all", at: "2026-04-02T10:00:00.000Z" };
+  assert.deepEqual(validateExportLog([entry]), [entry]);
+  assert.deepEqual(validateExportLog([{ ...entry, ids: ["a", "a", "b"] }])[0].ids, ["a", "b"]);
+  assert.throws(() => validateExportLog([{ ...entry, ids: "a" }]), /Protokoll/);
+  assert.throws(() => validateExportLog([{ ...entry, ids: ["../x"] }]), /Protokoll/);
 });

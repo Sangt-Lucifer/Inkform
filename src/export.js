@@ -115,14 +115,19 @@ export function exportPlan(records, archivedIds, period, type) {
   };
 }
 
-// Saved ZIP files: { from, to, type, at }. Used for the reminder about months not yet exported.
+// Saved ZIP files: { from, to, type, at, ids? }. ids names the consents whose PDF was in the file;
+// entries written before that have none, so which single PDFs they held is not known.
+const ID = /^[a-zA-Z0-9_-]{1,100}$/;
 export function validateExportLog(value) {
   if (!Array.isArray(value) || value.length > 1000) throw Error(t("export.invalidLog"));
   return value.map((entry) => {
     if (!entry || typeof entry.at !== "string" || !Object.hasOwn(EXPORT_TYPES, entry.type))
       throw Error(t("export.invalidLogEntry"));
     const { from, to } = exportPeriod({ kind: "range", from: entry.from, to: entry.to });
-    return { from, to, type: entry.type, at: entry.at };
+    if (entry.ids === undefined) return { from, to, type: entry.type, at: entry.at };
+    if (!Array.isArray(entry.ids) || entry.ids.length > 100000 || entry.ids.some((id) => typeof id !== "string" || !ID.test(id)))
+      throw Error(t("export.invalidLogEntry"));
+    return { from, to, type: entry.type, at: entry.at, ids: [...new Set(entry.ids)] };
   });
 }
 export function readExportLog(storage) {
@@ -136,11 +141,28 @@ export function readExportLog(storage) {
 // Whether a saved ZIP with consents covered the whole period.
 export const periodExported = (log, { from, to }) => log.some((e) => e.type !== "income" && e.from <= from && e.to >= to);
 
-// Completed months with consent PDFs on this device that no saved ZIP with consents covered.
+// Whether a saved ZIP with consents held this consent's PDF. An entry with ids knows it; an older
+// entry without ids counts only for consents last changed before that ZIP was saved, so a consent
+// added later (also one dated back into an exported month) is reported again.
+export function consentExported(log, record) {
+  return log.some(
+    (e) =>
+      e.type !== "income" &&
+      e.from <= record.date &&
+      e.to >= record.date &&
+      (e.ids ? e.ids.includes(record.id) : !(record.updatedAt > e.at)),
+  );
+}
+
+// Completed months with consent PDFs on this device that no saved ZIP with consents held.
 export function unexportedMonths(records, archivedIds, log, today) {
   const current = today.slice(0, 7),
-    months = new Set(records.filter((r) => exportable(r) && archivedIds.has(r.id) && r.date.slice(0, 7) < current).map((r) => r.date.slice(0, 7)));
-  return [...months].filter((month) => !periodExported(log, exportPeriod({ kind: "month", month }))).sort();
+    months = new Set(
+      records
+        .filter((r) => exportable(r) && archivedIds.has(r.id) && r.date.slice(0, 7) < current && !consentExported(log, r))
+        .map((r) => r.date.slice(0, 7)),
+    );
+  return [...months].sort();
 }
 
 export function formatSize(bytes) {
@@ -288,19 +310,28 @@ export function createExportFeature({
   // Runs synchronously up to navigator.share, so Safari keeps the tap as user activation.
   function save() {
     const ready = prepared,
-      status = $("export-status");
+      status = $("export-zip-status");
     if (!ready?.files.length || sharing) return;
     if (JSON.stringify(records()) !== ready.basis) {
+      status.textContent = t("export.changed");
       notify(t("export.changed"));
       preview();
       return;
     }
-    const file = new File([createZip(ready.files)], ready.name, { type: "application/zip" });
+    let file;
+    try {
+      file = new File([createZip(ready.files)], ready.name, { type: "application/zip" });
+    } catch (error) {
+      status.textContent = error.message;
+      return;
+    }
+    status.textContent = "";
     sharing = true;
     saveFile(file)
       .then(
         (way) => {
-          logExport({ from: ready.period.from, to: ready.period.to, type: ready.type, at: new Date().toISOString() });
+          // Only the consents whose PDF is really in the file count as exported.
+          logExport({ from: ready.period.from, to: ready.period.to, type: ready.type, at: new Date().toISOString(), ids: ready.copies });
           status.textContent =
             way === "download"
               ? t("export.downloaded", { datei: file.name })
@@ -338,7 +369,7 @@ export function createExportFeature({
         .join("")}</select></label></div>
       <p id="export-preview" class="ad-section-copy" role="status" aria-live="polite"></p>
       <div class="ad-actions-row"><button class="ad-button primary" type="button" id="export-save" disabled>${th("export.save")}</button></div>
-      <p id="export-status" class="ad-preview-note" role="status"></p>
+      <p id="export-zip-status" class="ad-preview-note" role="status"></p>
       <div id="export-offer" class="ad-notice" hidden><p id="export-offer-text"></p><div class="ad-actions-row"><button class="ad-button danger" type="button" id="export-offer-delete">${th("export.checkDelete")}</button><button class="ad-button" type="button" id="export-offer-later">${th("export.later")}</button></div></div>
       </div></section>
       <section class="ad-panel"><div class="ad-panel-header"><h2>${th("export.copiesTitle")}</h2></div><div class="ad-panel-body">

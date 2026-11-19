@@ -132,7 +132,43 @@ const read = (n) => execFileSync("python3", ["-I", "-c", "import sys,zipfile;sys
 check("Einwilligungs-PDF im ZIP enthält den Namen mit Umlauten", pdfText(read("Einwilligungen/2026-03-31_Müller_Jürgen.pdf")).includes("Jürgen Müller"));
 const report = pdfText(read("Einnahmen/Einnahmen_2026-03.pdf"));
 check("Einnahmenübersicht: Zeitraum März, ohne April und ohne entfernten Eintrag", report.includes("01.03.2026 bis 31.03.2026") && report.includes("Ayşe Yıldız | PDF fehlt") && !report.includes("Ćwik") && !report.includes("Lena Weg"));
-check("Status nach dem Teilen-Dialog", (await ev(`document.getElementById('export-status').textContent`)).includes("Inkform_2026-03.zip"));
+check(
+  "Status nach dem Teilen-Dialog sichtbar in der Verwaltung, nicht im Kunden-Footer",
+  (await ev(`(()=>{const s=document.querySelector('#admin-app #export-zip-status');return !!s&&s.offsetParent!==null&&s.textContent})()`)).includes("Inkform_2026-03.zip") &&
+    !(await ev(`document.getElementById('export-status').textContent`)).includes("Inkform_2026-03.zip"),
+);
+check("Protokoll nennt die Einwilligungen, deren PDF im ZIP war", await ev(`(()=>{const e=readExportLog(localStorage).at(-1);return e.ids.length===4&&e.ids.every(id=>incomeRecords().find(r=>r.id===id).date.startsWith('2026-03'))})()`));
+const months = () => ev(`exportFeature.unexportedMonths(readExportLog(localStorage)).join()`);
+check("März gilt als exportiert", !(await months()).includes("2026-03"));
+
+// A consent dated back into March after the export brings the reminder back -------------------
+await ev(`finishAdminLeave()`);
+await consent("Nach", "Trag", "2026-03-12");
+check("Rückdatierte Einwilligung: März wird wieder gemeldet", (await months()).includes("2026-03"));
+await ev(`openAdmin('overview')`);
+await until(`document.getElementById('admin-pin-dialog').open`);
+await ev(`unlockAdmin()`);
+await until(`adminAccess.isUnlocked() && !!document.querySelector('.ad-reminder')`);
+check("Erinnerung in der Übersicht nennt März 2026", await ev(`document.querySelector('.ad-reminder').textContent.includes('März 2026')`));
+await ev(`openAdmin('export')`);
+await set("export-month", "2026-03");
+await preview();
+// Cancelled share sheet: nothing logged.
+await ev(`window.__shared=null;navigator.share=async()=>{throw new DOMException('abgebrochen','AbortError')};document.getElementById('export-save').click()`);
+await until(`document.getElementById('export-zip-status').textContent.length>0`);
+check("Abbruch: Meldung im Verwaltungs-Status, März weiter gemeldet", (await ev(`document.getElementById('export-zip-status').textContent===t('export.aborted')`)) && (await months()).includes("2026-03"));
+// Income only: holds no consent PDF.
+await set("export-type", "income");
+await preview();
+await ev(`document.getElementById('export-zip-status').textContent='';navigator.share=async(d)=>{window.__shared=d.files[0]};document.getElementById('export-save').click()`);
+await until(`!!window.__shared && document.getElementById('export-zip-status').textContent.length>0`);
+check("Reiner Einnahmenexport markiert die neue Einwilligung nicht als gesichert", (await months()).includes("2026-03"));
+// Exported again with the consents: gone.
+await set("export-type", "all");
+await preview();
+await ev(`window.__shared=null;document.getElementById('export-save').click()`);
+await until(`!!window.__shared`);
+check("Erneuter Export mit Einwilligungen: Erinnerung für März verschwindet", !(await months()).includes("2026-03"));
 
 check("Keine Netzwerkzugriffe außer der lokalen Vorschau", requests.every((u) => !/^https?:/.test(u) || u.startsWith(ORIGIN)));
 check("Keine JavaScript- oder CSP-Fehler", errors.length === 0);
