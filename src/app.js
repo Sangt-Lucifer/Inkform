@@ -1572,6 +1572,11 @@ function updateBlockers() {
   ].filter(Boolean);
 }
 window.inkformIdle = () => !updateBlockers().length;
+// The new version took over while input was being made: the page stays; tell only the owner.
+window.addEventListener("inkform-update-deferred", () => {
+  if (adminOpen) toast(t("ipad.updateBusy"));
+  showOfflineDetails();
+});
 async function offlineDetails() {
   const worker = (w) => (w ? `${w.state} ${new URL(w.scriptURL).pathname}` : "–");
   const registration = await navigator.serviceWorker?.getRegistration().catch(() => null);

@@ -83,6 +83,8 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
       lookForUpdate("start");
       // „Nach Update suchen“: "loading" (the page reloads into the new version), "busy" (found,
       // but a form or unsaved change holds it up), "none", or a rejection without connection.
+      // Being idle is checked again after the installation and right before the reload; new
+      // input then holds the update back ("busy", or the event "inkform-update-deferred").
       let reloadOnTakeOver = false,
         tookOver = false;
       window.inkformLookForUpdate = async () => {
@@ -96,14 +98,25 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
           return "loading";
         }
         reloadOnTakeOver = true;
-        await new Promise((resolve, reject) => {
-          const check = () => {
-            if (next.state === "redundant") reject(Error("redundant"));
-            else if (next.state !== "installing") resolve();
-          };
-          next.addEventListener("statechange", check);
-          check();
-        });
+        try {
+          await new Promise((resolve, reject) => {
+            const check = () => {
+              if (next.state === "redundant") reject(Error("redundant"));
+              else if (next.state !== "installing") resolve();
+            };
+            next.addEventListener("statechange", check);
+            check();
+          });
+        } catch (error) {
+          // A failed installation leaves no wish to reload behind.
+          reloadOnTakeOver = false;
+          throw error;
+        }
+        // Installing takes a while: a customer may have started a form meanwhile.
+        if (!window.inkformIdle?.()) {
+          reloadOnTakeOver = false;
+          return "busy";
+        }
         next.postMessage({ type: "SKIP_WAITING" });
         return "loading";
       };
@@ -112,9 +125,16 @@ if ("serviceWorker" in navigator && window.isSecureContext && location.protocol 
       const firstController = navigator.serviceWorker.controller;
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         tookOver = Boolean(firstController);
-        if (reloadOnTakeOver) location.reload();
-        else
-          navigator.serviceWorker.ready.then((r) => r.active?.postMessage({ type: "CHECK_OFFLINE" }));
+        // Checked again right before reloading: input made since the button was tapped stays.
+        if (reloadOnTakeOver && window.inkformIdle?.()) {
+          location.reload();
+          return;
+        }
+        if (reloadOnTakeOver) {
+          reloadOnTakeOver = false;
+          window.dispatchEvent(new Event("inkform-update-deferred"));
+        }
+        navigator.serviceWorker.ready.then((r) => r.active?.postMessage({ type: "CHECK_OFFLINE" }));
       });
       const registration = await navigator.serviceWorker.ready;
       registration.active?.postMessage({ type: "CHECK_OFFLINE" });

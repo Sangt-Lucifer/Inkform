@@ -86,6 +86,43 @@ try {
   check("Neuere Offline-Kopie als die laufende Seite: Knopf lädt neu", (await ev(`window.inkformLookForUpdate()`)) === "loading");
   await until(`!window.__alteSeite&&document.readyState==='complete'&&!!navigator.serviceWorker.controller`, 200);
   check("Danach läuft die Seite aus der Kopie", await ev(`document.querySelector('meta[name="inkform-page"]').content==='ffffffffffff'`));
+  // Slow installation: the button was tapped while idle, a customer starts typing meanwhile.
+  const slow = (name, where, delay) =>
+    writeFile(swFile, original.replace(/inkform-app-[0-9a-f]+/, name).replace(where, `await new Promise((r) => setTimeout(r, ${delay}));\n      ${where}`));
+  const typing = `document.getElementById('firstName').value='Halb';document.getElementById('firstName').dispatchEvent(new Event('input',{bubbles:true}))`;
+  await slow("inkform-app-testupdate4", "const cache = await caches.open(CACHE);\n      for", 3000);
+  await ev(`window.__alteSeite=true;(window.__lookup=window.inkformLookForUpdate(),true)`);
+  await until(`navigator.serviceWorker.getRegistration().then(r=>!!r.installing)`);
+  await ev(typing);
+  check("Langsame Installation, dann Eingabe: Knopf meldet „busy“ statt zu laden", (await ev(`window.__lookup`)) === "busy");
+  await new Promise((r) => setTimeout(r, 1500));
+  check("Seite und Eingabe bleiben erhalten, Update wartet", await ev(`window.__alteSeite===true&&document.getElementById('firstName').value==='Halb'&&navigator.serviceWorker.getRegistration().then(r=>!!r.waiting)`));
+  await ev(`resetCustomerForm()`);
+  check("Im Leerlauf übernimmt der Knopf das wartende Update", (await ev(`window.inkformLookForUpdate()`)) === "loading");
+  await until(`!window.__alteSeite&&document.readyState==='complete'&&!!navigator.serviceWorker.controller`, 200);
+  check("Danach neue Version aktiv", await ev(`caches.keys().then(k=>k.includes('inkform-app-testupdate4')&&!k.includes('inkform-app-testupdate3'))`));
+  await ev(HELPERS);
+
+  // Slow takeover: input made between the tap and the controller change keeps the page.
+  await slow("inkform-app-testupdate5", "await self.clients.claim();", 3000);
+  await ev(`window.__alteSeite=true;window.__deferred=0;addEventListener('inkform-update-deferred',()=>window.__deferred++)`);
+  check("Knopf im Leerlauf: lädt", (await ev(`window.inkformLookForUpdate()`)) === "loading");
+  await ev(typing);
+  await until(`navigator.serviceWorker.controller&&window.__deferred===1`, 200);
+  await new Promise((r) => setTimeout(r, 1000));
+  check("Eingabe vor dem Controller-Wechsel: kein Neuladen, Eingabe bleibt", await ev(`window.__alteSeite===true&&document.getElementById('firstName').value==='Halb'&&caches.keys().then(k=>k.includes('inkform-app-testupdate5'))`));
+  await ev(`resetCustomerForm()`);
+  check("Im Leerlauf lädt der Knopf danach die neue Version", (await ev(`window.inkformLookForUpdate()`)) === "loading");
+  await until(`!window.__alteSeite&&document.readyState==='complete'&&!!navigator.serviceWorker.controller`, 200);
+  await ev(HELPERS);
+
+  // A failed installation leaves no reload wish behind.
+  await writeFile(swFile, original.replace(/inkform-app-[0-9a-f]+/, "inkform-app-testupdate6").replace('"licenses/NotoSans.txt"', '"licenses/fehlt.txt"'));
+  await ev(`window.__alteSeite=true`);
+  check("Fehlgeschlagene Installation: Knopf meldet einen Fehler", await ev(`window.inkformLookForUpdate().then(()=>false,()=>true)`));
+  await new Promise((r) => setTimeout(r, 1000));
+  check("…und die Seite lädt nicht neu", await ev(`window.__alteSeite===true`));
+
   check(
     "Nach den Updates: Einstellungen gelesen und Byte für Byte unverändert",
     (await ev(`localStorage.getItem(SETTINGS_KEY)`)) === settingsText && (await ev(`settings.app.headline`)) === JSON.parse(settingsText).app.headline,
