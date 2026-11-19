@@ -126,7 +126,20 @@ function storedPacks() {
   } catch (_) {}
   return packs;
 }
-let installedPacks = storedPacks();
+// A standalone HTML file carries the packs its settings use; they join the device's packs (a pack
+// the device already has wins) before any text is shown and before the settings are checked.
+function embeddedPacks() {
+  const packs = {};
+  try {
+    const config = JSON.parse(document.getElementById("inkform-config")?.textContent || "null");
+    for (const [code, pack] of Object.entries(config?.languages && typeof config.languages === "object" ? config.languages : {}))
+      try {
+        packs[code] = validatePack(code, pack);
+      } catch (_) {}
+  } catch (_) {}
+  return packs;
+}
+let installedPacks = { ...embeddedPacks(), ...storedPacks() };
 addLanguages(installedPacks);
 usePrintableCheck((text) => !unsupportedPdfChars(text).length);
 // store false: only for this page (the Safari tab of the install page stores nothing).
@@ -1883,6 +1896,112 @@ function storePacks(next) {
   installedPacks = next;
   addLanguages(installedPacks);
 }
+const formTextsOf = (code) => JSON.stringify(Object.entries(installedPacks[code]?.texts ?? {}).filter(([key]) => isFormKey(key)));
+// Every change of the installed packs goes through here: stored first (throws if that fails), then
+// the saved settings, the admin draft, the admin language and the customer form follow what is
+// there. A form whose language is gone, or whose form texts changed, is shown again in the language
+// it then has; entries and health answers stay, declarations, photo choice and signature are asked
+// for again (as when the customer switches the language).
+function changePacks(next) {
+  const formBefore = customerLanguage ? formTextsOf(customerLanguage) : "";
+  storePacks(next);
+  const prune = (locale) => {
+    const customer = locale.customer.filter((code) => hasLanguage(code)),
+      studioGone = !hasLanguage(locale.studio);
+    if (!studioGone && customer.length === locale.customer.length) return false;
+    if (studioGone) locale.studio = locale.content;
+    locale.customer = [...new Set([locale.studio, ...customer])];
+    return true;
+  };
+  if (!settingsBroken && prune(settings.locale))
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (_) {}
+  if (adminDraft) prune(adminDraft.locale);
+  const choice = operatorChoice();
+  if (!hasLanguage(language().code) || (choice && choice !== AUTO && !hasLanguage(choice)))
+    chooseOperatorLanguage(hasLanguage("en") ? "en" : BASE_LANGUAGE);
+  if (!customerLanguage) return;
+  const target = offeredLanguages(settings).includes(customerLanguage) ? customerLanguage : formStartLanguage();
+  if (target !== customerLanguage || formTextsOf(target) !== formBefore) switchCustomerLanguage(target, true);
+  else renderLanguageChoice();
+}
+// The ready-made packs of this app (sprachen/index.json on its own site): null until asked,
+// "loading", "failed" (offline, or the single HTML file) or { code: { name } }.
+let packIndex = null;
+async function loadPackIndex() {
+  packIndex = "loading";
+  try {
+    // Asked once per visit of the page; not at all when the device reports no connection.
+    if (location.protocol === "file:" || navigator.onLine === false) throw Error("offline");
+    const response = await fetch("sprachen/index.json", { cache: "no-cache" });
+    if (!response.ok) throw Error(String(response.status));
+    const listed = (await response.json())?.packs;
+    if (!listed || typeof listed !== "object") throw Error("index");
+    packIndex = Object.fromEntries(
+      Object.entries(listed)
+        .filter(([code, entry]) => PACK_CODE.test(code) && !isBuiltinLanguage(code) && typeof entry?.name === "string")
+        .map(([code, entry]) => [code, { name: entry.name.slice(0, 80) }]),
+    );
+  } catch (_) {
+    packIndex = "failed";
+  }
+  if (adminOpen && adminPage === "languages" && !translationImport && !translateCode) renderAdminSection();
+}
+function packIndexPanel() {
+  if (packIndex === null) loadPackIndex();
+  let body;
+  if (packIndex === null || packIndex === "loading") body = `<p class="ad-preview-note">${th("packList.loading")}</p>`;
+  else if (packIndex === "failed")
+    body = `<p class="ad-preview-note">${th("packList.failed")}</p><div class="ad-actions-row"><button type="button" class="ad-button" data-admin-action="pack-index-reload">${th("packList.retry")}</button></div>`;
+  else {
+    const codes = Object.keys(packIndex).sort((a, b) => packIndex[a].name.localeCompare(packIndex[b].name, language().locale));
+    body = codes.length
+      ? `<div class="app-lang-list" data-pack-index>${codes
+          .map((code) => {
+            const own = !!installedPacks[code];
+            return /* HTML */ `<div class="app-lang-row">
+              <span class="app-lang-mark">${languageMark(code)}</span>
+              <div class="app-lang-text"><strong lang="${code}">${escapeHtml(packIndex[code].name)}</strong><small>${th(own ? "packList.onDevice" : "packList.available")}</small></div>
+              <div class="ad-actions-row">${
+                own
+                  ? `<button type="button" class="ad-button" data-compare-pack="${code}">${adminIcon("upload")}${th("packList.compare")}</button>`
+                  : `<button type="button" class="ad-button primary" data-install-pack="${code}">${adminIcon("download")}${th("packList.install")}</button>`
+              }</div>
+            </div>`;
+          })
+          .join("")}</div>`
+      : `<p class="ad-preview-note">${th("packList.none")}</p>`;
+  }
+  return adminPanel(th("packList.title"), `<p class="ad-section-copy">${th("packList.copy")}</p>${body}`);
+}
+// Installs a listed pack; for a language with an own translation on this device, its texts are
+// compared in the preview of the translation file instead and taken over only after "Übernehmen".
+let packBusy = false;
+async function installListedPack(code) {
+  if (packBusy) return;
+  packBusy = true;
+  try {
+    const response = await fetch(`sprachen/${code}.json`, { cache: "no-cache" });
+    if (!response.ok) throw Error(String(response.status));
+    const raw = await response.json();
+    if (installedPacks[code]) {
+      translationImport = { ...readTranslationFile(raw, code, installedPacks[code]), file: `sprachen/${code}.json` };
+      renderAdminSection();
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (Object.keys(installedPacks).length >= PACKS_MAX) throw Error(t("pack.tooMany", { anzahl: PACKS_MAX }));
+    changePacks({ ...installedPacks, [code]: validatePack(code, raw) });
+  } catch (error) {
+    toast(t("packList.installFailed", { fehler: error.message }));
+    return;
+  } finally {
+    packBusy = false;
+  }
+  renderAdminSection();
+  toast(t("packList.installed", { sprache: translator(code).name }));
+}
 const shownName = (code) => {
   try {
     return new Intl.DisplayNames([language().locale], { type: "language" }).of(code) || code;
@@ -1949,6 +2068,7 @@ function languagesPage() {
     ) +
     languagePanel() +
     adminPanel(th("appLanguages.listTitle"), `<p class="ad-section-copy">${th("appLanguages.listCopy")}</p><div class="app-lang-list">${rows}</div>`) +
+    packIndexPanel() +
     adminPanel(
       th("appLanguages.addTitle"),
       /* HTML */ `<p class="ad-section-copy">${th("appLanguages.addCopy")}</p>
@@ -1980,7 +2100,7 @@ function addAppLanguage() {
   }
   try {
     if (Object.keys(installedPacks).length >= PACKS_MAX) throw Error(t("pack.tooMany", { anzahl: PACKS_MAX }));
-    storePacks({ ...installedPacks, [code]: validatePack(code, newPack(code)) });
+    changePacks({ ...installedPacks, [code]: validatePack(code, newPack(code)) });
   } catch (error) {
     toast(t("appLanguages.failed", { fehler: error.message }));
     return;
@@ -2002,17 +2122,15 @@ async function removeAppLanguage(code) {
     return;
   const next = { ...installedPacks };
   delete next[code];
+  if (translateCode === code) translateCode = null;
+  if (editLanguage === code) editLanguage = null;
   try {
-    storePacks(next);
+    changePacks(next);
   } catch (error) {
     toast(t("appLanguages.failed", { fehler: error.message }));
     return;
   }
-  if (translateCode === code) translateCode = null;
-  if (editLanguage === code) editLanguage = null;
-  if (operatorChoice() === code || language().code === code) chooseOperatorLanguage(hasLanguage("en") ? "en" : BASE_LANGUAGE);
-  else renderAdminSection();
-  renderLanguageChoice();
+  renderAdminSection();
   toast(t("appLanguages.removed", { sprache: name }));
 }
 // The keys of the app grouped by their first part, the texts of the form first.
@@ -2132,7 +2250,7 @@ function saveAppText(key) {
   if (value === undefined) delete texts[key];
   else texts[key] = value;
   try {
-    storePacks({ ...installedPacks, [code]: { ...pack, texts } });
+    changePacks({ ...installedPacks, [code]: { ...pack, texts } });
   } catch (err) {
     error.hidden = false;
     error.textContent = t("appLanguages.failed", { fehler: err.message });
@@ -2151,7 +2269,7 @@ function renameAppLanguage(input) {
     input.value = pack.name;
     return;
   }
-  storePacks({ ...installedPacks, [translateCode]: { ...pack, name } });
+  changePacks({ ...installedPacks, [translateCode]: { ...pack, name } });
   renderAdminSection();
 }
 // Translation file (see translationFile in languages.js): download for one language, upload with a
@@ -2255,7 +2373,7 @@ function applyTranslationImport() {
   const r = translationImport,
     count = r.added.length + r.changed.length;
   try {
-    storePacks({ ...installedPacks, [r.code]: validatePack(r.code, r.pack) });
+    changePacks({ ...installedPacks, [r.code]: validatePack(r.code, r.pack) });
   } catch (error) {
     toast(t("appLanguages.failed", { fehler: error.message }));
     return;
@@ -4026,12 +4144,15 @@ function languageButtons(codes, current, attribute) {
 }
 // A new language mid-form keeps the entries and health answers; declarations, the photo choice
 // and the signature must be given again in the language the customer now reads.
-function switchCustomerLanguage(code) {
-  if (!offeredLanguages(settings).includes(code) || code === customerLanguage) return;
+// force: shown again although the code stays (its texts changed, see changePacks).
+function switchCustomerLanguage(code, force = false) {
+  if (!(offeredLanguages(settings).includes(code) || (force && code === formStartLanguage()))) return;
+  if (code === customerLanguage && !force) return;
   const answers = MEDICAL.map((q) => [q.id, choiceValue(q.id), $(`note-${q.id}`)?.value ?? ""]);
   const touched = dirty;
   customerLanguage = code;
-  useLanguage(code);
+  if (adminOpen) useLanguage(language().code);
+  else useLanguage(code);
   renderShown();
   for (const [id, value, note] of answers) {
     if (!value) continue;
@@ -4041,7 +4162,7 @@ function switchCustomerLanguage(code) {
   }
   form.querySelectorAll('input[name="photo"]').forEach((input) => (input.checked = false));
   $("sober").checked = false;
-  clearSignature(touched ? t("signature.languageChanged") : "");
+  clearSignature(touched ? inLanguage(code, () => t("signature.languageChanged")) : "");
   $("medical-notice").hidden = !MEDICAL.some((q) => choiceValue(q.id) === "yes");
   updatePriceBalance();
   updateProgress();
@@ -4250,7 +4371,10 @@ function exportHtml() {
     configError(t("exportSettings.unsaved"));
     return;
   }
-  const payload = { ...clone(settings), theme: document.documentElement.dataset.theme };
+  // The packs of the languages the file shows, so it starts with them in a fresh browser, offline.
+  const used = [settings.locale.content, settings.locale.studio, ...settings.locale.customer, ...Object.keys(settings.translations ?? {}), operatorLanguage()];
+  const languages = Object.fromEntries([...new Set(used)].filter((code) => installedPacks[code]).map((code) => [code, installedPacks[code]]));
+  const payload = { ...clone(settings), theme: document.documentElement.dataset.theme, languages };
   const doc = new DOMParser().parseFromString(APP_SOURCE_HTML, "text/html");
   doc.getElementById("inkform-config").textContent = JSON.stringify(payload).replace(
     /</g,
@@ -4453,6 +4577,8 @@ $("admin-app").addEventListener("click", (event) => {
     window.scrollTo(0, 0);
   }
   if (button.dataset.removeLanguage) removeAppLanguage(button.dataset.removeLanguage);
+  if (button.dataset.installPack) installListedPack(button.dataset.installPack);
+  if (button.dataset.comparePack) installListedPack(button.dataset.comparePack);
   if (button.dataset.editTexts) {
     editLanguage = button.dataset.editTexts;
     adminPage = "content";
@@ -4602,6 +4728,10 @@ $("admin-app").addEventListener("click", (event) => {
       break;
     case "test-files":
       runFilesTest();
+      break;
+    case "pack-index-reload":
+      loadPackIndex();
+      renderAdminSection();
       break;
     case "look-for-update":
       if (!window.inkformLookForUpdate) toast(t("ipad.updateUnavailable"));

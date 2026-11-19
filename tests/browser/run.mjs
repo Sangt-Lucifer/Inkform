@@ -17,11 +17,11 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defaultOut, isBuiltin, resolveProfileDir, root } from "../../scripts/build.mjs";
 
-const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "export", "kopien", "sicherung", "einstellungen", "schriftgroessen", "offline", "update", "symbol", "blanko", "einrichtung", "unterpfad", "sprachen", "flaggen", "zuruecksetzen", "rueckfragen", "seitenleiste", "migration", "sprachpakete", "uebersetzen"];
+const CHECKS = ["formular", "pin-einnahmen", "abschluss", "aufbewahrung", "export", "kopien", "sicherung", "einstellungen", "schriftgroessen", "offline", "update", "symbol", "blanko", "einrichtung", "unterpfad", "sprachen", "flaggen", "zuruecksetzen", "rueckfragen", "seitenleiste", "migration", "sprachpakete", "uebersetzen", "pakete"];
 // Checks bound to one built-in profile; that profile runs only these.
 const PROFILE_CHECKS = { blanko: ["blanko", "einrichtung", "unterpfad", "sprachpakete"] };
 // Checks of the core itself, not of a studio's app: only with the built-in profile.
-const CORE_ONLY = ["sprachen", "flaggen"];
+const CORE_ONLY = ["sprachen", "flaggen", "pakete"];
 const argv = process.argv.slice(2);
 const pi = argv.indexOf("--profile");
 const profile = pi >= 0 ? argv[pi + 1] : "beispiel";

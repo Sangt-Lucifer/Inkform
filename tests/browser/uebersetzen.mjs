@@ -19,7 +19,7 @@ await until(`adminPage==='languages'&&document.getElementById('add-language')`);
 check(
   "Seite in der Leiste unter Formular, eingebaute Sprachen ohne Knöpfe",
   await ev(`!!document.querySelector('#admin-nav [data-admin-page="languages"][aria-current="page"]')
-    &&document.querySelectorAll('.app-lang-row').length===languageCodes().length&&!document.querySelector('[data-remove-language="de"],[data-remove-language="en"]')`),
+    &&document.querySelectorAll('.app-lang-list:not([data-pack-index]) .app-lang-row').length===languageCodes().length&&!document.querySelector('[data-remove-language="de"],[data-remove-language="en"]')`),
 );
 check(
   "Oben: Sprache der Verwaltung, Studiosprache und Sprachen für Kunden",

@@ -4,4 +4,6 @@ Sprachen, die nicht fest in die App eingebaut sind. Jede Datei `<code>.js` hat d
 
 Der Build prüft die Pakete wie die eingebauten Sprachen und legt sie neben die App: `sprachen/index.json` (Liste) und `sprachen/<code>.json`. Die App lädt ein Paket nur, wenn es gebraucht wird – bei „Automatisch“ mit einer Gerätesprache, die nicht eingebaut ist –, prüft es, speichert es auf dem Gerät (offline nutzbar) und nimmt es in Gesamtsicherung und Studio-Einstellungen mit. Angefragt wird nur die eigene Adresse der App.
 
+Unter Formular → Sprachen listet die App alle Pakete aus `sprachen/index.json` zur Installation, unabhängig von der Gerätesprache. Für eine Sprache mit eigener Übersetzung auf dem Gerät zeigt „Mit Paket abgleichen“ zuerst die Vorschau der Änderungen. Eine einzelne HTML-Datei (Export unter iPad & Einstellungen) nimmt die Pakete ihrer Sprachen mit.
+
 Ein neues Paket braucht kein App-Update: Datei hier ablegen, prüfen (`npm run build`, `npm test`), committen, `npm run pages`, pushen.
