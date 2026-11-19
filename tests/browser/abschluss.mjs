@@ -143,6 +143,60 @@ await ev(`document.getElementById('pdf-next').click()`);
 await until(`!document.getElementById('customer-app').hidden`);
 check("Nach Ablage gebucht", await ev(`incomeRecords().some(r=>r.customer==='Speicher Voll')`));
 
+// 4d. Writing the export copy fails: nothing is cleaned up, the dialog says so; after a reload the
+// same confirmation finishes with exactly one entry and one exportable PDF ---------------------
+const archiveKeys = () => ev(`createIndexedDbFiles(indexedDB,'inkform-archive').keys()`);
+await ev(`fillConsent({firstName:'Archiv',lastName:'Fehler'});form.requestSubmit()`);
+await until(`!!pendingConsent && (async()=>await pendingConsent.kept)()`);
+const failId = await ev(`pendingConsent.incomeEntry.id`);
+await ev(`window.__put=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...a){if(this.transaction.db.name==='inkform-archive')throw new DOMException('Schreibtest','QuotaExceededError');return window.__put.apply(this,a)}`);
+await unlockFromThanks();
+await ev(`document.getElementById('pdf-next').click()`);
+await until(`document.getElementById('share-status').textContent.includes('ZIP-Export') && !document.getElementById('pdf-next').disabled`);
+check("Schreibfehler: Fehler im Dialog, offene Einwilligung und Formularsperre bleiben", await ev(`document.getElementById('pdf-dialog').open&&document.getElementById('customer-app').hidden&&pendingConsent&&!pendingConsent.confirmed&&JSON.parse(localStorage.getItem(PENDING_KEY)).id==='${failId}'`) && (await pendingFiles()) === 1);
+await ev(`document.getElementById('pdf-next').click();document.getElementById('pdf-next').click()`);
+await until(`document.getElementById('share-status').textContent.includes('ZIP-Export') && !document.getElementById('pdf-next').disabled`);
+check("Wiederholter Versuch (auch doppelt getippt) bucht nicht doppelt", await ev(`incomeRecords().filter(r=>r.id==='${failId}').length===1`));
+await reload();
+await helpers();
+check("Nach Neuladen: „Vielen Dank“ bleibt, PDF noch da", await ev(`!document.getElementById('completion-screen').hidden&&!!pendingConsent?.blob`));
+await unlockFromThanks();
+await ev(`document.getElementById('pdf-next').click()`);
+await until(`!document.getElementById('customer-app').hidden`);
+await until(`(async()=>!localStorage.getItem(PENDING_KEY) && (await createIndexedDbFiles().keys()).length===0)()`);
+check("Erneut bestätigt: genau ein Eintrag und eine exportierbare PDF-Kopie", (await ev(`incomeRecords().filter(r=>r.id==='${failId}').length===1&&exportFeature.copies().has('${failId}')`)) && (await archiveKeys()).filter((k) => k === failId).length === 1);
+
+// 4e. Stopped after the export copy was written but before the cleanup ---------------------
+await ev(`fillConsent({firstName:'Archiv',lastName:'Abbruch'});form.requestSubmit()`);
+await until(`!!pendingConsent && (async()=>await pendingConsent.kept)()`);
+const cutId = await ev(`pendingConsent.incomeEntry.id`);
+await ev(`(async()=>{incomeFeature.book(pendingConsent.incomeEntry);await exportFeature.keep(pendingConsent.incomeEntry.id,pendingConsent.blob)})()`);
+await reload();
+await helpers();
+await unlockFromThanks();
+await ev(`document.getElementById('pdf-next').click()`);
+await until(`!document.getElementById('customer-app').hidden`);
+check("Abbruch nach Archivierung: erneut bestätigt, ein Eintrag, eine Kopie, offene Einwilligung weg", (await ev(`incomeRecords().filter(r=>r.id==='${cutId}').length===1&&!localStorage.getItem(PENDING_KEY)`)) && (await archiveKeys()).filter((k) => k === cutId).length === 1);
+
+// 4f. The pending PDF cannot be read once after a restart: read it again instead of "PDF fehlt"
+await ev(`fillConsent({firstName:'Lese',lastName:'Fehler'});form.requestSubmit()`);
+await until(`!!pendingConsent && (async()=>await pendingConsent.kept)()`);
+const readId = await ev(`pendingConsent.incomeEntry.id`);
+const failRead = await cmd("Page.addScriptToEvaluateOnNewDocument", {
+  source: `window.__failRead=true;{const g=IDBObjectStore.prototype.get;IDBObjectStore.prototype.get=function(...a){if(window.__failRead&&this.transaction.db.name==='inkform-pending')throw new DOMException('Lesetest','UnknownError');return g.apply(this,a)}}`,
+});
+await reload();
+await cmd("Page.removeScriptToEvaluateOnNewDocument", { identifier: failRead.identifier });
+await helpers();
+await unlockFromThanks();
+check("Lesefehler: „PDF erneut lesen“ und weiterhin „PDF fehlt“ angeboten", await ev(`!pendingConsent.blob&&!document.getElementById('pdf-retry-read').hidden&&!document.getElementById('pdf-missing').hidden&&document.getElementById('pdf-meta').textContent.includes('Lesetest')`));
+await ev(`window.__failRead=false;document.getElementById('pdf-retry-read').click()`);
+await until(`!!pendingConsent?.blob && !document.getElementById('pdf-next').hidden`);
+check("Nach erneutem Lesen: PDF da, normal ablegen möglich", await ev(`document.getElementById('pdf-retry-read').hidden&&document.getElementById('pdf-missing').hidden&&document.getElementById('pdf-title').textContent==='Dein PDF ist bereit.'`));
+await ev(`document.getElementById('pdf-next').click()`);
+await until(`!document.getElementById('customer-app').hidden`);
+check("Gebucht ohne „PDF fehlt“, PDF-Kopie für den Export", (await ev(`incomeRecords().filter(r=>r.id==='${readId}'&&!r.pdfMissing).length===1`)) && (await archiveKeys()).includes(readId));
+
 // 5. Characters the font cannot print ----------------------------------------------------
 await ev(`fillConsent({firstName:'Anna ✓',lastName:'Test'});form.requestSubmit()`);
 await until(`!document.getElementById('toast').hidden`);

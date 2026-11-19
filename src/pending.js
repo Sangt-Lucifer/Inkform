@@ -4,8 +4,9 @@
 //   metadata (file name, pages, prepared income entry; no health data) -> localStorage
 //   PDF file (contains health data and signature)                      -> IndexedDB, this device only
 //
-// The income entry is booked only when the owner confirms the filing. Both parts are removed
-// right after that. If the PDF can no longer be read, the owner can book the entry as "PDF fehlt".
+// The income entry is booked only when the owner confirms the filing; both parts are removed only
+// once the PDF is also kept for the ZIP export, so a failed step can be repeated (also after a
+// restart). If the PDF can no longer be read, the owner can book the entry as "PDF fehlt".
 import { t } from "./i18n.js";
 
 export const PENDING_KEY = "inkform.pending.v1";
@@ -53,11 +54,15 @@ export function createPendingStore({ storage, files }) {
     async load() {
       const meta = read();
       if (!meta) return null;
-      let blob = null;
+      // A read error is kept apart from a PDF that is really gone: the owner can try again.
+      let blob = null,
+        readError = null;
       try {
         blob = (await files?.get(meta.id)) ?? null;
-      } catch (_) {}
-      return { ...meta, blob };
+      } catch (error) {
+        readError = error;
+      }
+      return { ...meta, blob, readError };
     },
     // Metadata of this consent is removed synchronously (the next consent can start at once);
     // then only this consent's PDF is deleted, after a write still in progress has finished.

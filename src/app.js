@@ -1353,7 +1353,9 @@ function renderPdfArtifact(artifact) {
         : t("pdf.ready");
   $("pdf-filename").textContent = filename;
   $("pdf-meta").textContent = missing
-    ? t("pdf.missingMeta")
+    ? artifact.readError
+      ? t("pdf.readFailedMeta", { fehler: artifact.readError })
+      : t("pdf.missingMeta")
     : t(isReport ? "pdf.metaReport" : isTest ? "pdf.metaTest" : "pdf.metaConsent", {
         anzahl: pages,
         kb: Math.ceil(blob.size / 1024),
@@ -1374,6 +1376,8 @@ function renderPdfArtifact(artifact) {
   document.querySelector("#pdf-dialog .files-instructions").hidden = missing;
   $("pdf-next").hidden = !consent || missing;
   $("pdf-missing").hidden = !consent || !missing;
+  // Only a read error (not a PDF that is really gone) can be tried again.
+  $("pdf-retry-read").hidden = !consent || !missing || !artifact.readError;
   $("pdf-review-notice").hidden = !consent || missing;
   $("income-capture-note").hidden = !consent;
   $("income-capture-note").textContent = t(missing ? "pdf.captureMissing" : "pdf.capture");
@@ -1477,41 +1481,82 @@ async function restorePending() {
     incomeEntry: saved.income,
     confirmed: false,
     restored: true,
+    readError: saved.readError ? saved.readError.message || String(saved.readError) : "",
   };
   consentIncomeId = saved.income.id;
   return true;
 }
-function bookPendingConsent(pdfMissing) {
+// Confirming is repeatable per consent: booking is idempotent, and the PDF is kept for the ZIP
+// export after the entry exists (keep() checks it). Only then is the open consent removed and the
+// next customer allowed; a failed step keeps everything and offers to try again, also after a restart.
+let bookingInFlight = false;
+function setBookingBusy(busy) {
+  for (const id of ["pdf-next", "pdf-missing", "pdf-share", "pdf-retry-read"]) $(id).disabled = busy;
+}
+async function bookPendingConsent(pdfMissing) {
   const artifact = pdfArtifact;
-  if (!artifact || artifact !== pendingConsent || nativeShareInFlight) return;
+  if (!artifact || artifact !== pendingConsent || artifact.confirmed || nativeShareInFlight || bookingInFlight) return;
   if (!adminAccess.isUnlocked()) {
     adminAccess.request(() => bookPendingConsent(pdfMissing));
     return;
   }
+  bookingInFlight = true;
+  setBookingBusy(true);
   try {
-    if (!artifact.incomeEntry)
-      throw Error(t("pending.entryMissing"));
-    // Booking is idempotent per consent: a repeated confirmation never adds a second entry.
-    incomeFeature.book(artifact.incomeEntry, { pdfMissing });
-  } catch (error) {
-    $("share-status").textContent = t("pending.bookFailed", { fehler: error.message });
-    toast(t("pending.bookFailedToast"));
-    return;
+    try {
+      if (!artifact.incomeEntry) throw Error(t("pending.entryMissing"));
+      // A repeated confirmation never adds a second entry.
+      incomeFeature.book(artifact.incomeEntry, { pdfMissing });
+    } catch (error) {
+      $("share-status").textContent = t("pending.bookFailed", { fehler: error.message });
+      toast(t("pending.bookFailedToast"));
+      return;
+    }
+    if (!pdfMissing && artifact.blob)
+      try {
+        await exportFeature.keep(artifact.incomeEntry.id, artifact.blob);
+      } catch (error) {
+        console.error("PDF nicht für den Export gespeichert:", error);
+        if (pdfArtifact === artifact)
+          $("share-status").textContent = t("pending.archiveFailed", { fehler: error.message || String(error) });
+        toast(t("pending.archiveFailedToast"));
+        return;
+      }
+    artifact.confirmed = true;
+    // The metadata goes at once, so the next customer can start; the pending PDF is deleted once a
+    // write still in progress has finished. If that fails, the start-up sweep removes it.
+    pendingStore
+      .clear(artifact.incomeEntry.id)
+      .catch((error) => console.error("PDF-Kopie nicht entfernt, wird beim nächsten Start gelöscht:", error));
+    resetCustomerForm();
+    finishAdminLeave();
+  } finally {
+    bookingInFlight = false;
+    setBookingBusy(false);
   }
-  artifact.confirmed = true;
-  // Booking is written: the PDF is kept for the ZIP export, and this consent's pending copy is
-  // removed. The metadata goes at once, so the next customer can start; the pending PDF is deleted
-  // once a write still in progress has finished. If that fails, the start-up sweep removes it.
-  if (!pdfMissing && artifact.blob)
-    exportFeature.keep(artifact.incomeEntry.id, artifact.blob).catch((error) => {
-      console.error("PDF nicht für den Export gespeichert:", error);
-      toast(t("pending.archiveFailed"));
-    });
-  pendingStore
-    .clear(artifact.incomeEntry.id)
-    .catch((error) => console.error("PDF-Kopie nicht entfernt, wird beim nächsten Start gelöscht:", error));
-  resetCustomerForm();
-  finishAdminLeave();
+}
+// The PDF of the open consent could not be read after a restart: read it again.
+async function retryPendingRead() {
+  const artifact = pendingConsent;
+  if (!artifact || artifact.blob || bookingInFlight) return;
+  setBookingBusy(true);
+  try {
+    const saved = await pendingStore.load();
+    if (pendingConsent !== artifact || saved?.income?.id !== artifact.incomeEntry?.id) return;
+    artifact.readError = saved.readError ? saved.readError.message || String(saved.readError) : "";
+    if (saved.blob) {
+      artifact.blob = saved.blob;
+      artifact.url = URL.createObjectURL(saved.blob);
+    }
+  } catch (error) {
+    artifact.readError = error.message;
+  } finally {
+    setBookingBusy(false);
+  }
+  if (pdfArtifact === artifact) {
+    renderPdfArtifact(artifact);
+    if (!artifact.blob) $("share-status").textContent = t("pdf.readFailedAgain", { fehler: artifact.readError || "–" });
+  }
 }
 // Used by the service-worker registration: an app update may take over only while nothing is in
 // progress (empty customer form, no unconfirmed consent, no unsaved admin changes, no open dialog).
@@ -1567,6 +1612,7 @@ async function showOfflineDetails() {
 }
 $("pdf-next").addEventListener("click", () => bookPendingConsent(false));
 $("pdf-missing").addEventListener("click", () => bookPendingConsent(true));
+$("pdf-retry-read").addEventListener("click", retryPendingRead);
 function runFilesTest() {
   if (!libraryAvailable()) {
     toast(t("filesTest.libraryMissing"));

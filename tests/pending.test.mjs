@@ -183,3 +183,25 @@ test("sweep never deletes a consent saved while it is running", async () => {
   await createPendingStore({ storage, files }).sweep();
   assert.deepEqual([...files.map.keys()], [income.id]);
 });
+
+test("a read error is reported apart from a missing PDF, and the PDF stays for a retry", async () => {
+  const storage = memory(),
+    files = fileStore();
+  const store = createPendingStore({ storage, files });
+  await store.save(entry());
+  const get = files.get;
+  files.get = async () => {
+    throw Error("Lesetest");
+  };
+  const failed = await store.load();
+  assert.equal(failed.blob, null);
+  assert.equal(failed.readError.message, "Lesetest");
+  files.get = get;
+  const again = await store.load();
+  assert.equal(again.readError, null);
+  assert.equal(await again.blob.text(), "%PDF-1.3 test");
+  files.map.clear();
+  const gone = await store.load();
+  assert.equal(gone.blob, null);
+  assert.equal(gone.readError, null);
+});
