@@ -159,6 +159,7 @@ await until(`document.getElementById('share-status').textContent.includes('ZIP-E
 check("Wiederholter Versuch (auch doppelt getippt) bucht nicht doppelt", await ev(`incomeRecords().filter(r=>r.id==='${failId}').length===1`));
 await reload();
 await helpers();
+await until(`!!pendingConsent`);
 check("Nach Neuladen: „Vielen Dank“ bleibt, PDF noch da", await ev(`!document.getElementById('completion-screen').hidden&&!!pendingConsent?.blob`));
 await unlockFromThanks();
 await ev(`document.getElementById('pdf-next').click()`);

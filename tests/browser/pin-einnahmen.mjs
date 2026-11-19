@@ -64,6 +64,7 @@ await ev(`runFilesTest()`);
 check('Storage test also preserves the pending original',await ev(`pdfArtifact.isTest&&pendingConsent===window.__firstConsent`));
 await ev(`document.getElementById('pdf-dialog').close();finishAdminLeave();document.getElementById('completion-unlock').click();unlockAdmin()`);await until(`document.getElementById('pdf-dialog').open&&!nativeShareInFlight`);
 await ev(`document.getElementById('pdf-next').click()`);
+await until(`!document.getElementById('customer-app').hidden`); // booked once the PDF is also kept for the export
 check('Owner confirms PDF: booked once, clean next form',await ev(`!document.getElementById('customer-app').hidden&&!document.getElementById('firstName').value&&!adminAccess.isUnlocked()&&JSON.parse(localStorage.getItem(INCOME_KEY)).records.length===1&&JSON.parse(localStorage.getItem(INCOME_KEY)).records[0].totalCents===45050&&!localStorage.getItem(PENDING_KEY)`));
 await ev(`window.__realSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k===INCOME_KEY)throw Error('QuotaExceededTest');return window.__realSet.call(this,k,v)};fillConsent(false);form.requestSubmit()`);
 await until(`!document.getElementById('completion-screen').hidden`);
@@ -71,7 +72,9 @@ check('Customer screen locks and the PDF is retained while income storage is bro
 await ev(`document.getElementById('completion-unlock').click();unlockAdmin()`);await until(`document.getElementById('pdf-dialog').open&&!nativeShareInFlight`);
 await ev(`document.getElementById('pdf-next').click()`);
 check('Failed income storage prevents destructive next-customer reset',await ev(`pdfArtifact&&document.getElementById('firstName').value==='LEDGER-TEST'&&document.getElementById('share-status').textContent.includes('nicht lokal gespeichert')`));
-await ev(`Storage.prototype.setItem=window.__realSet;window.__signedBlob=pdfArtifact.blob;document.getElementById('pdf-next').click();openAdmin('income');unlockAdmin()`);
+await ev(`Storage.prototype.setItem=window.__realSet;window.__signedBlob=pdfArtifact.blob;document.getElementById('pdf-next').click()`);
+await until(`!document.getElementById('customer-app').hidden`);
+await ev(`openAdmin('income');unlockAdmin()`);
 await until(`!!document.getElementById('income-filter-artist')`);
 check('No-price consent retained as open and omitted from known total',await ev(`document.querySelectorAll('.income-table tbody tr').length===2&&document.querySelector('.income-summary').textContent.includes('450,50')&&document.querySelector('.income-summary').textContent.includes('1Preise offen')`));
 await ev(`window.__openId=JSON.parse(localStorage.getItem(INCOME_KEY)).records.find(r=>r.totalCents===null).id;document.querySelector('[data-income-edit="'+window.__openId+'"]').click();document.getElementById('income-total').value='250,00';document.getElementById('income-edit-form').requestSubmit()`);
