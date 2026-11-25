@@ -1,7 +1,7 @@
 // Cache only the static app; customer input and generated PDFs never enter this cache.
 // Paths are relative to this worker, so the app also runs below a sub path (e.g. /inkform/);
 // served at "/" they are the same addresses as before.
-const CACHE = "inkform-app-98d1a013ddb7";
+const CACHE = "inkform-app-1b7297c44eff";
 const BASE = new URL("./", self.location).href;
 const INDEX = new URL("index.html", BASE).href;
 const URLS = [
@@ -11,7 +11,6 @@ const URLS = [
   "icons/icon-512.png",
   "licenses/Inkform.txt",
   "licenses/jsPDF.txt",
-  "licenses/Tailwind.txt",
   "licenses/NotoSans.txt",
 ].map((path) => new URL(path, BASE).href);
 self.addEventListener("install", (event) => {
