@@ -156,6 +156,19 @@ export async function readPacks(builtins, dir = PACK_DIR) {
     .filter((code) => Object.hasOwn(builtins, code))
     .map((code) => `${code}.js: ist schon in src/sprachen/ eingebaut.`);
   errors.push(...checkLanguages({ [BASE_LANGUAGE]: builtins[BASE_LANGUAGE], ...packs }));
+  for (const [code, pack] of Object.entries(packs)) {
+    if (pack.form === undefined) continue;
+    try {
+      readTranslation(pack.form, DEFAULT_SETTINGS, (input, max, field) => {
+        if (input === undefined || input === "") return undefined;
+        if (typeof input !== "string" || input.length > max || /[<>]/.test(input))
+          throw Error(`${code}.js: form.${field} ist ungültig, zu lang oder enthält < oder >.`);
+        return input.normalize("NFC").trim() || undefined;
+      });
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
   if (errors.length) throw new Error(`Sprachpakete in ${path.relative(root, dir) || dir}:\n${errors.join("\n")}`);
   return packs;
 }
@@ -267,10 +280,9 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR,
   const unused = Object.keys(profile.text).filter((key) => !used.has(key));
   if (unused.length) throw new Error(`${id}: ungenutzte Profiltexte: ${unused.join(", ")}`);
 
-  const [registration, workerTemplate, tailwind, jspdf, logo, guide, pdfFonts] = await Promise.all([
+  const [registration, workerTemplate, jspdf, logo, guide, pdfFonts] = await Promise.all([
     read("src/register-worker.js"),
     read("src/service-worker.js"),
-    read("public/vendor/tailwind-browser.js"),
     read("public/vendor/jspdf.umd.min.js"),
     readFile(path.join(profile.dir, profile.logo)),
     profile.blank ? Buffer.alloc(0) : readFile(path.join(profile.dir, "Anleitung-iPad-und-Admin.pdf")),
@@ -332,10 +344,6 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR,
       () => `<style>\n${css}\n</style>`,
     )
     .replace(
-      /<script\s+src="\.\.\/public\/vendor\/tailwind-browser\.js"\s*><\/script>/,
-      () => `<script>\n${escapeScript(tailwind)}\n</script>`,
-    )
-    .replace(
       /<script\s+defer\s+src="\.\.\/public\/vendor\/jspdf\.umd\.min\.js"\s+id="pdf-library"\s*><\/script>/,
       () => `<script id="pdf-library">\n${escapeScript(jspdf)}\n</script>`,
     )
@@ -375,7 +383,6 @@ export async function buildProfile(ref, { languages: languageDir = LANGUAGE_DIR,
     ["dist/manifest.webmanifest", await readFile(path.join(profile.dir, "manifest.webmanifest"))],
     ["dist/licenses/Inkform.txt", await readFile(path.join(root, "LICENSE"))],
     ["dist/licenses/jsPDF.txt", await readFile(path.join(root, "public/vendor/LICENSE-jsPDF.txt"))],
-    ["dist/licenses/Tailwind.txt", await readFile(path.join(root, "public/vendor/LICENSE-Tailwind.txt"))],
     ["dist/licenses/NotoSans.txt", await readFile(path.join(root, "public/vendor/LICENSE-NotoSans.txt"))],
   ];
   for (const icon of (await readdir(path.join(profile.dir, "icons"))).sort()) {

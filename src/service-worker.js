@@ -11,7 +11,6 @@ const URLS = [
   "icons/icon-512.png",
   "licenses/Inkform.txt",
   "licenses/jsPDF.txt",
-  "licenses/Tailwind.txt",
   "licenses/NotoSans.txt",
 ].map((path) => new URL(path, BASE).href);
 self.addEventListener("install", (event) => {

@@ -179,6 +179,7 @@ Die App verarbeitet deine Angaben und deine Unterschrift auf diesem Gerät und e
   legal: DEFAULT_LEGAL,
   locale: PROFILE_LOCALE,
   translations: PROFILE_TRANSLATIONS,
+  legalReviewed: false,
 };
 // A profile can only start in a studio language other than its content language once the shipped
 // default translations fully cover it; otherwise the studio language falls back to the content

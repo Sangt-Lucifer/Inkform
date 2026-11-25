@@ -24,7 +24,9 @@ import {
   usePrintableCheck,
   validatePack,
   validatePacks,
+  withPackTranslations,
 } from "../src/languages.js";
+import { DEFAULT_SETTINGS } from "../src/defaults.js";
 import { buildProfile, readLanguages, readPacks } from "../scripts/build.mjs";
 import { loadLanguages } from "../scripts/sprachen.mjs";
 import { PSEUDO, pseudoLanguageSource, writePseudoPack } from "./lib/pseudo.mjs";
@@ -224,4 +226,27 @@ test("build: packs are checked like language files and published next to the app
   assert.ok(!files.get("dist/sw.js").includes("sprachen/"), "Pakete nicht im Offline-Cache der App");
   const none = (await buildProfile("blanko", { packs: path.join(dir, "fehlt") })).files;
   assert.deepEqual(JSON.parse(none.get("dist/sprachen/index.json")), { schemaVersion: 1, packs: {} });
+});
+
+test("shipped language packs bring complete draft form translations and keep own edits", async () => {
+  const builtins = await readLanguages();
+  const shipped = await readPacks(builtins);
+  const codes = Object.keys(shipped).sort();
+  assert.ok(codes.length >= 6, `erwartet mindestens 6 Sprachpakete, gefunden: ${codes.join(", ")}`);
+  const validated = validatePacks(shipped);
+  addLanguages(validated);
+  try {
+    const base = structuredClone(DEFAULT_SETTINGS);
+    base.translations = { es: { app: { headline: "Propio título del estudio" }, studio: {}, medical: {}, legal: {} } };
+    const filled = withPackTranslations(base, validated);
+    assert.equal(filled.translations.es.app.headline, "Propio título del estudio", "eigene Übersetzung bleibt");
+    for (const code of codes) {
+      assert.ok(validated[code].form, `${code} hat vorübersetzte Formulartexte`);
+      assert.equal(filled.translations[code]?.draft, true, `${code} ist als Entwurf markiert`);
+      assert.equal(hasAllTexts(filled, code), true, `${code} hat alle Formulartexte vollständig`);
+      assert.ok(filled.translations[code].app.privacyTemplate.includes("{{studio.name}}"), `${code} behält Platzhalter`);
+    }
+  } finally {
+    addLanguages({});
+  }
 });

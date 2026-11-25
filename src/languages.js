@@ -238,6 +238,32 @@ export function withDefaultTranslations(settings, defaults) {
   return { ...settings, translations };
 }
 
+// Pre-translated form texts shipped inside a language pack (pack.form). Fills only fields the
+// studio has not translated yet; own translations are never overwritten.
+export function withPackTranslations(settings, packs) {
+  if (!packs || typeof packs !== "object") return settings;
+  const fields = [...translatedFields(settings).keys()];
+  let translations = null;
+  for (const [code, pack] of Object.entries(packs)) {
+    const form = pack?.form;
+    if (!form || code === settings.locale.content || !hasLanguage(code)) continue;
+    const existing = (translations ?? settings.translations)?.[code];
+    const tr = existing ? structuredClone(existing) : emptyTranslation();
+    let added = false;
+    for (const field of fields) {
+      const value = fieldOf(form, field);
+      if (value === undefined || fieldOf(tr, field) !== undefined) continue;
+      setField(tr, field, value);
+      added = true;
+    }
+    if (!added) continue;
+    if (form.draft) tr.draft = true;
+    translations ??= structuredClone(settings.translations ?? {});
+    translations[code] = tr;
+  }
+  return translations ? { ...settings, translations } : settings;
+}
+
 function filledIn(settings, code) {
   const tr = settings.translations?.[code];
   if (!tr) return null;
@@ -319,6 +345,39 @@ export function packTextProblem(own, model, categories) {
   if (packPlaceholders(own) !== packPlaceholders(model)) return "placeholders";
   return null;
 }
+function validatePackForm(form, fail) {
+  if (!form || typeof form !== "object" || Array.isArray(form)) fail();
+  if (form.draft !== undefined && typeof form.draft !== "boolean") fail();
+  const clean = emptyTranslation();
+  if (form.draft === true) clean.draft = true;
+  const checkText = (value, field) => {
+    if (typeof value !== "string" || !value.trim() || value.length > fieldLimit(field) || /[<>]/.test(value)) fail();
+    return value.normalize("NFC").trim();
+  };
+  for (const part of ["app", "studio"]) {
+    const section = form[part];
+    if (section === undefined) continue;
+    if (!section || typeof section !== "object" || Array.isArray(section)) fail();
+    for (const [key, value] of Object.entries(section)) {
+      if (!TRANSLATED[part].includes(key)) fail();
+      clean[part][key] = checkText(value, `${part}.${key}`);
+    }
+  }
+  for (const part of ["medical", "legal"]) {
+    const section = form[part];
+    if (section === undefined) continue;
+    if (!section || typeof section !== "object" || Array.isArray(section)) fail();
+    for (const [id, entry] of Object.entries(section)) {
+      if (!/^[a-zA-Z0-9_]{1,60}$/.test(id) || !entry || typeof entry !== "object" || Array.isArray(entry)) fail();
+      clean[part][id] = {};
+      for (const [key, value] of Object.entries(entry)) {
+        if (!TRANSLATED[part].includes(key)) fail();
+        clean[part][id][key] = checkText(value, `${part}.${id}.${key}`);
+      }
+    }
+  }
+  return clean;
+}
 export function validatePack(code, value) {
   const fail = () => {
     throw Error(t("pack.invalid", { sprache: String(code).slice(0, 20) }));
@@ -326,7 +385,7 @@ export function validatePack(code, value) {
   const base = builtinLanguage(BASE_LANGUAGE);
   if (typeof code !== "string" || !PACK_CODE.test(code) || isBuiltinLanguage(code) || !base) fail();
   if (!value || typeof value !== "object" || Array.isArray(value)) fail();
-  const { name, locale, dir, pdfFont, texts } = value;
+  const { name, locale, dir, pdfFont, texts, form } = value;
   if (typeof name !== "string" || !name.trim() || name.length > 80) fail();
   let categories;
   try {
@@ -342,7 +401,14 @@ export function validatePack(code, value) {
     if (!Object.hasOwn(base.texts, key) || packTextProblem(own, base.texts[key], categories)) fail();
     clean[key] = typeof own === "string" ? own : { ...own };
   }
-  return { name: name.trim(), locale, dir, pdfFont, texts: clean };
+  return {
+    name: name.trim(),
+    locale,
+    dir,
+    pdfFont,
+    texts: clean,
+    ...(form !== undefined && { form: validatePackForm(form, fail) }),
+  };
 }
 // Several packs, e.g. from a backup: { code: pack }.
 export function validatePacks(value) {
@@ -464,6 +530,14 @@ export function readTranslationFile(value, target, existing) {
     else (Object.hasOwn(texts, key) ? result.changed : result.added).push({ key, before: texts[key], after: text });
     texts[key] = typeof text === "string" ? text : { ...text };
   }
-  result.pack = { ...pack, texts };
+  let form = pack.form;
+  if (!own && value.form !== undefined) {
+    try {
+      form = validatePackForm(value.form, () => {
+        throw Error();
+      });
+    } catch (_) {}
+  }
+  result.pack = { ...pack, texts, ...(form !== undefined && { form }) };
   return result;
 }

@@ -52,6 +52,7 @@ import {
   validateLocale,
   validateTranslations,
   withDefaultTranslations,
+  withPackTranslations,
 } from "./languages.js";
 import { createAdminAccess } from "./access.js";
 import { INCOME_KEY, createIncomeFeature, incomeId } from "./income.js";
@@ -247,6 +248,16 @@ function loadDevicePack() {
         code = [tag, tag.split("-")[0]].find((c) => PACK_CODE.test(c) && listed && Object.hasOwn(listed, c));
       if (!code) return "none";
       installPacks({ [code]: validatePack(code, await get(`${code}.json`)) }, $("install-screen").hidden);
+      if ($("install-screen").hidden && !settingsBroken) {
+        const next = withPackTranslations(settings, installedPacks);
+        if (next !== settings) {
+          settings = next;
+          try {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+          } catch (_) {}
+        }
+        if (adminDraft) adminDraft = withPackTranslations(adminDraft, installedPacks);
+      }
       return "installed";
     } catch (_) {
       return "failed";
@@ -427,7 +438,7 @@ function validateSettings(input, packs) {
       if (key === "medical") result.hint = string(item.hint, t("settings.itemHint"), 3000, true);
       else {
         result.text = string(item.text, t("settings.itemText"), 8000, true);
-        result.review = item.id === "privacy" ? true : !!item.review;
+        result.review = !!item.review;
       }
       return result;
     });
@@ -453,6 +464,7 @@ function validateSettings(input, packs) {
     legal,
     locale,
     translations: validateTranslations(value.translations, { medical, legal }, locale.content),
+    legalReviewed: value.legalReviewed === true,
   }, DEFAULT_SETTINGS);
   // The studio language needs all texts of the form, like every language offered to customers.
   if (!hasAllTexts(result, locale.studio)) {
@@ -562,16 +574,18 @@ function renderQuestionnaire() {
       </fieldset>`,
   ).join("");
   $("legal-confirmations").innerHTML = LEGAL.map(
-    (item) =>
-      /* HTML */ `<label class="check-row legal-row${item.review ? " review-row" : ""}"
+    (item) => {
+      const markReview = item.review && !settings.legalReviewed;
+      return /* HTML */ `<label class="check-row legal-row${markReview ? " review-row" : ""}"
         ><input type="checkbox" name="${item.id}" id="${item.id}" required /><span
           class="check-text"
           >${
-            item.review ? `<span class="inline-review">${th("common.inlineReview")}</span>` : ""
+            markReview ? `<span class="inline-review">${th("common.inlineReview")}</span>` : ""
           }<strong>${escapeHtml(item.title)}<span class="required">*</span></strong
           ><small>${escapeHtml(item.text)}</small></span
         ></label
-      >`,
+      >`;
+    },
   ).join("");
 }
 renderQuestionnaire();
@@ -587,6 +601,9 @@ function privacyText() {
 }
 function renderStudio() {
   $("privacy-text").textContent = privacyText();
+  const reviewed = !!settings.legalReviewed;
+  document.querySelectorAll("[data-legal-draft]").forEach((el) => (el.hidden = reviewed));
+  document.querySelectorAll("[data-legal-review-box]").forEach((el) => el.classList.toggle("review", !reviewed));
   $("studio-button-label").textContent = t("customer.admin");
   $("customer-studio-name").textContent = studio.name.split(" · ")[0];
   $("customer-studio-contact").textContent = [studio.name, studio.address]
@@ -1130,6 +1147,7 @@ function createPdf(data) {
     paragraph(t("common.reviewLabel"), { size: 8, bold: true, color: red, after: 1 });
     paragraph(text, { size: 9, color: red, after: 4 });
   }
+  const reviewed = !!settings.legalReviewed;
   header();
   paragraph(data.template?.documentTitle || settings.app.documentTitle, {
     size: 20,
@@ -1138,7 +1156,7 @@ function createPdf(data) {
   });
   paragraph(t("pdf.studio", { studio: data.studio.name }), { size: 10, bold: true });
   paragraph(`${data.studio.address} | ${data.studio.contact}`, { size: 9, color: grey });
-  review(t("pdf.draftNotice"));
+  if (!reviewed) review(t("pdf.draftNotice"));
   if (data.language && data.language !== settings.locale.content) {
     paragraph(t("pdf.language", { sprache: translator(data.language).name }), { size: 9, color: grey, after: 1 });
     if (settings.locale.note[data.language]) paragraph(settings.locale.note[data.language], { size: 9, color: grey });
@@ -1184,25 +1202,32 @@ function createPdf(data) {
   if (data.medical.some((q) => q.value === "yes")) paragraph(t("pdf.yesNotice"), { size: 10, bold: true });
   title(t("pdf.section3"));
   data.legal.forEach((item) => {
+    const markReview = item.review && !reviewed;
     ensure(22);
     paragraph(t("pdf.confirmed", { erklaerung: item.title }), {
       size: 10,
       bold: true,
-      color: item.review ? red : black,
+      color: markReview ? red : black,
       after: 2,
     });
-    if (item.review) review(item.text);
+    if (markReview) review(item.text);
     else paragraph(item.text, { size: 10, after: 5 });
   });
   ensure(22);
-  paragraph(t(data.photo === "yes" ? "pdf.photoYes" : "pdf.photoNo"), { size: 11, bold: true, color: red });
-  review(
+  paragraph(t(data.photo === "yes" ? "pdf.photoYes" : "pdf.photoNo"), {
+    size: 11,
+    bold: true,
+    color: reviewed ? black : red,
+  });
+  const photoBody =
     data.photo === "yes"
       ? data.template?.photoText || settings.app.photoText
-      : data.template?.photoDeniedText || settings.app.photoDeniedText,
-  );
+      : data.template?.photoDeniedText || settings.app.photoDeniedText;
+  if (reviewed) paragraph(photoBody, { size: 9, after: 4 });
+  else review(photoBody);
   title(t("pdf.privacy"));
-  review(data.privacy);
+  if (reviewed) paragraph(data.privacy, { size: 9, after: 4 });
+  else review(data.privacy);
   const imageWidth = 150,
     imageHeight = Math.min(60, imageWidth * data.signature.ratio);
 
@@ -1244,8 +1269,10 @@ function createPdf(data) {
     font(7, false, grey);
     doc.text(t("pdf.footer", { referenz: reference }), margin, 287);
     doc.text(t("pdf.page", { seite: page, seiten: pages }), 192, 287, { align: "right" });
-    font(7, true, red);
-    doc.text(t("pdf.footerDraft"), margin, 292);
+    if (!reviewed) {
+      font(7, true, red);
+      doc.text(t("pdf.footerDraft"), margin, 292);
+    }
   }
   return { doc, pages };
 }
@@ -1295,7 +1322,7 @@ form.addEventListener("submit", (event) => {
       blob = result.doc.output("blob");
     const slug = fileSlug(normalizeText(`${data.fields.lastName}_${data.fields.firstName}`));
     const clock = data.createdAt.toTimeString().slice(0, 8).replaceAll(":", "");
-    const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const suffix = Math.random().toString(36).slice(2, 6).padEnd(4, "0").toUpperCase();
     const filename = `${translator(settings.locale.studio).t("file.consent")}_${slug}_${data.fields.appointment}_${clock}_${suffix}.pdf`;
     // Prepared now, booked only when the owner confirms the filing (pdf-next). The customer sees
     // only the thank-you screen: the owner saves the PDF after unlocking.
@@ -1391,7 +1418,7 @@ function renderPdfArtifact(artifact) {
   $("pdf-missing").hidden = !consent || !missing;
   // Only a read error (not a PDF that is really gone) can be tried again.
   $("pdf-retry-read").hidden = !consent || !missing || !artifact.readError;
-  $("pdf-review-notice").hidden = !consent || missing;
+  $("pdf-review-notice").hidden = !consent || missing || !!settings.legalReviewed;
   $("income-capture-note").hidden = !consent;
   $("income-capture-note").textContent = t(missing ? "pdf.captureMissing" : "pdf.capture");
   if (consent && artifact.keepError)
@@ -1913,11 +1940,17 @@ function changePacks(next) {
     locale.customer = [...new Set([locale.studio, ...customer])];
     return true;
   };
-  if (!settingsBroken && prune(settings.locale))
+  const withForms = settingsBroken ? settings : withPackTranslations(settings, installedPacks);
+  const formsAdded = withForms !== settings;
+  if (formsAdded) settings = withForms;
+  if (!settingsBroken && (prune(settings.locale) || formsAdded))
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch (_) {}
-  if (adminDraft) prune(adminDraft.locale);
+  if (adminDraft) {
+    adminDraft = withPackTranslations(adminDraft, installedPacks);
+    prune(adminDraft.locale);
+  }
   const choice = operatorChoice();
   if (!hasLanguage(language().code) || (choice && choice !== AUTO && !hasLanguage(choice)))
     chooseOperatorLanguage(hasLanguage("en") ? "en" : BASE_LANGUAGE);
@@ -2384,6 +2417,13 @@ function applyTranslationImport() {
   renderAdminSection();
   window.scrollTo(0, 0);
   toast(t("translationFile.applied", { anzahl: count, sprache: r.pack.name }));
+}
+function legalReviewedNotice(noticeKey) {
+  const checked = !!adminDraft.legalReviewed;
+  return /* HTML */ `<div class="ad-notice${checked ? "" : " review"}">
+    <p style="margin:0 0 10px">${checked ? th("editor.legalReviewedDone") : th(noticeKey)}</p>
+    <label class="income-check" style="margin:0"><input type="checkbox" id="legal-reviewed" data-legal-reviewed ${checked ? "checked" : ""} /> <span>${th("editor.legalReviewedLabel")}</span></label>
+  </div>`;
 }
 function adminPanel(title, content, note = "") {
   return /* HTML */ `<section class="ad-panel">
@@ -2930,7 +2970,11 @@ async function writeCustomisations(data, { before = async () => {}, after = () =
     await writeIcon(data.icon);
     await before();
     // Packs from the file join those of the device (the page reloads afterwards).
-    if (data.languages) localStorage.setItem(PACKS_KEY, JSON.stringify({ ...installedPacks, ...data.languages }));
+    if (data.languages) {
+      const merged = { ...installedPacks, ...data.languages };
+      if (Object.keys(merged).length > PACKS_MAX) throw Error(t("pack.tooMany", { anzahl: PACKS_MAX }));
+      localStorage.setItem(PACKS_KEY, JSON.stringify(merged));
+    }
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
     if (data.theme) localStorage.setItem(THEME_KEY, data.theme);
     if (data.retention) writeRetention(localStorage, data.retention);
@@ -3821,7 +3865,7 @@ function renderAdminSection() {
     const medical = adminPage === "medical",
       key = medical ? "medical" : "legal",
       items = adminDraft[key];
-    content = `${!medical ? `<div class="ad-notice review">${th("editor.legalNotice")}</div>` : ""}<div class="ad-panel"><div class="ad-panel-header"><h2>${th(medical ? "editor.medicalTitle" : "editor.legalTitle")}</h2><span class="ad-chip">${th(medical ? "editor.medicalCount" : "editor.legalCount", { anzahl: items.length })}</span></div><div class="ad-panel-body">${items
+    content = `${!medical ? legalReviewedNotice("editor.legalNotice") : ""}<div class="ad-panel"><div class="ad-panel-header"><h2>${th(medical ? "editor.medicalTitle" : "editor.legalTitle")}</h2><span class="ad-chip">${th(medical ? "editor.medicalCount" : "editor.legalCount", { anzahl: items.length })}</span></div><div class="ad-panel-body">${items
       .map(
         (item, index) =>
           /* HTML */ `<details class="ad-editor" ${index === 0 ? "open" : ""}>
@@ -3850,7 +3894,6 @@ function renderAdminSection() {
                           type="checkbox"
                           data-config-path="${key}.${index}.review"
                           ${item.review ? "checked" : ""}
-                          ${["privacy", "liability"].includes(item.id) ? "disabled" : ""}
                         />${th("editor.reviewMark")}</label
                       >`
                 }${
@@ -3873,7 +3916,7 @@ function renderAdminSection() {
         "",
       )}<button class="ad-button" type="button" data-add-kind="${key}">${adminIcon("plus")}${th(medical ? "editor.addMedical" : "editor.addLegal")}</button></div></div>`;
   } else if (adminPage === "privacy") {
-    content = /* HTML */ `<div class="ad-notice review">${th("privacyPage.notice")}</div>
+    content = /* HTML */ `${legalReviewedNotice("privacyPage.notice")}
       ${adminPanel(
         th("privacyPage.retention"),
         /* HTML */ `<div class="ad-fields">
@@ -4454,7 +4497,9 @@ $("admin-defaults-confirm").addEventListener("click", () => {
 });
 $("admin-app").addEventListener("change", (event) => {
   if (event.target.id !== "backup-interval" || !adminAccess.isUnlocked()) return;
-  localStorage.setItem(BACKUP_INTERVAL_KEY, event.target.value);
+  try {
+    localStorage.setItem(BACKUP_INTERVAL_KEY, event.target.value);
+  } catch (_) {}
   renderAdminSection();
 });
 $("admin-app").addEventListener("change", (event) => {
@@ -4483,6 +4528,12 @@ $("admin-app").addEventListener("change", (event) => {
     adminDraft.locale.customer = el.checked ? [...others, code] : others;
   } else if (adminDraft && el.dataset.localeReviewed && el.checked) {
     delete adminDraft.translations[el.dataset.localeReviewed].draft;
+  } else if (adminDraft && el.dataset.legalReviewed !== undefined) {
+    adminDraft.legalReviewed = el.checked;
+    renderAdminSection();
+    updateAdminChrome();
+    $("legal-reviewed")?.focus();
+    return;
   } else return;
   renderAdminSection();
   updateAdminChrome();
@@ -4880,8 +4931,13 @@ exportFeature = createExportFeature({
   removedIds: () => readRemovedIds(localStorage),
   removeCopies: removePdfCopies,
   ask: (options) => askConfirm(options),
-  logExport: (entry) =>
-    localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify([...readExportLog(localStorage), entry].slice(-1000))),
+  logExport: (entry) => {
+    try {
+      localStorage.setItem(EXPORT_LOG_KEY, JSON.stringify([...readExportLog(localStorage), entry].slice(-1000)));
+    } catch (error) {
+      console.error("Export-Protokoll nicht gespeichert:", error);
+    }
+  },
   today: localDate,
 });
 try {

@@ -320,6 +320,8 @@ export default {
     "editor.legalCount": { one: "{anzahl} declaration", other: "{anzahl} declarations" },
     "editor.legalNotice": "Edit these legal drafts and have them reviewed professionally before use. The liability and privacy review marks stay active.",
     "editor.legalTitle": "Declarations & Confirmations",
+    "editor.legalReviewedLabel": "Legal texts have been reviewed – hide draft and review notices in the form and PDF",
+    "editor.legalReviewedDone": "Legal texts marked as reviewed. The form and PDF appear without red draft and review notices.",
     "editor.max": "A maximum of 40 entries per section is allowed.",
     "editor.medicalCount": { one: "{anzahl} question", other: "{anzahl} questions" },
     "editor.medicalTitle": "Health Questions",

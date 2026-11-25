@@ -41,7 +41,7 @@ export function fromBase64(text) {
 
 // The customisations, in both files. logo, icon: PNG bytes, or null for the one built into the app.
 // Only the known parts of the settings are taken, so nothing else can travel with them.
-const SETTINGS_PARTS = ["schemaVersion", "savedAt", "studio", "app", "medical", "legal", "locale", "translations"];
+const SETTINGS_PARTS = ["schemaVersion", "savedAt", "studio", "app", "medical", "legal", "locale", "translations", "legalReviewed"];
 const ITEM_PARTS = ["id", "title", "hint", "text", "review"];
 const pick = (value, keys) => Object.fromEntries(keys.filter((key) => key in value).map((key) => [key, value[key]]));
 function studioPart({ settings, theme, logo = null, icon = null, retention, backupDays, packs = {} }) {

@@ -321,6 +321,8 @@ export default {
     "editor.legalCount": { one: "{anzahl} Erklärungen", other: "{anzahl} Erklärungen" },
     "editor.legalNotice": "Rechtliche Entwürfe bearbeiten und vor Einsatz fachlich prüfen lassen. Die Prüfvermerke für Haftung und Datenschutz bleiben aktiv.",
     "editor.legalTitle": "Erklärungen & Bestätigungen",
+    "editor.legalReviewedLabel": "Rechtstexte sind geprüft – Entwurfs- und Prüfhinweise in Formular und PDF ausblenden",
+    "editor.legalReviewedDone": "Rechtstexte als geprüft markiert. Formular und PDF erscheinen ohne rote Entwurfs- und Prüfhinweise.",
     "editor.max": "Es sind maximal 40 Einträge pro Bereich möglich.",
     "editor.medicalCount": { one: "{anzahl} Fragen", other: "{anzahl} Fragen" },
     "editor.medicalTitle": "Fragen zur Gesundheit",

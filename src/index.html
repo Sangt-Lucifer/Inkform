@@ -12,11 +12,10 @@
     <meta name="referrer" content="no-referrer" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src blob:; form-action 'none'; base-uri 'none'"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src blob:; form-action 'none'; base-uri 'none'"
     />
     <link rel="icon" type="image/png" href="__STUDIO_LOGO__" />
     <title data-t="meta.title"></title>
-    <script src="../public/vendor/tailwind-browser.js"></script>
     <script defer src="../public/vendor/jspdf.umd.min.js" id="pdf-library"></script>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -472,7 +471,7 @@
                 <span class="section-status" data-status="consent" data-t="status.open"></span>
               </div>
               <div class="card-body">
-                <div class="review" style="margin-bottom: 13px" data-t="consent.reviewNote">
+                <div class="review" data-legal-draft style="margin-bottom: 13px" data-t="consent.reviewNote">
                   <span class="review-label" data-t-slot="label" data-t="common.reviewLabel"
                     ><svg class="icon" aria-hidden="true"><use href="#i-warning" /></svg></span
                   >
@@ -483,7 +482,7 @@
                     <span data-t="consent.photo"></span> <span class="optional" data-t="consent.photoVoluntary"></span>
                   </legend>
                   <div style="clear: both"></div>
-                  <span class="inline-review" data-t="common.inlineReview"></span>
+                  <span class="inline-review" data-legal-draft data-t="common.inlineReview"></span>
                   <p id="photo-text"></p>
                   <div class="photo-options">
                     <label class="choice"
@@ -508,8 +507,8 @@
                 </fieldset>
                 <details class="privacy-details">
                   <summary data-t="consent.privacySummary"></summary>
-                  <div class="review">
-                    <span class="review-label" data-t="common.reviewLabel"></span>
+                  <div class="review" data-legal-review-box>
+                    <span class="review-label" data-legal-draft data-t="common.reviewLabel"></span>
                     <p id="privacy-text"></p>
                   </div>
                 </details>
@@ -566,7 +565,6 @@
               <svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg>
             </div>
             <div
-              class="flex justify-center gap-5 mt-5"
               style="display: flex; justify-content: center; gap: 20px; margin-top: 20px"
             >
               <button type="button" class="text-button" data-open="reset-dialog" data-t="customer.newForm"></button>

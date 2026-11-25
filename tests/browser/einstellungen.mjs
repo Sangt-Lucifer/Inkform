@@ -59,6 +59,8 @@ await until(`!!ownIcon`);
 const setLocation = (value) =>
   ev(`openAdminAuthorized('studio');(l=>{l.value=${JSON.stringify(value)};l.dispatchEvent(new Event('input',{bubbles:true}))})(document.getElementById('admin-studio-location'));saveAdmin()`);
 await setLocation("Exportort");
+await ev(`openAdminAuthorized('legal');const cb=document.getElementById('legal-reviewed');cb.checked=true;cb.dispatchEvent(new Event('change',{bubbles:true}));saveAdmin()`);
+check("Rechtstexte geprüft: Haken gespeichert und Entwurfshinweise im Formular verborgen", await ev(`settings.legalReviewed===true && [...document.querySelectorAll('[data-legal-draft]')].every(el=>el.hidden)`));
 await ev(`writeRetention(localStorage,{pdfYears:10,incomeYears:3});localStorage.setItem(BACKUP_INTERVAL_KEY,'14');setTheme('light')`);
 
 // What goes where ---------------------------------------------------------------------------
@@ -103,6 +105,7 @@ check(
     file.schemaVersion === 4 &&
     JSON.stringify(file.languages) === "{}" &&
     file.settings.studio.location === "Exportort" &&
+    file.settings.legalReviewed === true &&
     file.theme === "light" &&
     file.retention.pdfYears === 10 &&
     file.backupDays === 14 &&

@@ -22,7 +22,7 @@ const load=new Promise(resolve=>{const cb=({data})=>{if(JSON.parse(data).method=
 await cmd('Page.navigate',{url:ORIGIN+'/'});await load;
 await until(`document.documentElement.dataset.offlineReady==='true'&&document.getElementById('admin-pin-dialog').open`);
 check('Optimized web app prepares complete offline cache',true);
-check('Cache contains one HTML, the licenses and no duplicated vendor libraries',await ev(`(async()=>{const name=(await caches.keys()).find(k=>k.startsWith('inkform-app-'));const urls=(await(await caches.open(name)).keys()).map(r=>r.url);return urls.filter(u=>u.endsWith('/index.html')).length===1&&!urls.some(u=>u.includes('/vendor/'))&&urls.length===8})()`));
+check('Cache contains one HTML, the licenses and no duplicated vendor libraries',await ev(`(async()=>{const name=(await caches.keys()).find(k=>k.startsWith('inkform-app-'));const urls=(await(await caches.open(name)).keys()).map(r=>r.url);return urls.filter(u=>u.endsWith('/index.html')).length===1&&!urls.some(u=>u.includes('/vendor/'))&&urls.length===7})()`));
 await ev(`document.getElementById('admin-pin').value='839274';document.getElementById('admin-pin-repeat').value='839274';document.getElementById('admin-pin-form').requestSubmit()`);
 await until(`adminAccess.isUnlocked()`);
 await ev(`document.querySelector('[data-admin-action="guide"]').click()`);

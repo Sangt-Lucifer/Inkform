@@ -31,7 +31,6 @@ export const BLANKO_FILES = [
   "dist/icons/icon-512.png",
   "dist/licenses/Inkform.txt",
   "dist/licenses/jsPDF.txt",
-  "dist/licenses/Tailwind.txt",
   "dist/licenses/NotoSans.txt",
   "dist/sprachen/index.json",
   ...packCodes().map((code) => `dist/sprachen/${code}.json`),

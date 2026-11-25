@@ -131,7 +131,7 @@ export function checkKeyUsage(baseTexts, sources) {
 // Language data for the app: the profile's texts filled in, the source text dropped.
 export function languagesForApp(languages, fill) {
   return Object.fromEntries(
-    Object.entries(languages).map(([code, { name, locale, dir, pdfFont, texts }]) => [
+    Object.entries(languages).map(([code, { name, locale, dir, pdfFont, texts, form }]) => [
       code,
       {
         name,
@@ -143,9 +143,10 @@ export function languagesForApp(languages, fill) {
             key,
             typeof value === "string"
               ? fill(value)
-              : Object.fromEntries(Object.entries(value).map(([form, text]) => [form, fill(text)])),
+              : Object.fromEntries(Object.entries(value).map(([plural, text]) => [plural, fill(text)])),
           ]),
         ),
+        ...(form !== undefined && { form }),
       },
     ]),
   );

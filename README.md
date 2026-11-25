@@ -94,7 +94,7 @@ npm run pages          # geprüften Blanko-Build als Commit in den lokalen Zweig
 |---|---|
 | `src/` | App: Formular, Verwaltung mit PIN, Einnahmen, Aufbewahrung, PDF, Sicherung, Service Worker |
 | `src/sprachen/` | Texte der Oberfläche, eine Datei je Sprache, siehe [NEUE-SPRACHE.md](NEUE-SPRACHE.md) |
-| `public/vendor/` | jsPDF, Tailwind CSS Browser, Noto Sans, jeweils mit Lizenz |
+| `public/vendor/` | jsPDF, Noto Sans, jeweils mit Lizenz |
 | `profiles/blanko/` | die neutrale App, die GitHub Pages ausliefert |
 | `profiles/beispiel/` | erfundenes Musterstudio für Tests und die Beispiel-Anleitung |
 | `scripts/` | Build, Prüfung, `gh-pages`, lokale Vorschau, lokales Zertifikat |
@@ -104,4 +104,4 @@ Aufbau, Verhalten der App, Migration der Einstellungen und Prüfungen im Detail:
 
 ## Lizenz
 
-[MIT mit Commons Clause](LICENSE): Nutzen, verändern und kostenlos weitergeben darf jeder, privat wie im Unternehmen, also auch ein Studio für seine Einwilligungen. Nicht erlaubt ist, Inkform zu verkaufen: gegen Geld oder eine andere Gegenleistung ein Produkt oder einen Dienst anzubieten, dessen Wert ganz oder wesentlich aus Inkform kommt, etwa die App selbst oder ihr Hosting. Bezahlte Einrichtung oder bezahlter Support fallen darunter, wenn ihr Wert im Wesentlichen aus Inkform kommt. Wer Inkform weitergibt, gibt die Lizenz mit; die App liefert sie als `licenses/Inkform.txt` mit. Fremde Teile in `public/vendor/` behalten ihre eigenen Lizenzen (jsPDF und Tailwind MIT, Noto Sans SIL OFL 1.1).
+[MIT mit Commons Clause](LICENSE): Nutzen, verändern und kostenlos weitergeben darf jeder, privat wie im Unternehmen, also auch ein Studio für seine Einwilligungen. Nicht erlaubt ist, Inkform zu verkaufen: gegen Geld oder eine andere Gegenleistung ein Produkt oder einen Dienst anzubieten, dessen Wert ganz oder wesentlich aus Inkform kommt, etwa die App selbst oder ihr Hosting. Bezahlte Einrichtung oder bezahlter Support fallen darunter, wenn ihr Wert im Wesentlichen aus Inkform kommt. Wer Inkform weitergibt, gibt die Lizenz mit; die App liefert sie als `licenses/Inkform.txt` mit. Fremde Teile in `public/vendor/` behalten ihre eigenen Lizenzen (jsPDF MIT, Noto Sans SIL OFL 1.1).

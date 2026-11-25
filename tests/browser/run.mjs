@@ -11,7 +11,7 @@
 // protocols go to test-results/ of the core (built-in profile) or of the studio folder, so a
 // studio's screenshots never end up in the core. The checks use synthetic data only.
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -41,8 +41,13 @@ checks = bound
   : checks.filter((c) => !Object.values(PROFILE_CHECKS).flat().includes(c));
 const buildDir = defaultOut(profileDir);
 const results = isBuiltin(profileDir) ? root : profileDir;
-const out = path.join(results, "test-results", `${path.basename(profileDir)}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
+const resultsDir = path.join(results, "test-results");
+const prefix = `${path.basename(profileDir)}-`;
+const out = path.join(resultsDir, `${prefix}${new Date().toISOString().replace(/[:.]/g, "-")}`);
 await mkdir(out, { recursive: true });
+// Keep only the latest 10 runs per profile so test-results/ does not grow without bound.
+const older = (await readdir(resultsDir)).filter((name) => name.startsWith(prefix)).sort().slice(0, -10);
+await Promise.all(older.map((name) => rm(path.join(resultsDir, name), { recursive: true, force: true })));
 
 const run = (cmd, args, opts = {}) =>
   new Promise((resolve) => {
