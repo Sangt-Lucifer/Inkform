@@ -36,10 +36,12 @@ export function runLeakCheck({ env = process.env, withoutStudios = false } = {})
   if (run.status !== 0) throw new Error(`Leak-Prüfung fehlgeschlagen; nichts geschrieben:\n${run.stdout}${run.stderr}`);
 }
 
-// The branch may hold only the app files written here before.
+// The branch may hold only the app files written here before (including retired licenses or packs).
+const RETIRED = /^(?:licenses\/[\w-]+\.txt|sprachen\/[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2})?\.json)$/;
 async function checkWorktree(dir) {
   const allowed = new Set([".git", ".nojekyll", ...PAGES_FILES.values()]),
-    problems = [];
+    problems = [],
+    retired = [];
   async function walk(rel) {
     for (const entry of await readdir(path.join(dir, rel))) {
       const name = rel ? `${rel}/${entry}` : entry,
@@ -48,11 +50,15 @@ async function checkWorktree(dir) {
       else if (info.isDirectory()) {
         if (PAGES_DIRS.includes(name)) await walk(name);
         else problems.push(`${name}/: fremder Ordner`);
-      } else if (!allowed.has(name)) problems.push(`${name}: fremde Datei`);
+      } else if (!allowed.has(name)) {
+        if (RETIRED.test(name)) retired.push(name);
+        else problems.push(`${name}: fremde Datei`);
+      }
     }
   }
   await walk("");
   if (problems.length) throw new Error(`${BRANCH} enthält Fremdes; nichts geschrieben:\n- ${problems.join("\n- ")}`);
+  return retired;
 }
 
 // What Git staged must be exactly the checked files: a clean filter or an ignore rule of the
@@ -98,7 +104,8 @@ export async function buildPages({ repo = root, requireClean = true, env = proce
     commit;
   try {
     git("worktree", "add", "-q", ...(fresh ? ["--orphan", "-b", BRANCH, dir] : [dir, BRANCH]));
-    await checkWorktree(dir);
+    const retired = await checkWorktree(dir);
+    for (const name of retired) await rm(path.join(dir, name));
     for (const [name, bytes] of out) {
       await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
       await writeFile(path.join(dir, name), bytes);
