@@ -747,7 +747,7 @@ function signatureImage() {
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, output.width, output.height);
   ink.strokes.forEach((stroke) => drawStroke(context, stroke, output.width, output.height));
-  return { data: output.toDataURL("image/png"), ratio: output.height / output.width };
+  return { data: output.toDataURL("image/png"), canvas: output, ratio: output.height / output.width };
 }
 function birthValid() {
   return birthDateValid(fieldValue("birthDate"), localDate(), fieldValue("appointment"));
@@ -1072,14 +1072,61 @@ function gatherData() {
     signature: signatureImage(),
   };
 }
+function pdfUserText(data) {
+  return [
+    ...Object.values(data.fields),
+    ...Object.values(data.studio),
+    ...Object.values(data.template),
+    ...data.medical.flatMap((q) => [q.title, q.hint, q.note]),
+    ...data.legal.flatMap((item) => [item.title, item.text]),
+    data.privacy,
+    data.language && data.language !== settings.locale.content ? settings.locale.note[data.language] || "" : "",
+  ].join("\n");
+}
+// Wraps text for canvas PDF pages: respects line breaks, word spaces and character-level CJK wrapping.
+function wrapCanvasText(context, text, maxPx) {
+  const lines = [];
+  for (const raw of normalizeText(text).split("\n")) {
+    if (!raw) {
+      lines.push("");
+      continue;
+    }
+    let line = "";
+    for (const part of raw.split(/(\s+)/)) {
+      if (!part) continue;
+      if (line && context.measureText(line + part).width <= maxPx) {
+        line += part;
+      } else if (!line && context.measureText(part).width <= maxPx) {
+        line = part.trimStart();
+      } else if (context.measureText(part.trimStart()).width <= maxPx) {
+        if (line.trimEnd()) lines.push(line.trimEnd());
+        line = part.trimStart();
+      } else {
+        for (const ch of part) {
+          if (line && context.measureText(line + ch).width > maxPx) {
+            lines.push(line.trimEnd());
+            line = ch.trimStart();
+          } else line += ch;
+        }
+      }
+    }
+    if (line.trimEnd() || !raw.trim()) lines.push(line.trimEnd());
+  }
+  return lines;
+}
 function createPdf(data) {
-  const doc = createPdfDocument(window.jspdf.jsPDF, {
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
-    compress: true,
-    putOnlyUsedFonts: true,
-  });
+  const useCanvas =
+    language().pdfFont === "system" ||
+    unsupportedPdfChars(pdfUserText(data)).length > 0;
+  const doc = useCanvas
+    ? new window.jspdf.jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true })
+    : createPdfDocument(window.jspdf.jsPDF, {
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+        putOnlyUsedFonts: true,
+      });
   const margin = 18,
     width = 174,
     bottom = 274;
@@ -1099,12 +1146,70 @@ function createPdf(data) {
     creator: t("pdf.docCreator"),
   });
   doc.setCreationDate(data.createdAt);
+  const PX = 8,
+    rtl = language().dir === "rtl",
+    sysFont = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans", "Apple SD Gothic Neo", "Geeza Pro", "Noto Sans", "Segoe UI", sans-serif',
+    rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`,
+    canvases = [];
+  let pageCtx = null;
+  function newCanvasPage() {
+    const c = document.createElement("canvas");
+    c.width = 210 * PX;
+    c.height = 297 * PX;
+    const g = c.getContext("2d");
+    g.fillStyle = "#ffffff";
+    g.fillRect(0, 0, c.width, c.height);
+    g.textBaseline = "alphabetic";
+    g.direction = rtl ? "rtl" : "ltr";
+    canvases.push(c);
+    pageCtx = g;
+  }
+  if (useCanvas) newCanvasPage();
   function font(size = 10, bold = false, color = black) {
+    if (useCanvas) {
+      pageCtx.font = `${bold ? "700 " : ""}${size * 0.352778 * PX}px ${sysFont}`;
+      pageCtx.fillStyle = rgb(color);
+      return;
+    }
     doc.setFont(language().pdfFont, bold ? "bold" : "normal");
     doc.setFontSize(size);
     doc.setTextColor(...color);
   }
   function header() {
+    if (useCanvas) {
+      const g = pageCtx;
+      g.fillStyle = "rgb(244,245,248)";
+      g.fillRect(0, 0, 210 * PX, 32 * PX);
+      const logoImg = document.querySelector(".studio-logo");
+      let left = margin;
+      if (logoImg?.complete && logoImg.naturalWidth > 0) {
+        const size = 22,
+          inner = size * 0.88,
+          scale = inner / Math.max(logoImg.naturalWidth, logoImg.naturalHeight),
+          w = logoImg.naturalWidth * scale,
+          h = logoImg.naturalHeight * scale;
+        g.fillStyle = "#000000";
+        g.beginPath();
+        g.roundRect(margin * PX, 5 * PX, size * PX, size * PX, 1.5 * PX);
+        g.fill();
+        g.drawImage(logoImg, (margin + (size - w) / 2) * PX, (5 + (size - h) / 2) * PX, w * PX, h * PX);
+        left = margin + 27;
+      }
+      g.direction = "ltr";
+      g.textAlign = "left";
+      font(16, true);
+      g.fillText(data.template?.brand || settings.app.brand, left * PX, 15 * PX);
+      font(8, false, grey);
+      g.fillText(t("pdf.headerLabel"), left * PX, 22 * PX);
+      g.textAlign = "right";
+      font(8, false, grey);
+      g.fillText(reference, 192 * PX, 15 * PX);
+      g.fillText(t("pdf.formVersion", { version }), 192 * PX, 22 * PX);
+      g.direction = rtl ? "rtl" : "ltr";
+      g.textAlign = rtl ? "right" : "left";
+      y = 42;
+      return;
+    }
     doc.setFillColor(244, 245, 248);
     doc.rect(0, 0, 210, 32, "F");
     const left = drawPdfLogo(doc, margin, 5, 22) ? margin + 27 : margin;
@@ -1119,18 +1224,24 @@ function createPdf(data) {
   }
   function ensure(height) {
     if (y + height > bottom) {
-      doc.addPage();
+      if (useCanvas) newCanvasPage();
+      else doc.addPage();
       header();
     }
   }
   function paragraph(text, { size = 10, bold = false, color = black, indent = 0, after = 3 } = {}) {
     font(size, bold, color);
-    const lines = doc.splitTextToSize(normalizeText(text), width - indent);
+    const lines = useCanvas
+      ? wrapCanvasText(pageCtx, text, (width - indent) * PX)
+      : doc.splitTextToSize(normalizeText(text), width - indent);
     const lineHeight = size * 0.352778 * 1.4;
     for (const line of lines) {
       ensure(lineHeight + 1);
       font(size, bold, color);
-      doc.text(line, margin + indent, y);
+      if (useCanvas) {
+        pageCtx.textAlign = rtl ? "right" : "left";
+        pageCtx.fillText(line, (rtl ? 210 - margin - indent : margin + indent) * PX, y * PX);
+      } else doc.text(line, margin + indent, y);
       y += lineHeight;
     }
     y += after;
@@ -1238,19 +1349,36 @@ function createPdf(data) {
 
   ensure(imageHeight + 48);
   labelValue(t("pdf.place"), data.studio.location);
-  doc.setDrawColor(218, 225, 209);
-  doc.roundedRect(margin, y, width, imageHeight + 3, 2, 2, "S");
   const actualWidth = imageHeight / data.signature.ratio;
-  doc.addImage(
-    data.signature.data,
-    "PNG",
-    margin + (width - actualWidth) / 2,
-    y + 1,
-    actualWidth,
-    imageHeight,
-    undefined,
-    "FAST",
-  );
+  if (useCanvas) {
+    const g = pageCtx;
+    g.strokeStyle = "rgb(218,225,209)";
+    g.lineWidth = 0.35 * PX;
+    g.beginPath();
+    g.roundRect(margin * PX, y * PX, width * PX, (imageHeight + 3) * PX, 2 * PX);
+    g.stroke();
+    if (data.signature.canvas)
+      g.drawImage(
+        data.signature.canvas,
+        (margin + (width - actualWidth) / 2) * PX,
+        (y + 1) * PX,
+        actualWidth * PX,
+        imageHeight * PX,
+      );
+  } else {
+    doc.setDrawColor(218, 225, 209);
+    doc.roundedRect(margin, y, width, imageHeight + 3, 2, 2, "S");
+    doc.addImage(
+      data.signature.data,
+      "PNG",
+      margin + (width - actualWidth) / 2,
+      y + 1,
+      actualWidth,
+      imageHeight,
+      undefined,
+      "FAST",
+    );
+  }
   y += imageHeight + 9;
   paragraph(fullName, { size: 11, bold: true, after: 2 });
   paragraph(t("pdf.signed", { zeit: timeFormat(data.signedAt) }), { size: 9, after: 2 });
@@ -1261,6 +1389,34 @@ function createPdf(data) {
   });
   paragraph(t("pdf.created", { zeit: stamp }), { size: 8, color: grey, after: 2 });
   paragraph(t("pdf.clockNotice"), { size: 8, color: grey });
+  if (useCanvas) {
+    const pages = canvases.length;
+    canvases.forEach((c, index) => {
+      const page = index + 1;
+      pageCtx = c.getContext("2d");
+      pageCtx.strokeStyle = "rgb(224,228,217)";
+      pageCtx.lineWidth = 0.35 * PX;
+      pageCtx.beginPath();
+      pageCtx.moveTo(margin * PX, 282 * PX);
+      pageCtx.lineTo(192 * PX, 282 * PX);
+      pageCtx.stroke();
+      pageCtx.direction = "ltr";
+      font(7, false, grey);
+      pageCtx.textAlign = "left";
+      pageCtx.fillText(t("pdf.footer", { referenz: reference }), margin * PX, 287 * PX);
+      pageCtx.textAlign = "right";
+      pageCtx.fillText(t("pdf.page", { seite: page, seiten: pages }), 192 * PX, 287 * PX);
+      if (!reviewed) {
+        font(7, true, red);
+        pageCtx.textAlign = rtl ? "right" : "left";
+        pageCtx.direction = rtl ? "rtl" : "ltr";
+        pageCtx.fillText(t("pdf.footerDraft"), (rtl ? 192 : margin) * PX, 292 * PX);
+      }
+      if (index > 0) doc.addPage();
+      doc.addImage(c.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297, undefined, "FAST");
+    });
+    return { doc, pages };
+  }
   const pages = doc.getNumberOfPages();
   for (let page = 1; page <= pages; page++) {
     doc.setPage(page);
@@ -1305,16 +1461,8 @@ form.addEventListener("submit", (event) => {
     invalidatePdf();
     const data = gatherData();
 
-    const userText = [
-      ...Object.values(data.fields),
-      ...Object.values(data.studio),
-      ...Object.values(data.template),
-      ...data.medical.flatMap((q) => [q.title, q.hint, q.note]),
-      ...data.legal.flatMap((item) => [item.title, item.text]),
-      data.privacy,
-    ].join("\n");
-    const missing = unsupportedPdfChars(userText);
-    if (missing.length) {
+    const missing = unsupportedPdfChars(pdfUserText(data));
+    if (missing.length && !document.createElement("canvas").getContext?.("2d")) {
       toast(t("pdf.unsupportedChars", { zeichen: missing.join(" ") }));
       return;
     }

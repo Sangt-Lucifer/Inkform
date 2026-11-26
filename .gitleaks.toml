@@ -1,0 +1,16 @@
+title = "Inkform Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Erlaubte Ausnahmen für erzeugte Artefakte, Vendor-Bibliotheken und absichtliche Gegentests"
+paths = [
+  '''^build/''',
+  '''^test-results/''',
+  '''^public/vendor/''',
+]
+regexes = [
+  '''-----BEGIN PRIVATE KEY-----''',
+  '''testpasswort-nur-fuer-tests''',
+]

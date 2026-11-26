@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { loadPdfFonts } from "./fonts.mjs";
 import { DEFAULT_SETTINGS } from "../src/defaults.js";
-import { dropField, fieldOf, readTranslation, translatedFields, validCurrency } from "../src/languages.js";
+import { dropField, fieldOf, isFormKey, readTranslation, translatedFields, validCurrency } from "../src/languages.js";
 import { BASE_LANGUAGE, checkKeyUsage, checkLanguages, languagesForApp, loadLanguages } from "./sprachen.mjs";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
@@ -155,7 +155,8 @@ export async function readPacks(builtins, dir = PACK_DIR) {
   const errors = Object.keys(packs)
     .filter((code) => Object.hasOwn(builtins, code))
     .map((code) => `${code}.js: ist schon in src/sprachen/ eingebaut.`);
-  errors.push(...checkLanguages({ [BASE_LANGUAGE]: builtins[BASE_LANGUAGE], ...packs }));
+  const requiredKeys = Object.keys(builtins[BASE_LANGUAGE].texts).filter(isFormKey);
+  errors.push(...checkLanguages({ [BASE_LANGUAGE]: builtins[BASE_LANGUAGE], ...packs }, { requiredKeys }));
   for (const [code, pack] of Object.entries(packs)) {
     if (pack.form === undefined) continue;
     try {

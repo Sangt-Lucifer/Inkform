@@ -1,7 +1,7 @@
 :root {
   --paper: #f5f5f5;
   --ink: #272727;
-  --muted: #757575;
+  --muted: #616161;
   --line: #e4e4e4;
   --accent: #e4e4e4;
   --accent-text: #595959;
@@ -28,8 +28,14 @@ body {
 }
 button,
 input,
+select,
 textarea {
   font: inherit;
+}
+h1,
+h2,
+h3 {
+  text-wrap: balance;
 }
 button,
 a,
@@ -930,13 +936,15 @@ dialog::backdrop {
 }
 .dialog-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px 16px;
   padding: 22px 25px;
   border-bottom: 1px solid var(--line);
 }
 .dialog-head h2 {
+  flex: 1 1 200px;
   min-width: 0;
   font-size: 19px;
   letter-spacing: -0.5px;
@@ -2043,6 +2051,20 @@ html[data-theme="dark"] .ad-notice.review {
 }
 .ad-field select {
   max-width: 100%;
+  cursor: pointer;
+}
+fieldset.ad-field {
+  border: 1px solid var(--ad-line);
+  border-radius: 9px;
+  padding: 14px 16px;
+  margin: 0;
+}
+fieldset.ad-field > legend {
+  font-size: 11px;
+  color: var(--ad-text);
+  font-weight: 550;
+  padding: 0 6px;
+  margin-left: -6px;
 }
 .ad-field label {
   display: block;
@@ -2052,6 +2074,7 @@ html[data-theme="dark"] .ad-notice.review {
   margin-bottom: 9px;
 }
 .ad-field input,
+.ad-field select,
 .ad-field textarea {
   width: 100%;
   min-width: 0;
@@ -2060,9 +2083,9 @@ html[data-theme="dark"] .ad-notice.review {
   border-radius: 7px;
   background: var(--ad-input);
   color: var(--ad-text);
-  padding: 12px;
+  padding: 10px 12px;
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.5;
 }
 .ad-field textarea {
   min-height: 110px !important;
@@ -2074,6 +2097,7 @@ html[data-theme="dark"] .ad-notice.review {
   opacity: 0.7;
 }
 .ad-field input:focus,
+.ad-field select:focus,
 .ad-field textarea:focus {
   outline: 0;
   border-color: var(--ad-blue);
@@ -3589,4 +3613,14 @@ html[data-theme="dark"] .language-button svg {
 }
 fieldset .ad-actions-row {
   margin-top: 10px;
+}
+.step-number,
+.section-number,
+.ad-editor-num,
+.income-table td,
+.income-table th,
+.price-balance,
+.ad-stat strong,
+.ad-version {
+  font-variant-numeric: tabular-nums;
 }

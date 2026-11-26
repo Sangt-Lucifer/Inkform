@@ -50,8 +50,11 @@ Einwilligungen/
 # Geheimnisse
 .env
 .env.*
+!.env.example
 *.key
 *.pem
+id_rsa
+id_ed25519
 secrets/
 
 # Sicherungen und Exporte der App nach Dateinamen, auch in sonst freigegebenen Ordnern (steht am

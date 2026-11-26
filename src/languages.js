@@ -394,7 +394,7 @@ export function validatePack(code, value) {
   } catch (_) {
     fail();
   }
-  if (!["ltr", "rtl"].includes(dir) || pdfFont !== base.pdfFont) fail();
+  if (!["ltr", "rtl"].includes(dir) || (pdfFont !== base.pdfFont && pdfFont !== "system")) fail();
   if (!texts || typeof texts !== "object" || Array.isArray(texts)) fail();
   const clean = {};
   for (const [key, own] of Object.entries(texts)) {
@@ -444,11 +444,12 @@ export const usePrintableCheck = (check) => (printable = check);
 export function languageProgress(code) {
   const keys = baseKeys(),
     builtin = isBuiltinLanguage(code),
-    texts = builtin ? builtinLanguage(code).texts : (languageTexts(code) ?? {});
+    texts = builtin ? builtinLanguage(code).texts : (languageTexts(code) ?? {}),
+    usesSystemFont = !builtin && hasLanguage(code) && translator(code).pdfFont === "system";
   const has = (key) => builtin || Object.hasOwn(texts, key);
   const form = keys.filter(isFormKey),
     admin = keys.filter((key) => !isFormKey(key));
-  const unprintable = builtin ? [] : form.filter((key) => inPdf(key) && has(key) && !packForms(texts[key]).every((text) => printable(text)));
+  const unprintable = builtin || usesSystemFont ? [] : form.filter((key) => inPdf(key) && has(key) && !packForms(texts[key]).every((text) => printable(text)));
   return {
     form: form.filter(has).length,
     formTotal: form.length,

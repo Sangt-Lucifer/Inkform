@@ -250,3 +250,18 @@ test("shipped language packs bring complete draft form translations and keep own
     addLanguages({});
   }
 });
+
+test("packs with pdfFont 'system' are valid and formReady even with CJK/Arabic characters", () => {
+  const sys = { ...copy(), locale: "zh-CN", dir: "ltr", pdfFont: "system", texts: { ...pack.texts, "pdf.headerLabel": "纹身同意书" } };
+  const clean = validatePack("zh", sys);
+  assert.equal(clean.pdfFont, "system");
+  addLanguages({ zh: clean });
+  usePrintableCheck((text) => !/[\u4e00-\u9fff]/.test(text));
+  try {
+    assert.deepEqual(languageProgress("zh").unprintable, []);
+    assert.equal(formReady("zh"), true);
+  } finally {
+    usePrintableCheck(() => true);
+    addLanguages({});
+  }
+});

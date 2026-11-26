@@ -63,6 +63,7 @@ await ev(`applySettings(validateSettings({...clone(settings),legalReviewed:true}
 check('Reviewed legal texts hide draft/review notices in form and PDF',await ev(`!window.__pdfLines.some(t=>t.includes('ENTWURF:')) && !window.__pdfLines.some(t=>t.includes('VOR EINSATZ RECHTLICH PRÜFEN')) && [...document.querySelectorAll('[data-legal-draft]')].every(el=>el.hidden)`));
 await ev(`applySettings(validateSettings({...clone(settings),legalReviewed:false}));for(const item of LEGAL) document.getElementById(item.id).checked=true;ink.strokes=[[{x:.1,y:.3},{x:.4,y:.7},{x:.8,y:.2}]];ink.signedAt=Date.now();void 0;`);
 check('Complete form creates a multipage PDF offline',await ev(`(()=>{const result=createPdf(gatherData());return result.pages>=2 && result.doc.output('arraybuffer').byteLength>10000})()`));
+check('Non-Latin characters (CJK/Arabic) automatically use system-font canvas PDF fallback',await ev(`(()=>{const d=gatherData();d.fields.firstName='太郎';d.fields.lastName='محمد';const result=createPdf(d);return result.pages>=2 && result.doc.output('arraybuffer').byteLength>20000})()`));
 // Logo in the PDF header: the built-in one, or the owner's own (an invented 64 × 32 PNG), drawn on
 // every page; one jsPDF cannot read leaves no square and no shifted text.
 const builtInWidth = await ev(`builtInPdfLogo.width`);

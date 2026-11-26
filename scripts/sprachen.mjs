@@ -31,7 +31,7 @@ const placeholders = (value) =>
   [...new Set(forms(value).flatMap((text) => [...text.matchAll(PLACEHOLDER)].map((m) => m[0])))].sort().join(" ");
 
 // Returns a list of error messages (empty: everything is fine).
-export function checkLanguages(languages) {
+export function checkLanguages(languages, { requiredKeys = null } = {}) {
   const errors = [];
   const base = languages[BASE_LANGUAGE];
   if (!base) return [`Grundsprache fehlt: src/sprachen/${BASE_LANGUAGE}.js`];
@@ -98,7 +98,8 @@ export function checkLanguages(languages) {
         );
     }
     if (code !== BASE_LANGUAGE) {
-      const missing = Object.keys(base.texts).filter((k) => !Object.hasOwn(lang.texts, k));
+      const needed = requiredKeys ?? Object.keys(base.texts);
+      const missing = needed.filter((k) => !Object.hasOwn(lang.texts, k));
       if (missing.length) errors.push(`${where}: fehlende Schlüssel: ${missing.join(", ")}`);
     }
   }
